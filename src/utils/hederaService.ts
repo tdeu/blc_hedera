@@ -278,14 +278,14 @@ export const getHederaConfig = (environment: 'development' | 'production'): Hede
   if (environment === 'development') {
     return {
       network: 'testnet',
-      operatorAccountId: process.env.REACT_APP_HEDERA_TESTNET_ACCOUNT_ID || '',
-      operatorPrivateKey: process.env.REACT_APP_HEDERA_TESTNET_PRIVATE_KEY || ''
+      operatorAccountId: import.meta.env.VITE_HEDERA_TESTNET_ACCOUNT_ID || '',
+      operatorPrivateKey: import.meta.env.VITE_HEDERA_TESTNET_PRIVATE_KEY || ''
     };
   } else {
     return {
       network: 'mainnet',
-      operatorAccountId: process.env.REACT_APP_HEDERA_MAINNET_ACCOUNT_ID || '',
-      operatorPrivateKey: process.env.REACT_APP_HEDERA_MAINNET_PRIVATE_KEY || ''
+      operatorAccountId: import.meta.env.VITE_HEDERA_MAINNET_ACCOUNT_ID || '',
+      operatorPrivateKey: import.meta.env.VITE_HEDERA_MAINNET_PRIVATE_KEY || ''
     };
   }
 };

@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
-import { TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle, Filter, ChevronDown, Share2, Heart, Bookmark, Zap, Globe, Shield, Search } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle, Filter, ChevronDown, Share2, Heart, Bookmark, Zap, Globe, Shield, Search, Plus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from './LanguageContext';
@@ -52,6 +52,7 @@ interface BettingMarketsProps {
   userBalance: number;
   onMarketSelect?: (market: BettingMarket) => void;
   markets?: BettingMarket[];
+  onCreateMarket?: () => void;
 }
 
 // Comprehensive 25+ markets with clear category classification
@@ -661,7 +662,7 @@ export const realTimeMarkets: BettingMarket[] = [
   }
 ];
 
-export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = realTimeMarkets }: BettingMarketsProps) {
+export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = realTimeMarkets, onCreateMarket }: BettingMarketsProps) {
   const [showBetDialog, setShowBetDialog] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket | null>(null);
   const [betPosition, setBetPosition] = useState<'yes' | 'no'>('yes');
@@ -707,17 +708,17 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     if (!selectedMarket || !betAmount) return;
     
     const amount = parseFloat(betAmount);
-    if (amount <= 0 || amount > userBalance) {
-      toast.error('Invalid amount or insufficient balance');
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid amount');
       return;
     }
 
     try {
       await onPlaceBet(selectedMarket.id, betPosition, amount);
       setShowBetDialog(false);
-      toast.success(`Truth position cast successfully on: ${selectedMarket.claim.substring(0, 50)}...`);
+      // Success message will be shown by the parent component
     } catch (error) {
-      toast.error('Failed to cast position. Please try again.');
+      // Error message will be shown by the parent component
     }
   };
 
@@ -822,12 +823,23 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
             </Select>
           </div>
 
-          {/* Active Markets Counter - Right Side */}
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-medium text-muted-foreground">
-              31 Active Markets
-            </span>
+          {/* Active Markets Counter & Create Button - Right Side */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-muted-foreground">
+                31 Active Markets
+              </span>
+            </div>
+            {onCreateMarket && (
+              <Button 
+                onClick={onCreateMarket}
+                className="gap-2 bg-primary hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" />
+                Create Market
+              </Button>
+            )}
           </div>
         </div>
       </div>

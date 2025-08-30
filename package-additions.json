@@ -1,0 +1,17 @@
+{
+  "description": "Additional dependencies needed for Hedera integration",
+  "devDependencies": {
+    "hardhat": "^2.19.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "dependencies": {
+    "ethers": "^6.8.0",
+    "ipfs-http-client": "^60.0.1"
+  },
+  "scripts": {
+    "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
+    "setup:hcs": "node scripts/setup-hcs.js",
+    "test:contracts": "hardhat test --network hederaTestnet"
+  }
+}

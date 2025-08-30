@@ -4,6 +4,11 @@
       "private": true,
       "dependencies": {
             "@hashgraph/sdk": "^2.71.1",
+            "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
+            "@nomicfoundation/hardhat-ethers": "^4.0.0",
+            "@nomicfoundation/hardhat-network-helpers": "^3.0.0",
+            "@nomicfoundation/hardhat-verify": "^3.0.0",
+            "@openzeppelin/contracts": "^5.4.0",
             "@radix-ui/react-accordion": "^1.2.3",
             "@radix-ui/react-alert-dialog": "^1.1.6",
             "@radix-ui/react-aspect-ratio": "^1.1.2",
@@ -30,12 +35,16 @@
             "@radix-ui/react-toggle": "^1.1.2",
             "@radix-ui/react-toggle-group": "^1.1.2",
             "@radix-ui/react-tooltip": "^1.1.8",
+            "chai": "^6.0.1",
             "class-variance-authority": "^0.7.1",
             "clsx": "*",
             "cmdk": "^1.1.1",
+            "date-fns": "^4.1.0",
             "embla-carousel-react": "^8.6.0",
+            "ethers": "^6.15.0",
             "hono": "^4.0.0",
             "input-otp": "^1.4.2",
+            "ipfs-http-client": "^60.0.1",
             "lucide-react": "^0.487.0",
             "next-themes": "^0.4.6",
             "react": "^18.3.1",
@@ -49,12 +58,19 @@
             "vaul": "^1.1.2"
       },
       "devDependencies": {
+            "@nomicfoundation/hardhat-toolbox": "^6.1.0",
             "@types/node": "^20.10.0",
             "@vitejs/plugin-react-swc": "^3.10.2",
+            "dotenv": "^17.2.1",
+            "hardhat": "^3.0.3",
             "vite": "6.3.5"
       },
       "scripts": {
             "dev": "vite",
-            "build": "vite build"
-      }
+            "build": "vite build",
+            "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
+            "setup:hcs": "node scripts/create-hcs-topics.js",
+            "test:contracts": "hardhat test --network hederaTestnet"
+      },
+      "type": "module"
 }
