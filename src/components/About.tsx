@@ -15,7 +15,7 @@ export default function About() {
             BC
           </div>
           <div>
-            <h1 className="text-4xl font-bold text-primary">Blockcast</h1>
+            <h1 className="text-4xl font-bold text-primary">BLockcast</h1>
             <p className="text-lg text-muted-foreground">Africa's Truth Verification Platform</p>
           </div>
         </div>
