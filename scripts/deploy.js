@@ -80,8 +80,9 @@ async function main() {
   await castToken.authorizeMinter(factoryAddress);
   console.log("✓ Factory authorized to mint CAST tokens");
 
-  // Set factory in BetNFT (if needed)
-  // await betNFT.setFactory(factoryAddress);
+  // Transfer BetNFT ownership to factory so it can authorize markets
+  await betNFT.transferOwnership(factoryAddress);
+  console.log("✓ BetNFT ownership transferred to factory");
 
   // 7. Save deployment info
   const deploymentInfo = {

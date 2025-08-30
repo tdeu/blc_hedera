@@ -6,6 +6,86 @@ BlockCast is a decentralized prediction market platform focused on truth verific
 
 BlockCast combines prediction markets with AI-powered truth verification to combat misinformation across Africa. Users can create markets, place bets on truth claims, submit evidence, and participate in a community-driven verification process.
 
+## 🎯 **HEDERA BLOCKCHAIN INTEGRATION - WHAT YOU CAN DO**
+
+### ✅ **FULLY INTEGRATED FEATURES**
+
+#### 1. **CREATE PREDICTION MARKETS** 🏭
+- **UI Flow**: `Verify Claims` → `Submit New Claim` → Fill form → Click "Submit for Review"
+- **Blockchain Action**: Creates new smart contract via `PredictionMarketFactory` at `0x2122f101576b05635C16c0Cbc29Fe72a6172f5Fa`
+- **Contract Deployed**: Each market gets unique contract address (e.g., `0x2b7f2F1Ab881a0611FcFACe6dEF41666D014588B`)
+- **Transaction**: EVM transaction on Hedera testnet with full confirmation
+- **Events Emitted**: `MarketCreated(marketId, marketAddress, question)`
+- **Gas Used**: ~5M gas limit with automatic pricing
+- **Storage**: Market data permanently stored on Hedera blockchain
+
+#### 2. **PLACE PREDICTIONS/BETS** 💰
+- **UI Flow**: `Betting Markets` → Select market → Choose YES/NO → Enter amount → Place Bet
+- **Blockchain Action**: Calls `buyYes()` or `buyNo()` on individual market contract
+- **Collateral**: Uses CastToken (`0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c`) as betting currency
+- **Token Approval**: Automatic ERC20 approval before bet placement
+- **Pricing**: Dynamic automated market maker (AMM) pricing based on current pool ratios
+- **Transaction**: EVM transaction recorded on Hedera with bet details
+- **NFT Minting**: Automatic BetNFT creation for each bet position (tradeable receipt)
+
+#### 3. **BET NFT CREATION & TRADING** 🎨
+- **Automatic Creation**: Every bet automatically mints NFT receipt via `BetNFT` contract at `0x1eabfE3518F9f49eA128cCE521F432089AF6BbfF`
+- **NFT Data**: Contains market address, share count, position (YES/NO), timestamp
+- **Trading**: NFTs are tradeable on secondary markets (list/buy/sell functions)
+- **Metadata**: JSON metadata with bet details and market information
+- **Ownership**: True ownership - you control your bet positions as NFTs
+
+#### 4. **EVIDENCE SUBMISSION** 📋
+- **UI Flow**: `Community` → `Submit Evidence` → Upload files → Add description → Submit
+- **Blockchain Action**: Evidence hash and metadata stored on Hedera Consensus Service (HCS)
+- **HCS Topic**: Evidence stored on topic `0.0.6701034`
+- **IPFS Integration**: Files uploaded to decentralized IPFS storage
+- **Timestamping**: Immutable timestamps via HCS for evidence ordering
+- **AI Processing**: Evidence becomes available for AI attestation system
+
+#### 5. **MARKET RESOLUTION** ⚖️
+- **Admin Function**: Market resolution via `resolveMarket()` function
+- **Outcome Setting**: Sets final outcome (YES/NO/INVALID)  
+- **Automatic Settlement**: Winners automatically receive payouts
+- **CAST Rewards**: Market creators receive 100 CAST tokens upon resolution
+- **Final State**: Market permanently resolved on-chain
+
+### 🏗️ **SMART CONTRACT ADDRESSES (HEDERA TESTNET)**
+
+| Contract | Address | Purpose |
+|----------|---------|---------|
+| **PredictionMarketFactory** | `0x2122f101576b05635C16c0Cbc29Fe72a6172f5Fa` | Creates new prediction markets |
+| **CastToken** | `0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c` | Betting collateral & rewards |
+| **BetNFT** | `0x1eabfE3518F9f49eA128cCE521F432089AF6BbfF` | NFT receipts for bet positions |
+| **Treasury** | `0x2294B9B3dbD2A23206994294D4cd4599Fdd8BdDD` | Protocol fee collection |
+| **AdminManager** | `0xBE13b8Af1c2d22F86EF64B1a20752158A98eAF82` | Access control & governance |
+
+### 🔗 **HCS TOPIC IDS (HEDERA CONSENSUS SERVICE)**
+
+| Topic | ID | Purpose |
+|-------|----|---------| 
+| **Evidence Topic** | `0.0.6701034` | Community evidence submissions |
+| **AI Attestations Topic** | `0.0.6701057` | AI verification results |
+| **Challenges Topic** | `0.0.6701064` | Community challenges to AI decisions |
+
+### 💱 **YOUR HEDERA ACCOUNT DETAILS**
+
+- **Main Account ID**: `0.0.6643581`
+- **EVM Account ID**: `0.0.6421186` 
+- **EVM Address**: `0xfd76D4c18D5A10F558d057743bFB0218130157f4`
+- **Network**: Hedera Testnet
+- **RPC Endpoint**: `https://testnet.hashio.io/api`
+
+### 🔍 **VERIFY YOUR TRANSACTIONS**
+
+**View Your Account Activity:**
+- Main Account: https://hashscan.io/testnet/account/0.0.6643581
+- EVM Account: https://hashscan.io/testnet/account/0.0.6421186
+
+**View Contract Activity:**
+- Factory Contract: https://hashscan.io/testnet/contract/`<CONTRACT_ID>`
+- Recent Transaction: https://hashscan.io/testnet/transaction/`<TRANSACTION_HASH>`
+
 ## 🏗️ Architecture & Flow
 
 ### Core Workflow
@@ -112,12 +192,61 @@ blockcast_new/
 - **AI Attestations Topic (0.0.6701057)**: AI agent decisions and reasoning
 - **Challenges Topic (0.0.6701064)**: Community challenges to AI resolutions
 
-### Smart Contract Addresses (Testnet)
-- **AdminManager**: 0x3446B3454EaA47Af7a7BBbC7a3790e1E9eeDe8A7
-- **CastToken**: 0x96a1F60A46FAFBf3b349b93448E6727ac37ea441
-- **Treasury**: 0x16Ab850B265c7A29D30F4759e00A0702c656B734
-- **BetNFT**: 0xb51e3c40BB1b4AF9e7E03e788c5935071ac6aA3E
-- **PredictionMarketFactory**: 0x3EdddBf18346c7993ba5d6c4AeFb1fCBE5C50D43
+### 📊 **DETAILED UI TO BLOCKCHAIN FLOW**
+
+#### **Creating a Market:**
+```
+UI: Verify Claims Tab → Submit New Claim Form
+    ↓
+Frontend: hederaEVMService.createMarket()
+    ↓
+Blockchain: PredictionMarketFactory.createMarket()
+    ↓
+Events: MarketCreated(id, address, question)
+    ↓
+Result: New contract deployed + Market ID returned
+```
+
+#### **Placing a Bet:**
+```
+UI: Betting Markets → Select Market → Choose YES/NO → Enter Amount
+    ↓
+Frontend: handlePlaceBet() → hederaPlaceBet()
+    ↓
+Blockchain: 
+  1. CastToken.approve(marketAddress, betAmount)
+  2. PredictionMarket.buyYes(shares) OR buyNo(shares)
+  3. BetNFT.mintBetNFT(user, market, shares, isYes)
+    ↓
+Result: Bet recorded + NFT receipt minted + User balance updated
+```
+
+#### **Evidence Submission:**
+```
+UI: Community Tab → Submit Evidence → Upload Files
+    ↓
+IPFS: Files uploaded to decentralized storage
+    ↓
+HCS: Evidence metadata + IPFS hash → Topic 0.0.6701034
+    ↓
+Result: Evidence timestamped and indexed for AI processing
+```
+
+### 💰 **TOKEN ECONOMICS ON HEDERA**
+
+- **CastToken Supply**: Mintable ERC20 token for betting
+- **Market Creation**: Requires gas fees in HBAR
+- **Bet Placement**: Uses CastToken as collateral
+- **Market Resolution**: Creator receives 100 CAST tokens
+- **Protocol Fees**: 2% default fee rate to Treasury
+- **NFT Trading**: Secondary market trading of bet positions
+
+### Smart Contract Addresses (ACTIVE DEPLOYMENT)
+- **AdminManager**: 0xBE13b8Af1c2d22F86EF64B1a20752158A98eAF82
+- **CastToken**: 0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c
+- **Treasury**: 0x2294B9B3dbD2A23206994294D4cd4599Fdd8BdDD
+- **BetNFT**: 0x1eabfE3518F9f49eA128cCE521F432089AF6BbfF
+- **PredictionMarketFactory**: 0x2122f101576b05635C16c0Cbc29Fe72a6172f5Fa
 
 ### Authentication & Session Management
 The app uses Hedera SDK authentication with:

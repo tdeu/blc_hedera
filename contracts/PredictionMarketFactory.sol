@@ -78,6 +78,7 @@ contract PredictionMarketFactory {
         allMarkets.push(address(market));
 
         // Authorize the new market to mint NFTs
+        // The factory must be owner of BetNFT for this to work
         betNFT.authorizeMarket(address(market));
 
         // Note: CAST reward will be given when market is resolved, not at creation

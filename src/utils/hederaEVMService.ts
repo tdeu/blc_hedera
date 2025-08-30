@@ -96,11 +96,25 @@ export class HederaEVMService {
         console.log('⏳ Waiting for transaction confirmation (with extended timeout)...');
         // Wait longer for Hedera's block times
         receipt = await tx.wait(); // Let it use default wait behavior
+        
+        // Check if transaction was successful
+        if (receipt.status === 0) {
+          console.error('❌ Transaction reverted on-chain. Status:', receipt.status);
+          console.error('Receipt details:', {
+            hash: receipt.hash,
+            gasUsed: receipt.gasUsed?.toString(),
+            logs: receipt.logs?.length || 0
+          });
+          throw new Error('Transaction reverted on blockchain');
+        }
+        
         console.log('✅ Transaction confirmed:', receipt.hash);
         console.log('📋 Receipt logs count:', receipt.logs?.length || 0);
       } catch (receiptError) {
         console.error('❌ Transaction confirmation failed after extended wait:', receiptError);
         console.error('Receipt error details:', receiptError?.message);
+        console.error('Receipt error code:', receiptError?.code);
+        console.error('Receipt error data:', receiptError?.data);
         throw receiptError;
       }
 
