@@ -1,11 +1,14 @@
 import { ethers } from 'ethers';
 import { pendingMarketsService } from './pendingMarketsService';
+import { approvedMarketsService } from './approvedMarketsService';
 
 // Admin wallet addresses - Whitelisted EVM addresses (for MetaMask compatibility)
 export const ADMIN_ADDRESSES = [
   '0xfd76d4c18d5a10f558d057743bfb0218130157f4', // Super Admin (You)
   '0x02dd61aa2ab7d0bf5d03239527c8ca245a26dabd', // Admin #2
   '0x32B03e2fd3DcbFd1cb9C17fF4F9652579945aEAD', // Your current connected address
+  '0x947d2175ad83ae42c59cfef2990e6cccf2b27213', // Super Admin #2
+  '0xC8130178a046eD25b4b248eE511F3846717b2b06', // Super Admin #3
 ];
 
 // Super admin address (primary admin with full privileges) - EVM format
@@ -143,6 +146,24 @@ class AdminService {
       
       if (!approvedMarket) {
         return false;
+      }
+
+      // Get original submission to find submitter address
+      const pendingMarkets = pendingMarketsService.getPendingMarkets();
+      const originalSubmission = pendingMarkets.find(m => m.id === marketId);
+      const submitterAddress = originalSubmission?.submittedBy || 'unknown';
+      
+      // Store approved market in Supabase for permanent storage
+      const supabaseSuccess = await approvedMarketsService.storeApprovedMarket(
+        approvedMarket,
+        adminAddress,
+        submitterAddress,
+        reason
+      );
+
+      if (!supabaseSuccess) {
+        console.warn('⚠️ Market approved locally but failed to store in Supabase');
+        // Continue anyway - we can retry later
       }
       
       // Record admin action

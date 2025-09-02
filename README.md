@@ -6,6 +6,57 @@ BlockCast is a decentralized prediction market platform focused on truth verific
 
 BlockCast combines prediction markets with AI-powered truth verification to combat misinformation across Africa. Users can create markets, place bets on truth claims, submit evidence, and participate in a community-driven verification process.
 
+## 🗄️ **SUPABASE DATABASE INTEGRATION**
+
+### ✅ **PERSISTENT MARKET STORAGE**
+BlockCast now features **dual-layer storage architecture** that maintains web3 principles while ensuring reliable data persistence:
+
+- **Blockchain Layer (Sensitive Data)**: All financial transactions, bets, and settlements remain on Hedera blockchain
+- **Supabase Layer (Market Metadata)**: Market titles, descriptions, approval status, and admin actions stored in PostgreSQL
+- **Real-time Sync**: When admins approve markets, they're instantly stored in Supabase for global visibility
+- **Cross-Device Persistence**: Approved markets visible to all users regardless of which admin approved them
+- **Fallback System**: Gracefully falls back to localStorage if Supabase is unavailable
+
+### 🔄 **ADMIN APPROVAL WORKFLOW**
+1. **Market Submission**: Users submit markets via "Submit New Claim" → stored in localStorage (pending)
+2. **Admin Review**: Super admins see pending markets in Admin Dashboard
+3. **Market Approval**: Admin clicks "Approve" → market stored in **both** localStorage AND Supabase
+4. **Global Visibility**: All users immediately see approved market on homepage (loaded from Supabase)
+5. **Blockchain Integration**: Approved markets can then be deployed as smart contracts
+
+### 🏗️ **DATABASE SCHEMA**
+```sql
+-- Approved Markets Table (Supabase PostgreSQL)
+CREATE TABLE approved_markets (
+    id TEXT PRIMARY KEY,                  -- Market UUID
+    claim TEXT NOT NULL,                  -- Market question/claim
+    description TEXT,                     -- Detailed description
+    category TEXT NOT NULL,               -- Category (Politics, Sports, etc.)
+    country TEXT NOT NULL,                -- Target country
+    region TEXT NOT NULL,                 -- Geographic region
+    market_type TEXT NOT NULL,            -- Market type classification
+    confidence_level TEXT NOT NULL,       -- AI confidence level
+    expires_at TIMESTAMPTZ NOT NULL,      -- Market expiration
+    created_at TIMESTAMPTZ DEFAULT NOW(), -- Creation timestamp
+    approved_at TIMESTAMPTZ DEFAULT NOW(), -- Approval timestamp
+    approved_by TEXT NOT NULL,            -- Admin wallet address who approved
+    approval_reason TEXT,                 -- Optional approval reason
+    submitter_address TEXT NOT NULL      -- Original submitter wallet
+);
+```
+
+### 🔐 **SECURITY & PRIVACY**
+- **No Sensitive Data**: Only market metadata stored in Supabase, never private keys or transaction data
+- **Public Information**: All stored data is public anyway (market descriptions, categories)
+- **Admin Addresses**: Approval tracking by admin wallet addresses (non-sensitive)
+- **Web3 Compliant**: Maintains decentralization for financial/sensitive operations
+
+### 📊 **SUPABASE FEATURES**
+- **Row Level Security (RLS)**: Enabled with public read access, controlled write access
+- **Real-time Updates**: Instant market visibility across all users
+- **Performance Indexes**: Optimized queries for category, country, and approval date
+- **Admin Analytics**: Track approval statistics and admin activity
+
 ## 🦊 **METAMASK WALLET INTEGRATION**
 
 ### ✅ **CONNECT YOUR WALLET**
@@ -151,6 +202,19 @@ cd blockcast_new
 npm install
 ```
 
+### Supabase Setup (Required for Persistent Storage)
+1. **Create Supabase Project**: Go to [supabase.com](https://supabase.com) → Create new project
+2. **Set up Database**: 
+   - Copy the SQL from `supabase-schema.sql` 
+   - Run it in your Supabase SQL Editor
+3. **Add Credentials**: 
+   - Copy `.env.example` to `.env`
+   - Add your Supabase URL and anon key from project settings:
+   ```bash
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key-here
+   ```
+
 ### MetaMask Wallet Setup
 1. **Install MetaMask**: Download from https://metamask.io
 2. **Get Testnet HBAR**: Visit https://portal.hedera.com/register for testnet tokens
@@ -200,6 +264,11 @@ App runs at: http://localhost:3000
 - **Hedera Consensus Service (HCS)** for evidence storage
 - **IPFS** for file storage (Pinata, Web3.Storage, Infura)
 
+### Database & Storage
+- **Supabase** (@supabase/supabase-js) - PostgreSQL database for market metadata
+- **Row Level Security (RLS)** - Secure data access policies
+- **Real-time Subscriptions** - Live updates for approved markets
+
 ### Smart Contracts
 - **PredictionMarketFactory.sol** - Market creation and management
 - **CastToken.sol** - ERC20 token for betting and governance
@@ -217,12 +286,16 @@ blockcast_new/
 │   │   ├── Settings.tsx           # User settings and portfolio
 │   │   └── ui/                    # Reusable UI components
 │   ├── utils/
-│   │   ├── walletService.ts       # MetaMask wallet integration
-│   │   ├── hederaEVMService.ts    # Hedera EVM contract interactions
-│   │   ├── hederaService.ts       # Hedera HCS integration
-│   │   ├── useHedera.ts           # React hook for Hedera
-│   │   ├── ipfsService.ts         # IPFS file storage
-│   │   └── contractService.ts     # Smart contract interactions
+│   │   ├── walletService.ts           # MetaMask wallet integration
+│   │   ├── hederaEVMService.ts        # Hedera EVM contract interactions
+│   │   ├── hederaService.ts           # Hedera HCS integration
+│   │   ├── useHedera.ts               # React hook for Hedera
+│   │   ├── ipfsService.ts             # IPFS file storage
+│   │   ├── contractService.ts         # Smart contract interactions
+│   │   ├── supabase.ts                # Supabase client configuration
+│   │   ├── approvedMarketsService.ts  # Supabase market storage service
+│   │   ├── adminService.ts            # Admin approval workflow
+│   │   └── pendingMarketsService.ts   # localStorage pending markets
 │   └── App.tsx                    # Main application component
 ├── contracts/                     # Solidity smart contracts
 ├── scripts/                      # Deployment and setup scripts

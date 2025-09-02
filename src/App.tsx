@@ -23,6 +23,7 @@ import Admin from './components/admin/Admin';
 import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
 import { adminService } from './utils/adminService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
+import { approvedMarketsService } from './utils/approvedMarketsService';
 import { UserProvider } from './contexts/UserContext';
 import { BettingMarket, realTimeMarkets } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
@@ -138,7 +139,7 @@ export default function App() {
     setShowOnboarding(needsOnboarding);
 
     // Load approved markets into homepage
-    loadApprovedMarkets();
+    await loadApprovedMarkets();
 
     // Set up callback for when markets are approved by admin
     adminService.setMarketApprovalCallback(addApprovedMarketToHomepage);
@@ -250,18 +251,30 @@ export default function App() {
     }
   };
 
-  // Load approved markets and merge with existing markets
-  const loadApprovedMarkets = () => {
+  // Load approved markets from Supabase and merge with existing markets
+  const loadApprovedMarkets = async () => {
     try {
-      const approvedMarkets = pendingMarketsService.getApprovedMarkets();
+      // Load from Supabase (permanent storage)
+      const supabaseMarkets = await approvedMarketsService.getApprovedMarkets();
+      
+      // Also load from localStorage (for backward compatibility and recent approvals)
+      const localApprovedMarkets = pendingMarketsService.getApprovedMarkets();
+      
+      // Combine both sources, avoiding duplicates
+      const allApprovedMarkets = [...supabaseMarkets];
+      localApprovedMarkets.forEach(localMarket => {
+        if (!supabaseMarkets.find(m => m.id === localMarket.id)) {
+          allApprovedMarkets.push(localMarket);
+        }
+      });
       
       // Merge approved markets with existing markets, avoiding duplicates
       setMarkets(currentMarkets => {
         const existingIds = new Set(currentMarkets.map(m => m.id));
-        const newApprovedMarkets = approvedMarkets.filter(m => !existingIds.has(m.id));
+        const newApprovedMarkets = allApprovedMarkets.filter(m => !existingIds.has(m.id));
         
         if (newApprovedMarkets.length > 0) {
-          console.log(`🎉 Adding ${newApprovedMarkets.length} approved markets to homepage`);
+          console.log(`🎉 Adding ${newApprovedMarkets.length} approved markets to homepage (${supabaseMarkets.length} from Supabase, ${localApprovedMarkets.length} from localStorage)`);
           return [...currentMarkets, ...newApprovedMarkets];
         }
         
@@ -269,6 +282,24 @@ export default function App() {
       });
     } catch (error) {
       console.error('Error loading approved markets:', error);
+      
+      // Fallback to localStorage if Supabase fails
+      try {
+        const localApprovedMarkets = pendingMarketsService.getApprovedMarkets();
+        setMarkets(currentMarkets => {
+          const existingIds = new Set(currentMarkets.map(m => m.id));
+          const newApprovedMarkets = localApprovedMarkets.filter(m => !existingIds.has(m.id));
+          
+          if (newApprovedMarkets.length > 0) {
+            console.log(`📦 Fallback: Adding ${newApprovedMarkets.length} approved markets from localStorage`);
+            return [...currentMarkets, ...newApprovedMarkets];
+          }
+          
+          return currentMarkets;
+        });
+      } catch (fallbackError) {
+        console.error('Error loading markets from localStorage fallback:', fallbackError);
+      }
     }
   };
 
