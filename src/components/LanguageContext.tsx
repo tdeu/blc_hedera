@@ -97,7 +97,7 @@ const translations = {
     currentBalance: 'Current Balance',
     insufficientBalance: 'Insufficient balance',
     balance: 'Balance',
-    eth: 'ETH',
+    eth: 'HBAR',
     
     // Confirmation & Messages
     castConfirmationDesc: 'Are you sure you want to cast this position?',
@@ -224,7 +224,7 @@ const translations = {
     currentBalance: 'Solde Actuel',
     insufficientBalance: 'Solde insuffisant',
     balance: 'Solde',
-    eth: 'ETH',
+    eth: 'HBAR',
     
     // Confirmation & Messages
     castConfirmationDesc: 'Êtes-vous sûr de vouloir prendre cette position?',
@@ -351,7 +351,7 @@ const translations = {
     currentBalance: 'Salio la Sasa',
     insufficientBalance: 'Salio halikutoshi',
     balance: 'Salio',
-    eth: 'ETH',
+    eth: 'HBAR',
     
     // Confirmation & Messages
     castConfirmationDesc: 'Una uhakika unataka kuchukua msimamo huu?',

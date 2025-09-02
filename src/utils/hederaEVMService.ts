@@ -10,14 +10,15 @@ export interface MarketContract {
 
 export interface HederaEVMConfig {
   rpcUrl: string;
-  privateKey: string;
+  privateKey?: string; // Optional, can use connected wallet instead
   factoryAddress: string;
 }
 
 export class HederaEVMService {
-  private provider: ethers.JsonRpcProvider;
-  private signer: ethers.Wallet;
+  private provider: ethers.JsonRpcProvider | ethers.BrowserProvider;
+  private signer: ethers.Wallet | ethers.JsonRpcSigner;
   private factoryAddress: string;
+  private useConnectedWallet: boolean;
 
   // ABI for the PredictionMarketFactory contract
   private factoryABI = [
@@ -26,18 +27,30 @@ export class HederaEVMService {
     "event MarketCreated(bytes32 indexed id, address market, string question)"
   ];
 
-  constructor(config: HederaEVMConfig) {
+  constructor(config: HederaEVMConfig, connectedWallet?: { provider: ethers.BrowserProvider; signer: ethers.JsonRpcSigner }) {
     console.log('🔧 Initializing HederaEVMService with config:', {
       rpcUrl: config.rpcUrl,
       factoryAddress: config.factoryAddress,
+      useConnectedWallet: !!connectedWallet,
       signerAddress: config.privateKey ? 'PRIVATE_KEY_PROVIDED' : 'NO_PRIVATE_KEY'
     });
     
-    this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
-    this.signer = new ethers.Wallet(config.privateKey, this.provider);
     this.factoryAddress = config.factoryAddress;
-    
-    console.log('✅ EVM Service initialized. Signer address:', this.signer.address);
+    this.useConnectedWallet = !!connectedWallet;
+
+    if (connectedWallet) {
+      // Use connected wallet (MetaMask)
+      this.provider = connectedWallet.provider;
+      this.signer = connectedWallet.signer;
+      console.log('✅ EVM Service initialized with connected wallet');
+    } else if (config.privateKey) {
+      // Fallback to hardcoded private key for development
+      this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      this.signer = new ethers.Wallet(config.privateKey, this.provider);
+      console.log('✅ EVM Service initialized with private key');
+    } else {
+      throw new Error('Either connected wallet or private key must be provided');
+    }
   }
 
   /**
@@ -266,7 +279,8 @@ export class HederaEVMService {
    */
   async getBalance(): Promise<string> {
     try {
-      const balance = await this.provider.getBalance(this.signer.address);
+      const address = await this.getAddress();
+      const balance = await this.provider.getBalance(address);
       return ethers.formatEther(balance);
     } catch (error) {
       console.error('Failed to get balance:', error);
@@ -277,8 +291,11 @@ export class HederaEVMService {
   /**
    * Gets the signer address
    */
-  getAddress(): string {
-    return this.signer.address;
+  async getAddress(): Promise<string> {
+    if (this.useConnectedWallet && 'getAddress' in this.signer) {
+      return await this.signer.getAddress();
+    }
+    return (this.signer as ethers.Wallet).address;
   }
 
   /**
@@ -293,7 +310,8 @@ export class HederaEVMService {
       ];
 
       const castToken = new ethers.Contract(castTokenAddress, erc20ABI, this.provider);
-      const balance = await castToken.balanceOf(this.signer.address);
+      const address = await this.getAddress();
+      const balance = await castToken.balanceOf(address);
       return ethers.formatEther(balance);
     } catch (error) {
       console.error('Failed to get CastToken balance:', error);
@@ -312,7 +330,8 @@ export class HederaEVMService {
       ];
 
       const castToken = new ethers.Contract(castTokenAddress, castTokenABI, this.signer);
-      const tx = await castToken.mint(this.signer.address, ethers.parseEther(amount.toString()));
+      const address = await this.getAddress();
+      const tx = await castToken.mint(address, ethers.parseEther(amount.toString()));
       await tx.wait();
       
       console.log(`Minted ${amount} CAST tokens for testing`);

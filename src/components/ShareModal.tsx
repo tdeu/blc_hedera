@@ -132,7 +132,7 @@ export default function ShareModal({ isOpen, onClose, market }: ShareModalProps)
               <span className="text-sm font-semibold text-green-400">Referral Bonus</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Earn 0.1 ETH when your friend places their first bet!
+              Earn 2 HBAR when your friend places their first bet!
             </p>
           </div>
 

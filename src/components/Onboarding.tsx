@@ -64,7 +64,7 @@ const onboardingSteps = [
     description: 'Fund your account safely',
     icon: Wallet,
     content: {
-      title: 'Secure ETH Transactions',
+      title: 'Secure HBAR Transactions',
       description: 'Add funds to your wallet to start betting. All transactions are secured on the blockchain. Start small and gradually increase your bets as you gain confidence.',
       highlights: [
         'Secure blockchain transactions',
@@ -144,12 +144,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </div>
             <CardTitle>Welcome Bonus!</CardTitle>
             <CardDescription>
-              You've received 0.1 ETH to start betting
+              You've received 2 HBAR to start betting
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-center p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg">
-              <div className="text-2xl font-bold text-primary">+0.1 ETH</div>
+              <div className="text-2xl font-bold text-primary">+2 HBAR</div>
               <p className="text-sm text-muted-foreground">Added to your wallet</p>
             </div>
             <Button onClick={onComplete} className="w-full">

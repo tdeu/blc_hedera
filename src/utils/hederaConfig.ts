@@ -27,6 +27,7 @@ export interface HederaConfig {
     evidence?: string;
     aiAttestations?: string;
     challenges?: string;
+    userProfiles?: string;
   };
   
   // JSON-RPC endpoints for EVM interaction
@@ -101,6 +102,7 @@ export function initializeHederaConfig(): HederaConfig {
       evidence: process.env.HCS_EVIDENCE_TOPIC,
       aiAttestations: process.env.HCS_AI_ATTESTATIONS_TOPIC,
       challenges: process.env.HCS_CHALLENGES_TOPIC,
+      userProfiles: process.env.HCS_USER_PROFILES_TOPIC,
     },
     jsonRpcUrl: NETWORK_CONFIGS[network].jsonRpcUrl,
     chainId: NETWORK_CONFIGS[network].chainId,

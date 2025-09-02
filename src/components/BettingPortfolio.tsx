@@ -127,7 +127,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
               <Wallet className="h-5 w-5 text-primary" />
               <span className="font-semibold text-primary">Available Balance</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">{userBalance.toFixed(3)} ETH</p>
+            <p className="text-2xl font-bold text-foreground">{userBalance.toFixed(3)} HBAR</p>
             <p className="text-sm text-muted-foreground">Ready for casting</p>
           </CardContent>
         </Card>
@@ -138,7 +138,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
               <Vote className="h-5 w-5 text-secondary" />
               <span className="font-semibold text-secondary">Total Cast</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">{totalCastAmount.toFixed(3)} ETH</p>
+            <p className="text-2xl font-bold text-foreground">{totalCastAmount.toFixed(3)} HBAR</p>
             <p className="text-sm text-muted-foreground">Across {userBets.length} positions</p>
           </CardContent>
         </Card>
@@ -161,7 +161,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
               <span className="font-semibold text-yellow-500">P&L</span>
             </div>
             <p className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(3)} ETH
+              {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(3)} HBAR
             </p>
             <p className="text-sm text-muted-foreground">
               {winRate.toFixed(1)}% win rate
@@ -260,7 +260,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-green-500">
-                    {totalPotentialWinnings.toFixed(2)} ETH
+                    {totalPotentialWinnings.toFixed(2)} HBAR
                   </div>
                   <div className="text-sm text-muted-foreground">Potential Winnings</div>
                 </div>
@@ -302,7 +302,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                         <div className="flex items-center gap-2 mt-1">
                           {getPositionBadge(cast.position)}
                           <span className="text-sm text-muted-foreground">
-                            {cast.amount} ETH @ {cast.odds || 2.0}x
+                            {cast.amount} HBAR @ {cast.odds || 2.0}x
                           </span>
                         </div>
                       </div>
@@ -313,10 +313,10 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                         cast.status === 'lost' ? 'text-red-500' : 'text-yellow-500'
                       }`}>
                         {cast.status === 'won' && cast.actualWinning ? 
-                          `+${cast.actualWinning.toFixed(3)} ETH` :
+                          `+${cast.actualWinning.toFixed(3)} HBAR` :
                           cast.status === 'lost' ? 
-                            `-${cast.amount.toFixed(3)} ETH` :
-                            `${(cast.potentialWinning || cast.potentialReturn || 0).toFixed(3)} ETH`
+                            `-${cast.amount.toFixed(3)} HBAR` :
+                            `${(cast.potentialWinning || cast.potentialReturn || 0).toFixed(3)} HBAR`
                         }
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -369,7 +369,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
                           <span className="text-muted-foreground">Cast Amount:</span>
-                          <div className="font-semibold text-foreground">{cast.amount} ETH</div>
+                          <div className="font-semibold text-foreground">{cast.amount} HBAR</div>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Odds:</span>
@@ -377,7 +377,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                         </div>
                         <div>
                           <span className="text-muted-foreground">Potential Win:</span>
-                          <div className="font-semibold text-green-500">{(cast.potentialWinning || cast.potentialReturn || 0).toFixed(3)} ETH</div>
+                          <div className="font-semibold text-green-500">{(cast.potentialWinning || cast.potentialReturn || 0).toFixed(3)} HBAR</div>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Position:</span>
@@ -436,7 +436,7 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                         <div>
                           <span className="text-muted-foreground">Cast Amount:</span>
-                          <div className="font-semibold text-foreground">{cast.amount} ETH</div>
+                          <div className="font-semibold text-foreground">{cast.amount} HBAR</div>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Odds:</span>
@@ -460,8 +460,8 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
                             cast.status === 'won' ? 'text-green-500' : 'text-red-500'
                           }`}>
                             {cast.status === 'won' ? 
-                              `+${(cast.actualWinning! - cast.amount).toFixed(3)} ETH` :
-                              `-${cast.amount.toFixed(3)} ETH`
+                              `+${(cast.actualWinning! - cast.amount).toFixed(3)} HBAR` :
+                              `-${cast.amount.toFixed(3)} HBAR`
                             }
                           </div>
                         </div>

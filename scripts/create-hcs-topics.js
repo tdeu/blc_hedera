@@ -56,6 +56,9 @@ async function createHCSTopics() {
     const evidenceTopic = evidenceReceipt.topicId?.toString();
     console.log('✅ Evidence Topic created:', evidenceTopic);
     
+    // Small delay between topic creations
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     // Create AI attestations topic
     console.log('\n2. Creating AI Attestations Topic...');
     const attestationTopicTx = new TopicCreateTransaction()
@@ -65,6 +68,9 @@ async function createHCSTopics() {
     const attestationReceipt = await attestationResponse.getReceipt(client);
     const attestationTopic = attestationReceipt.topicId?.toString();
     console.log('✅ AI Attestations Topic created:', attestationTopic);
+    
+    // Small delay between topic creations
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Create challenges topic
     console.log('\n3. Creating Challenges Topic...');
@@ -76,12 +82,26 @@ async function createHCSTopics() {
     const challengeTopic = challengeReceipt.topicId?.toString();
     console.log('✅ Challenges Topic created:', challengeTopic);
     
+    // Small delay between topic creations
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Create user profiles topic
+    console.log('\n4. Creating User Profiles Topic...');
+    const profilesTopicTx = new TopicCreateTransaction()
+      .setTopicMemo('BlockCast User Profiles Topic - User profile data and preferences');
+    
+    const profilesResponse = await profilesTopicTx.execute(client);
+    const profilesReceipt = await profilesResponse.getReceipt(client);
+    const profilesTopic = profilesReceipt.topicId?.toString();
+    console.log('✅ User Profiles Topic created:', profilesTopic);
+    
     // Output environment variables
     console.log('\n🎉 HCS Topics created successfully!');
     console.log('\n📝 Topic IDs:');
     console.log(`HCS_EVIDENCE_TOPIC=${evidenceTopic}`);
     console.log(`HCS_AI_ATTESTATIONS_TOPIC=${attestationTopic}`);
     console.log(`HCS_CHALLENGES_TOPIC=${challengeTopic}`);
+    console.log(`HCS_USER_PROFILES_TOPIC=${profilesTopic}`);
     
     // Update .env file automatically
     const envPath = '.env';
@@ -93,7 +113,8 @@ async function createHCSTopics() {
       const updates = {
         'HCS_EVIDENCE_TOPIC': evidenceTopic,
         'HCS_AI_ATTESTATIONS_TOPIC': attestationTopic,
-        'HCS_CHALLENGES_TOPIC': challengeTopic
+        'HCS_CHALLENGES_TOPIC': challengeTopic,
+        'HCS_USER_PROFILES_TOPIC': profilesTopic
       };
       
       for (const [key, value] of Object.entries(updates)) {

@@ -52,7 +52,7 @@ const paymentProviders: PaymentProvider[] = [
     type: 'crypto',
     fees: '0.5%',
     processingTime: 'Instant',
-    supportedCurrencies: ['ETH', 'USDC', 'DAI'],
+    supportedCurrencies: ['HBAR', 'USDC', 'DAI'],
     popular: true
   },
   {
@@ -72,7 +72,7 @@ const paymentProviders: PaymentProvider[] = [
     type: 'crypto',
     fees: '0.1%',
     processingTime: 'Instant',
-    supportedCurrencies: ['BNB', 'USDT', 'ETH']
+    supportedCurrencies: ['BNB', 'USDT', 'HBAR']
   },
   {
     id: 'flutterwave',
@@ -119,7 +119,7 @@ export default function LocalCurrencyWallet() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const dragHandleRef = useRef<HTMLDivElement>(null);
 
-  const ethPrice = 3200; // Mock ETH price in USD
+  const hbarPrice = 0.05; // Mock HBAR price in USD (approximately $0.05)
 
   // Load saved position from localStorage
   useEffect(() => {
@@ -248,11 +248,11 @@ export default function LocalCurrencyWallet() {
     }
   }, [isDragging, dragOffset]);
 
-  const calculateETH = () => {
+  const calculateHBAR = () => {
     if (!amount || isNaN(Number(amount))) return '0.000';
     const usdAmount = Number(amount) * selectedCurrency.rate;
-    const ethAmount = usdAmount / ethPrice;
-    return ethAmount.toFixed(6);
+    const hbarAmount = usdAmount / hbarPrice;
+    return hbarAmount.toFixed(3);
   };
 
   const calculateFees = () => {
@@ -283,7 +283,7 @@ export default function LocalCurrencyWallet() {
     toast.success(
       <div className="flex items-center gap-2">
         <Wallet className="h-4 w-4 text-primary" />
-        <span>Wallet funded with {calculateETH()} ETH! 💰</span>
+        <span>Wallet funded with {calculateHBAR()} HBAR! 💰</span>
       </div>
     );
     
@@ -438,7 +438,7 @@ export default function LocalCurrencyWallet() {
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">You'll receive:</span>
-                      <span className="font-bold text-primary">{calculateETH()} ETH</span>
+                      <span className="font-bold text-primary">{calculateHBAR()} HBAR</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">USD equivalent:</span>
@@ -492,7 +492,7 @@ export default function LocalCurrencyWallet() {
                   className="w-full h-10"
                 >
                   <Wallet className="h-4 w-4 mr-2" />
-                  Fund Wallet with {calculateETH()} ETH
+                  Fund Wallet with {calculateHBAR()} HBAR
                 </Button>
 
                 {/* Help Section - Compact */}

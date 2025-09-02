@@ -36,12 +36,20 @@ async function setupHCSTopics() {
     );
     console.log('✅ Challenges Topic created:', challengeTopic);
     
+    // Create user profiles topic
+    console.log('\n4. Creating User Profiles Topic...');
+    const profilesTopic = await hcsService.createTopic(
+      'BlockCast User Profiles Topic - User profile data and preferences'
+    );
+    console.log('✅ User Profiles Topic created:', profilesTopic);
+    
     // Output environment variables
     console.log('\n🎉 HCS Topics created successfully!');
     console.log('\n📝 Add these to your .env file:');
     console.log(`HCS_EVIDENCE_TOPIC=${evidenceTopic}`);
     console.log(`HCS_AI_ATTESTATIONS_TOPIC=${attestationTopic}`);
     console.log(`HCS_CHALLENGES_TOPIC=${challengeTopic}`);
+    console.log(`HCS_USER_PROFILES_TOPIC=${profilesTopic}`);
     
     // Update .env file automatically
     const envPath = '.env';
@@ -53,7 +61,8 @@ async function setupHCSTopics() {
       const updates = {
         'HCS_EVIDENCE_TOPIC': evidenceTopic,
         'HCS_AI_ATTESTATIONS_TOPIC': attestationTopic,
-        'HCS_CHALLENGES_TOPIC': challengeTopic
+        'HCS_CHALLENGES_TOPIC': challengeTopic,
+        'HCS_USER_PROFILES_TOPIC': profilesTopic
       };
       
       for (const [key, value] of Object.entries(updates)) {

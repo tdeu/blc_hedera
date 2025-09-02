@@ -145,6 +145,43 @@ export class HCSService {
     return receipt.transactionId?.toString() || '';
   }
 
+  // Submit generic message to any topic
+  async submitMessage(topicType: 'evidence' | 'ai_attestations' | 'challenges' | 'user_profiles', messageData: any): Promise<string> {
+    let topicId: string;
+    
+    switch (topicType) {
+      case 'evidence':
+        if (!this.config.topics.evidence) throw new Error('Evidence topic not configured');
+        topicId = this.config.topics.evidence;
+        break;
+      case 'ai_attestations':
+        if (!this.config.topics.aiAttestations) throw new Error('AI attestations topic not configured');
+        topicId = this.config.topics.aiAttestations;
+        break;
+      case 'challenges':
+        if (!this.config.topics.challenges) throw new Error('Challenges topic not configured');
+        topicId = this.config.topics.challenges;
+        break;
+      case 'user_profiles':
+        if (!this.config.topics.userProfiles) throw new Error('User profiles topic not configured');
+        topicId = this.config.topics.userProfiles;
+        break;
+      default:
+        throw new Error(`Unknown topic type: ${topicType}`);
+    }
+
+    const message = JSON.stringify(messageData);
+    
+    const transaction = new TopicMessageSubmitTransaction()
+      .setTopicId(TopicId.fromString(topicId))
+      .setMessage(message);
+
+    const response = await transaction.execute(this.config.client);
+    const receipt = await response.getReceipt(this.config.client);
+
+    return receipt.transactionId?.toString() || '';
+  }
+
   // Get messages from HCS topic using Mirror Node API
   async getTopicMessages(
     topicId: string, 

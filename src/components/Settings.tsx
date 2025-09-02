@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -8,12 +8,14 @@ import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Settings as SettingsIcon, User, Bell, Shield, Globe, Palette, Database, Smartphone, Languages, Moon, Sun, Volume2, VolumeX, Wallet, History } from 'lucide-react';
-import { Avatar, AvatarFallback } from './ui/avatar';
+import { Settings as SettingsIcon, User, Bell, Shield, Globe, Palette, Database, Smartphone, Languages, Moon, Sun, Volume2, VolumeX, Wallet, History, Save, Edit } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useLanguage } from './LanguageContext';
 import { toast } from 'sonner@2.0.3';
 import BettingPortfolio, { UserBet } from './BettingPortfolio';
 import VerificationHistory, { VerificationResult } from './VerificationHistory';
+import { useUser } from '../contexts/UserContext';
+import { Textarea } from './ui/textarea';
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -26,7 +28,16 @@ interface SettingsProps {
 
 export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, userBets = [], verificationHistory = [], onSelectVerification }: SettingsProps) {
   const { language, setLanguage, t } = useLanguage();
+  const { profile, updateUserProfile, loading } = useUser();
   const [activeTab, setActiveTab] = useState('profile');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    displayName: '',
+    username: '',
+    bio: '',
+    avatar: ''
+  });
   const [notifications, setNotifications] = useState({
     truthMarkets: true,
     communityUpdates: true,
@@ -39,6 +50,18 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
     historyVisible: false,
     activityVisible: true
   });
+
+  // Initialize profile form when profile loads
+  useEffect(() => {
+    if (profile && !editingProfile) {
+      setProfileForm({
+        displayName: profile.displayName || '',
+        username: profile.username || '',
+        bio: profile.bio || '',
+        avatar: profile.avatar || ''
+      });
+    }
+  }, [profile, editingProfile]);
 
   const languageOptions = [
     { code: 'en', name: 'English', flag: '🇬🇧', native: 'English' },
@@ -67,6 +90,46 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
 
   const handleDeleteAccount = () => {
     toast.error('Account deletion requires email confirmation. Check your inbox.');
+  };
+
+  const handleEditProfile = () => {
+    setEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setSaving(true);
+      await updateUserProfile({
+        displayName: profileForm.displayName,
+        username: profileForm.username,
+        bio: profileForm.bio,
+        avatar: profileForm.avatar
+      });
+      setEditingProfile(false);
+      toast.success('Profile updated successfully!');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast.error('Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProfile(false);
+    // Reset form to current profile values
+    if (profile) {
+      setProfileForm({
+        displayName: profile.displayName || '',
+        username: profile.username || '',
+        bio: profile.bio || '',
+        avatar: profile.avatar || ''
+      });
+    }
+  };
+
+  const updateProfileForm = (field: keyof typeof profileForm, value: string) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -131,118 +194,171 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
         <TabsContent value="profile" className="space-y-6">
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-              <CardDescription>
-                Manage your public profile and account details
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Profile Information</CardTitle>
+                  <CardDescription>
+                    Manage your public profile and account details
+                  </CardDescription>
+                </div>
+                {!editingProfile && (
+                  <Button onClick={handleEditProfile} variant="outline" size="sm">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Profile Picture */}
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                    JD
-                  </AvatarFallback>
-                </Avatar>
-                <div className="space-y-2">
-                  <Button variant="outline" size="sm">
-                    Change Avatar
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Recommended: Square image, at least 400x400px
-                  </p>
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-pulse">Loading profile...</div>
                 </div>
-              </div>
-
-              <Separator />
-
-              {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input id="username" defaultValue="TruthSeeker_001" />
+              ) : !profile ? (
+                <div className="text-center py-8">
+                  <p>Please connect your wallet to view your profile.</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue="john.doe@example.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
-                  <Select defaultValue="nigeria">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nigeria">🇳🇬 Nigeria</SelectItem>
-                      <SelectItem value="kenya">🇰🇪 Kenya</SelectItem>
-                      <SelectItem value="south-africa">🇿🇦 South Africa</SelectItem>
-                      <SelectItem value="ghana">🇬🇭 Ghana</SelectItem>
-                      <SelectItem value="senegal">🇸🇳 Senegal</SelectItem>
-                      <SelectItem value="cote-divoire">🇨🇮 Côte d'Ivoire</SelectItem>
-                      <SelectItem value="morocco">🇲🇦 Morocco</SelectItem>
-                      <SelectItem value="egypt">🇪🇬 Egypt</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Select defaultValue="africa/lagos">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="africa/lagos">Africa/Lagos (WAT)</SelectItem>
-                      <SelectItem value="africa/nairobi">Africa/Nairobi (EAT)</SelectItem>
-                      <SelectItem value="africa/johannesburg">Africa/Johannesburg (SAST)</SelectItem>
-                      <SelectItem value="africa/cairo">Africa/Cairo (EET)</SelectItem>
-                      <SelectItem value="africa/casablanca">Africa/Casablanca (WET)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Bio */}
-              <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
-                <textarea
-                  id="bio"
-                  className="w-full min-h-[100px] px-3 py-2 bg-input border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  placeholder="Tell the community about yourself and your truth verification interests..."
-                  defaultValue="Passionate about fighting misinformation across Africa. Specialized in economic and political fact-checking."
-                />
-              </div>
-
-              {/* Verification Status */}
-              <div className="p-4 bg-muted/20 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-foreground">Verification Status</h4>
-                    <p className="text-sm text-muted-foreground">Complete verification to increase trust</p>
+              ) : (
+                <>
+                  {/* Profile Picture */}
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-20 w-20">
+                      <AvatarImage src={editingProfile ? profileForm.avatar : profile.avatar} />
+                      <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                        {(editingProfile ? profileForm.displayName : profile.displayName)?.charAt(0)?.toUpperCase() ||
+                         (editingProfile ? profileForm.username : profile.username)?.charAt(0)?.toUpperCase() || 
+                         'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="space-y-2">
+                      {editingProfile ? (
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="Avatar URL"
+                            value={profileForm.avatar}
+                            onChange={(e) => updateProfileForm('avatar', e.target.value)}
+                            className="w-48"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Recommended: Square image, at least 400x400px
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm text-muted-foreground">
+                            {profile.avatar ? 'Custom avatar set' : 'Using default avatar'}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Click "Edit Profile" to change your avatar
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
-                    Partial
-                  </Badge>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Email verified</span>
-                    <Badge className="bg-green-500/20 text-green-500 border-green-500/30">✓</Badge>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Phone verified</span>
-                    <Badge variant="outline">Pending</Badge>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Identity verified</span>
-                    <Badge variant="outline">Not started</Badge>
-                  </div>
-                </div>
-                <Button className="w-full mt-4" variant="outline">
-                  Complete Verification
-                </Button>
-              </div>
 
-              <Button className="w-full">Save Profile Changes</Button>
+                  <Separator />
+
+                  {/* Basic Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="displayName">Display Name</Label>
+                      {editingProfile ? (
+                        <Input
+                          id="displayName"
+                          value={profileForm.displayName}
+                          onChange={(e) => updateProfileForm('displayName', e.target.value)}
+                          placeholder="Your display name"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted/50 rounded-md text-sm">
+                          {profile.displayName || 'No display name set'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      {editingProfile ? (
+                        <Input
+                          id="username"
+                          value={profileForm.username}
+                          onChange={(e) => updateProfileForm('username', e.target.value)}
+                          placeholder="@username"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted/50 rounded-md text-sm">
+                          {profile.username ? `@${profile.username}` : 'No username set'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <Label htmlFor="walletAddress">Wallet Address</Label>
+                      <div className="p-2 bg-muted/50 rounded-md text-sm font-mono">
+                        {profile.walletAddress}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bio */}
+                  <div className="space-y-2">
+                    <Label htmlFor="bio">Bio</Label>
+                    {editingProfile ? (
+                      <Textarea
+                        id="bio"
+                        value={profileForm.bio}
+                        onChange={(e) => updateProfileForm('bio', e.target.value)}
+                        placeholder="Tell the community about yourself and your truth verification interests..."
+                        rows={4}
+                      />
+                    ) : (
+                      <div className="p-3 bg-muted/50 rounded-md text-sm min-h-[100px]">
+                        {profile.bio || 'No bio provided'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* User Statistics */}
+                  <div className="p-4 bg-muted/20 rounded-lg">
+                    <h4 className="font-semibold text-foreground mb-3">Your Statistics</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-primary">{profile.stats.marketsCreated}</div>
+                        <div className="text-xs text-muted-foreground">Markets Created</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-primary">{profile.stats.totalBetsPlaced}</div>
+                        <div className="text-xs text-muted-foreground">Bets Placed</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-primary">{profile.stats.correctPredictions}</div>
+                        <div className="text-xs text-muted-foreground">Correct Predictions</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-primary">{profile.stats.reputationScore}</div>
+                        <div className="text-xs text-muted-foreground">Reputation</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  {editingProfile ? (
+                    <div className="flex gap-2">
+                      <Button onClick={handleCancelEdit} variant="outline" className="flex-1">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSaveProfile} disabled={saving} className="flex-1">
+                        {saving ? (
+                          'Saving...'
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

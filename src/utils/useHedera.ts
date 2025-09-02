@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { HederaService, getHederaConfig, VerificationEvidence } from './hederaService';
 import { HederaEVMService, getHederaEVMConfig, MarketContract } from './hederaEVMService';
 import { BettingMarket } from '../components/BettingMarkets';
+import { WalletConnection } from './walletService';
 import { toast } from 'sonner';
+import { ethers } from 'ethers';
 
 interface UseHederaReturn {
   hederaService: HederaService | null;
@@ -15,7 +17,7 @@ interface UseHederaReturn {
   resolveMarket: (contractId: string, outcome: 'yes' | 'no') => Promise<string | null>;
 }
 
-export const useHedera = (): UseHederaReturn => {
+export const useHedera = (walletConnection?: WalletConnection | null): UseHederaReturn => {
   const [hederaService, setHederaService] = useState<HederaService | null>(null);
   const [hederaEVMService, setHederaEVMService] = useState<HederaEVMService | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -41,8 +43,22 @@ export const useHedera = (): UseHederaReturn => {
         
         // Initialize EVM service for contract interactions
         const evmConfig = getHederaEVMConfig();
-        const evmService = new HederaEVMService(evmConfig);
-        setHederaEVMService(evmService);
+        
+        // Initialize EVM service for contract interactions
+        let evmService: HederaEVMService;
+        
+        try {
+          // Always initialize with private key first, then update with wallet later
+          console.log('🔄 Initializing HederaEVMService with private key (will update with wallet if connected)...');
+          evmService = new HederaEVMService(evmConfig);
+          console.log('✅ HederaEVMService initialized successfully');
+          
+          setHederaEVMService(evmService);
+        } catch (evmError) {
+          console.error('❌ Failed to initialize HederaEVMService:', evmError);
+          console.error('EVM Config:', evmConfig);
+          throw evmError; // Re-throw to trigger the outer catch block
+        }
         
         setIsConnected(true);
         console.log('Connected to Hedera network (HCS + EVM)');
@@ -56,7 +72,29 @@ export const useHedera = (): UseHederaReturn => {
     };
 
     initializeHedera();
-  }, []);
+  }, []); // Remove walletConnection dependency to prevent constant re-initialization
+
+  // Update EVM service when wallet connection changes (but not when EVM service changes)
+  useEffect(() => {
+    if (hederaService && walletConnection && walletConnection.provider && walletConnection.signer) {
+      console.log('🔄 Updating HederaEVMService with connected wallet...');
+      const evmConfig = getHederaEVMConfig();
+      
+      try {
+        const evmService = new HederaEVMService(evmConfig, {
+          provider: walletConnection.provider,
+          signer: walletConnection.signer
+        });
+        setHederaEVMService(evmService);
+        console.log('✅ HederaEVMService updated with connected wallet address:', walletConnection.address);
+      } catch (error) {
+        console.error('❌ Failed to update HederaEVMService with wallet:', error);
+        console.error('Wallet connection details:', walletConnection);
+      }
+    } else if (walletConnection) {
+      console.log('⏳ Wallet connected but Hedera service not ready yet');
+    }
+  }, [walletConnection?.address]); // Only depend on wallet address, not the entire connection object
 
   const createMarket = useCallback(async (market: Partial<BettingMarket>): Promise<MarketContract | null> => {
     if (!hederaEVMService) {
@@ -103,11 +141,16 @@ export const useHedera = (): UseHederaReturn => {
     position: 'yes' | 'no', 
     amount: number
   ): Promise<string | null> => {
+    console.log('🎯 placeBet called with:', { marketId, position, amount });
+    console.log('📊 HederaEVMService status:', hederaEVMService ? 'AVAILABLE' : 'NULL');
+    
     if (!hederaEVMService) {
-      console.warn('Hedera EVM service not available. Processing mock bet.');
+      console.warn('❌ Hedera EVM service not available. Processing mock bet.');
       // Return mock transaction ID for development
       return `mock-tx-${Date.now()}`;
     }
+    
+    console.log('🚀 Starting real bet placement with HederaEVMService...');
 
     try {
       setIsLoading(true);

@@ -932,7 +932,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Total Pool</span>
-                    <span className="font-semibold">{formatCurrency(market.totalPool)} ETH</span>
+                    <span className="font-semibold">{formatCurrency(market.totalPool)} HBAR</span>
                   </div>
                   
                   <div className="flex items-center justify-between text-xs">
@@ -1031,7 +1031,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="betAmount">Amount (ETH)</Label>
+                  <Label htmlFor="betAmount">Amount (HBAR)</Label>
                   <Input
                     id="betAmount"
                     type="number"
@@ -1043,10 +1043,10 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                     placeholder="Enter amount..."
                   />
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Balance: {userBalance.toFixed(3)} ETH</span>
+                    <span>Balance: {userBalance.toFixed(3)} HBAR</span>
                     {betAmount && selectedMarket && (
                       <span>
-                        Potential win: {(parseFloat(betAmount) * (betPosition === 'yes' ? selectedMarket.yesOdds : selectedMarket.noOdds)).toFixed(3)} ETH
+                        Potential win: {(parseFloat(betAmount) * (betPosition === 'yes' ? selectedMarket.yesOdds : selectedMarket.noOdds)).toFixed(3)} HBAR
                       </span>
                     )}
                   </div>

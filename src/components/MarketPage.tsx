@@ -87,7 +87,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
     onPlaceBet(market.id, position, amount);
     
     // Success feedback
-    toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} ETH`);
+    toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} HBAR`);
   };
 
   const calculateProfit = (amount: number, position: 'yes' | 'no') => {
@@ -130,7 +130,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
     setCastAmount('');
     setProfitCalculation(null);
     
-    toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} ETH`);
+    toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} HBAR`);
   };
 
   const handleCommentSubmit = () => {
@@ -600,7 +600,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                 {t('castYourPosition')}
               </CardTitle>
               <CardDescription>
-                {t('currentBalance')}: {userBalance.toFixed(3)} ETH
+                {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -622,7 +622,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                       disabled={amount > userBalance}
                     >
                       <span className="text-primary font-semibold">TRUE</span>
-                      <span className="ml-2">{amount} ETH</span>
+                      <span className="ml-2">{amount} HBAR</span>
                     </Button>
                   ))}
                 </div>
@@ -645,7 +645,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                       disabled={amount > userBalance}
                     >
                       <span className="text-secondary font-semibold">FALSE</span>
-                      <span className="ml-2">{amount} ETH</span>
+                      <span className="ml-2">{amount} HBAR</span>
                     </Button>
                   ))}
                 </div>
@@ -685,7 +685,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Your Stake:</span>
-                          <span className="font-medium">{profitCalculation.amount.toFixed(3)} ETH</span>
+                          <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Odds:</span>
@@ -693,15 +693,15 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Potential Return:</span>
-                          <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} ETH</span>
+                          <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
                         </div>
                         <div className="flex justify-between border-t border-border pt-1 mt-2">
                           <span className="text-muted-foreground">Profit if Correct:</span>
-                          <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} ETH</span>
+                          <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Loss if Wrong:</span>
-                          <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} ETH</span>
+                          <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
                         </div>
                       </div>
                     </div>
@@ -722,7 +722,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                 <div className="p-3 bg-muted/50 rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
                   <div className="font-semibold text-green-400">
-                    {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} ETH
+                    {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
                   </div>
                 </div>
               )}

@@ -36,9 +36,9 @@ export const mockAIResponses = {
 
 // Welcome bonus configuration
 export const welcomeBonus = {
-  amount: 0.1,
-  currency: 'ETH',
-  message: 'Welcome to Blockcast! Here\'s 0.1 ETH to get you started with truth verification! 🎉',
+  amount: 2,
+  currency: 'HBAR',
+  message: 'Welcome to Blockcast! Here\'s 2 HBAR to get you started with truth verification! 🎉',
   icon: 'gift'
 };
 

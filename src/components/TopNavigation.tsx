@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
-import { Menu, Shield, Settings, Moon, Sun, TrendingUp, Wallet, Bell, Users, Languages, ChevronDown } from 'lucide-react';
+import { Menu, Shield, Settings, Moon, Sun, TrendingUp, Wallet, Bell, Users, Languages, ChevronDown, User } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { Avatar, AvatarFallback } from './ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useLanguage } from './LanguageContext';
+import { useUser } from '../contexts/UserContext';
 // Logo placeholder - replace with actual image when available
 
 interface TopNavigationProps {
@@ -15,11 +16,16 @@ interface TopNavigationProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   userBalance: number;
+  walletConnected?: boolean;
+  walletAddress?: string;
+  onConnectWallet?: () => void;
+  onDisconnectWallet?: () => void;
 }
 
-export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance }: TopNavigationProps) {
+export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance, walletConnected, walletAddress, onConnectWallet, onDisconnectWallet }: TopNavigationProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { language, setLanguage } = useLanguage();
+  const { profile } = useUser();
 
   // Simplified main navigation - only core features
   const mainNavItems = [
@@ -108,8 +114,21 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
             {/* Balance (Desktop) - Compact */}
             <div className="hidden lg:flex items-center gap-1 bg-muted/50 px-2 py-1 rounded-md">
               <Wallet className="h-3 w-3 text-primary" />
-              <span className="text-xs font-semibold text-foreground">{userBalance.toFixed(3)}</span>
+              <span className="text-xs font-semibold text-foreground">{userBalance.toFixed(3)} HBAR</span>
             </div>
+
+            {/* Wallet Connect/Disconnect Button */}
+            {walletConnected ? (
+              <Button variant="outline" size="sm" onClick={onDisconnectWallet} className="hidden lg:flex items-center gap-1 text-xs px-2 py-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connected'}
+              </Button>
+            ) : (
+              <Button variant="default" size="sm" onClick={onConnectWallet} className="hidden lg:flex items-center gap-1 text-xs px-2 py-1">
+                <Wallet className="h-3 w-3" />
+                Connect Wallet
+              </Button>
+            )}
 
             {/* Notifications - Compact */}
             <Button variant="ghost" size="sm" className="relative p-2">
@@ -140,12 +159,17 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                 <DropdownMenuContent align="end" className="w-48">
                   <div className="flex items-center gap-2 p-2">
                     <Avatar className="h-6 w-6">
+                      <AvatarImage src={profile?.avatar} />
                       <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                        JD
+                        {profile?.displayName?.charAt(0)?.toUpperCase() || 
+                         profile?.username?.charAt(0)?.toUpperCase() || 
+                         walletAddress?.slice(2, 4)?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="text-sm font-medium">John Doe</p>
+                      <p className="text-sm font-medium">
+                        {profile?.displayName || profile?.username || `User ${walletAddress?.slice(-6)}`}
+                      </p>
                       <p className="text-xs text-muted-foreground">Truth Verifier</p>
                     </div>
                   </div>
@@ -153,10 +177,6 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                   <DropdownMenuItem onClick={() => handleNavClick('settings')}>
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive">
-                    Sign Out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -183,23 +203,43 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                   {/* User Profile Section */}
                   <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg mb-6">
                     <Avatar>
+                      <AvatarImage src={profile?.avatar} />
                       <AvatarFallback className="bg-primary text-primary-foreground">
-                        JD
+                        {profile?.displayName?.charAt(0)?.toUpperCase() || 
+                         profile?.username?.charAt(0)?.toUpperCase() || 
+                         walletAddress?.slice(2, 4)?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <p className="font-medium">John Doe</p>
+                      <p className="font-medium">
+                        {profile?.displayName || profile?.username || `User ${walletAddress?.slice(-6)}`}
+                      </p>
                       <p className="text-sm text-muted-foreground">Truth Verifier</p>
                     </div>
                   </div>
 
                   {/* Balance */}
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg mb-6">
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg mb-4">
                     <div className="flex items-center gap-2">
                       <Wallet className="h-5 w-5 text-primary" />
                       <span className="font-medium">Balance</span>
                     </div>
-                    <span className="font-bold text-primary">{userBalance.toFixed(3)} ETH</span>
+                    <span className="font-bold text-primary">{userBalance.toFixed(3)} HBAR</span>
+                  </div>
+
+                  {/* Wallet Connect/Disconnect Button (Mobile) */}
+                  <div className="mb-6">
+                    {walletConnected ? (
+                      <Button variant="outline" onClick={onDisconnectWallet} className="w-full flex items-center justify-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Connected: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Wallet'}</span>
+                      </Button>
+                    ) : (
+                      <Button variant="default" onClick={onConnectWallet} className="w-full flex items-center justify-center gap-2">
+                        <Wallet className="h-4 w-4" />
+                        Connect Wallet
+                      </Button>
+                    )}
                   </div>
 
                   {/* Navigation Items */}
@@ -244,13 +284,6 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                     </Select>
                   </div>
 
-                  {/* Sign Out */}
-                  <Button 
-                    variant="outline" 
-                    className="w-full mt-8 text-destructive border-destructive/30 hover:bg-destructive hover:text-destructive-foreground"
-                  >
-                    Sign Out
-                  </Button>
                 </SheetContent>
               </Sheet>
             </div>

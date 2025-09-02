@@ -1,10 +1,34 @@
 # BlockCast - African Truth Verification Platform
 
-BlockCast is a decentralized prediction market platform focused on truth verification in Africa, built on Hedera Hashgraph with comprehensive blockchain integration.
+BlockCast is a decentralized prediction market platform focused on truth verification in Africa, built on Hedera Hashgraph with comprehensive blockchain integration and MetaMask wallet support.
 
 ## 🌍 Overview
 
 BlockCast combines prediction markets with AI-powered truth verification to combat misinformation across Africa. Users can create markets, place bets on truth claims, submit evidence, and participate in a community-driven verification process.
+
+## 🦊 **METAMASK WALLET INTEGRATION**
+
+### ✅ **CONNECT YOUR WALLET**
+- **One-Click Connection**: Click "Connect Wallet" button in navigation
+- **Auto Network Setup**: MetaMask automatically adds Hedera Testnet (Chain ID: 296)
+- **Real HBAR Balance**: See your actual HBAR balance instead of mock amounts
+- **Network Switching**: Automatic switching to Hedera Testnet
+- **Account Management**: Switch accounts seamlessly with wallet updates
+- **Transaction Signing**: All transactions signed through your MetaMask wallet
+
+### 🔗 **HEDERA TESTNET CONFIGURATION**
+- **Network Name**: Hedera Testnet  
+- **RPC URL**: `https://testnet.hashio.io/api`
+- **Chain ID**: 296 (0x128)
+- **Currency Symbol**: HBAR
+- **Block Explorer**: `https://hashscan.io/testnet/`
+
+### 💳 **WALLET FEATURES**
+- **Real Balance Display**: Shows actual HBAR from your wallet
+- **Transaction History**: All transactions viewable on HashScan
+- **Wallet Address Display**: See your connected address (e.g., `0x32b0...aead`)
+- **Connect/Disconnect**: Easy wallet management in UI
+- **Auto-Reconnect**: Remembers wallet connection on page refresh
 
 ## 🎯 **HEDERA BLOCKCHAIN INTEGRATION - WHAT YOU CAN DO**
 
@@ -20,12 +44,15 @@ BlockCast combines prediction markets with AI-powered truth verification to comb
 - **Storage**: Market data permanently stored on Hedera blockchain
 
 #### 2. **PLACE PREDICTIONS/BETS** 💰
-- **UI Flow**: `Betting Markets` → Select market → Choose YES/NO → Enter amount → Place Bet
+- **UI Flow**: `Betting Markets` → Select market → Choose YES/NO → Enter HBAR amount → Place Bet
+- **Wallet Required**: Must connect MetaMask wallet to place bets
+- **Balance Check**: Automatically checks your real HBAR balance before betting
 - **Blockchain Action**: Calls `buyYes()` or `buyNo()` on individual market contract
 - **Collateral**: Uses CastToken (`0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c`) as betting currency
-- **Token Approval**: Automatic ERC20 approval before bet placement
+- **Token Approval**: Automatic ERC20 approval before bet placement via your wallet
 - **Pricing**: Dynamic automated market maker (AMM) pricing based on current pool ratios
-- **Transaction**: EVM transaction recorded on Hedera with bet details
+- **Transaction**: EVM transaction signed by your MetaMask and recorded on Hedera
+- **Gas Fees**: Real HBAR gas fees paid from your connected wallet
 - **NFT Minting**: Automatic BetNFT creation for each bet position (tradeable receipt)
 
 #### 3. **BET NFT CREATION & TRADING** 🎨
@@ -68,23 +95,29 @@ BlockCast combines prediction markets with AI-powered truth verification to comb
 | **AI Attestations Topic** | `0.0.6701057` | AI verification results |
 | **Challenges Topic** | `0.0.6701064` | Community challenges to AI decisions |
 
-### 💱 **YOUR HEDERA ACCOUNT DETAILS**
+### 💱 **WALLET CONNECTION & ACCOUNT DETAILS**
 
-- **Main Account ID**: `0.0.6643581`
-- **EVM Account ID**: `0.0.6421186` 
-- **EVM Address**: `0xfd76D4c18D5A10F558d057743bFB0218130157f4`
-- **Network**: Hedera Testnet
+- **Connect Wallet**: Use MetaMask with Hedera Testnet configuration
+- **Your Wallet Address**: Display varies based on connected account (e.g., `0x32b03e2fd3dcbfd1cb9c17ff4f9652579945aead`)
+- **Network**: Hedera Testnet (Chain ID: 296)
 - **RPC Endpoint**: `https://testnet.hashio.io/api`
+- **Currency**: HBAR (18 decimals)
+- **Balance**: Real-time HBAR balance from your MetaMask wallet
 
 ### 🔍 **VERIFY YOUR TRANSACTIONS**
 
-**View Your Account Activity:**
-- Main Account: https://hashscan.io/testnet/account/0.0.6643581
-- EVM Account: https://hashscan.io/testnet/account/0.0.6421186
+**View Your Connected Wallet Activity:**
+- Your MetaMask Address: Check HashScan with your connected address
+- Example: https://hashscan.io/testnet/address/0x32b03e2fd3dcbfd1cb9c17ff4f9652579945aead
 
 **View Contract Activity:**
-- Factory Contract: https://hashscan.io/testnet/contract/`<CONTRACT_ID>`
-- Recent Transaction: https://hashscan.io/testnet/transaction/`<TRANSACTION_HASH>`
+- Factory Contract: https://hashscan.io/testnet/address/0x2122f101576b05635C16c0Cbc29Fe72a6172f5Fa
+- Recent Transaction: https://hashscan.io/testnet/transaction/`<YOUR_TRANSACTION_HASH>`
+
+**Recent Successful Transactions:**
+- Market Creation: `0x2b425869dee36f2a5dd31a64d9adf26f611b471d5d9e7ff26c2e1f9f537f1221`
+- Contract Address: `0xE579549b2A641f4Fb171ed680F9a80c15c45Db61`
+- Market Creation 2: Contract `0x538d2Ee299667dC8f75894135890664A911fc645`
 
 ## 🏗️ Architecture & Flow
 
@@ -118,31 +151,37 @@ cd blockcast_new
 npm install
 ```
 
-### Environment Setup
-1. Create a Hedera testnet account at https://portal.hedera.com
-2. Copy your credentials to `.env`:
+### MetaMask Wallet Setup
+1. **Install MetaMask**: Download from https://metamask.io
+2. **Get Testnet HBAR**: Visit https://portal.hedera.com/register for testnet tokens
+3. **Connect Wallet**: Click "Connect Wallet" in the app - MetaMask will auto-configure Hedera Testnet
+
+### Optional Environment Setup (For Development)
+For development features, create `.env` file:
 
 ```bash
-# Hedera Testnet Configuration
+# Optional: Hedera Testnet Configuration (for fallback/development)
 VITE_HEDERA_TESTNET_ACCOUNT_ID=0.0.YOUR_ACCOUNT_ID
 VITE_HEDERA_TESTNET_PRIVATE_KEY=YOUR_DER_ENCODED_PRIVATE_KEY
+VITE_HEDERA_PRIVATE_KEY_EVM=YOUR_ETHEREUM_STYLE_PRIVATE_KEY
 
-# Deployment Configuration
-HEDERA_NETWORK=testnet
-HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT_ID
-HEDERA_PRIVATE_KEY=YOUR_DER_ENCODED_PRIVATE_KEY
-
-# HCS Topic IDs (created during setup)
+# HCS Topic IDs (pre-created)
 HCS_EVIDENCE_TOPIC=0.0.6701034
 HCS_AI_ATTESTATIONS_TOPIC=0.0.6701057
 HCS_CHALLENGES_TOPIC=0.0.6701064
 ```
+
+**Note**: With MetaMask integration, environment variables are only needed for development features. Regular users just need MetaMask!
 
 ### Start Development
 ```bash
 npm run dev
 ```
 App runs at: http://localhost:3000
+
+**⚠️ TROUBLESHOOTING**: If you get `ERR_CONNECTION_REFUSED` when accessing localhost:3000 in your browser:
+- The Vite config has been updated with `host: true` in `vite.config.ts` to fix this issue
+- If it still doesn't work, restart the dev server after making this change
 
 ## 🛠️ Technology Stack
 
@@ -156,6 +195,8 @@ App runs at: http://localhost:3000
 ### Blockchain & Web3
 - **Hedera Hashgraph** (@hashgraph/sdk)
 - **Hedera Smart Contracts** (Solidity)
+- **MetaMask Integration** (Ethers.js v6)
+- **Hedera EVM JSON-RPC** (HashIO API)
 - **Hedera Consensus Service (HCS)** for evidence storage
 - **IPFS** for file storage (Pinata, Web3.Storage, Infura)
 
@@ -172,10 +213,13 @@ blockcast_new/
 │   ├── components/          # React components
 │   │   ├── BettingMarkets.tsx     # Main markets interface
 │   │   ├── VerificationInput.tsx  # Truth verification form
+│   │   ├── TopNavigation.tsx      # Navigation with wallet connect
 │   │   ├── Settings.tsx           # User settings and portfolio
 │   │   └── ui/                    # Reusable UI components
 │   ├── utils/
-│   │   ├── hederaService.ts       # Hedera blockchain integration
+│   │   ├── walletService.ts       # MetaMask wallet integration
+│   │   ├── hederaEVMService.ts    # Hedera EVM contract interactions
+│   │   ├── hederaService.ts       # Hedera HCS integration
 │   │   ├── useHedera.ts           # React hook for Hedera
 │   │   ├── ipfsService.ts         # IPFS file storage
 │   │   └── contractService.ts     # Smart contract interactions

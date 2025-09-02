@@ -14,7 +14,13 @@
       "Bash(npm pkg set:*)",
       "Bash(npm run deploy:hedera:*)",
       "Bash(node:*)",
-      "Bash(npm run setup:hcs:*)"
+      "Bash(npm run setup:hcs:*)",
+      "Read(C:\\Users\\thoma\\Bureau\\hedera-docs/**)",
+      "Read(C:\\Users\\thoma\\Bureau\\hedera-docs/**)",
+      "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\getting-started-evm-developers/**)",
+      "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\getting-started-evm-developers/**)",
+      "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\core-concepts\\smart-contracts/**)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

@@ -19,6 +19,7 @@ import Settings from './components/Settings';
 import MarketPage from './components/MarketPage';
 import Categories from './components/Categories';
 import CreateMarket from './components/CreateMarket';
+import { UserProvider } from './contexts/UserContext';
 import { BettingMarket, realTimeMarkets } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
@@ -28,6 +29,7 @@ import { Gift, Sparkles, Wallet, Shield, Target, Zap, Users } from 'lucide-react
 // Logo placeholder - replace with actual image when available
 import { mockVerificationHistory } from './utils/mockData';
 import { useHedera } from './utils/useHedera';
+import { walletService, WalletConnection } from './utils/walletService';
 
 interface UserProfile {
   id: string;
@@ -88,6 +90,9 @@ export default function App() {
   // User state
   const [userId] = useState(generateUserId());
   
+  // Wallet state
+  const [walletConnection, setWalletConnection] = useState<WalletConnection | null>(null);
+  
   // Blockchain state - maps market IDs to their deployed contract addresses
   const [marketContracts, setMarketContracts] = useState<Record<string, string>>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -109,7 +114,7 @@ export default function App() {
     submitEvidence: hederaSubmitEvidence,
     createMarket: hederaCreateMarket,
     isConnected: isHederaConnected 
-  } = useHedera();
+  } = useHedera(walletConnection);
 
   // Initialize app on mount
   useEffect(() => {
@@ -130,7 +135,7 @@ export default function App() {
     // Initialize user profile
     const profile: UserProfile = {
       id: userId,
-      balance: 1.0, // Starting balance
+      balance: walletConnection?.balance ? parseFloat(walletConnection.balance) : 0.0, // Use real wallet balance
       totalBets: 0,
       totalWinnings: 0,
       verificationCount: 0,
@@ -139,6 +144,9 @@ export default function App() {
     };
     
     setUserProfile(profile);
+
+    // Try to auto-connect wallet if previously connected
+    tryAutoConnectWallet();
     
     // Show welcome for new users
     if (profile.isNew && !needsOnboarding) {
@@ -146,6 +154,48 @@ export default function App() {
     }
     
     setIsLoading(false);
+  };
+
+  // Wallet connection functions
+  const tryAutoConnectWallet = async () => {
+    try {
+      const connection = await walletService.autoConnect();
+      if (connection) {
+        setWalletConnection(connection);
+        updateUserBalanceFromWallet(connection);
+      }
+    } catch (error) {
+      console.log('Auto-connect failed, user needs to connect manually');
+    }
+  };
+
+  const connectWallet = async () => {
+    try {
+      const connection = await walletService.connectMetaMask();
+      setWalletConnection(connection);
+      updateUserBalanceFromWallet(connection);
+      toast.success('Wallet connected successfully! 🦊');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to connect wallet');
+    }
+  };
+
+  const updateUserBalanceFromWallet = (connection: WalletConnection) => {
+    setUserProfile(prev => prev ? {
+      ...prev,
+      balance: parseFloat(connection.balance)
+    } : null);
+  };
+
+  const disconnectWallet = () => {
+    walletService.disconnect();
+    setWalletConnection(null);
+    // Reset balance to 0 when wallet is disconnected
+    setUserProfile(prev => prev ? {
+      ...prev,
+      balance: 0
+    } : null);
+    toast.info('Wallet disconnected');
   };
 
   // Handle navigation changes
@@ -295,9 +345,19 @@ export default function App() {
       toast.error('User profile not found');
       return;
     }
+
+    // Check if wallet is connected
+    if (!walletConnection || !walletConnection.isConnected) {
+      toast.error('Please connect your wallet to place bets');
+      return;
+    }
+
+    // Refresh wallet balance before checking
+    const currentBalance = await walletService.getBalance();
+    const numericBalance = parseFloat(currentBalance);
     
-    if (amount > userProfile.balance) {
-      toast.error(`Insufficient balance. You have ${userProfile.balance.toFixed(3)} ETH available`);
+    if (amount > numericBalance) {
+      toast.error(`Insufficient balance. You have ${numericBalance.toFixed(3)} HBAR available`);
       return;
     }
 
@@ -556,7 +616,8 @@ export default function App() {
 
   return (
     <LanguageProvider>
-      <div className="min-h-screen bg-background flex flex-col">
+      <UserProvider walletConnection={walletConnection}>
+        <div className="min-h-screen bg-background flex flex-col">
         {/* Navigation */}
         <TopNavigation 
           currentTab={currentTab}
@@ -564,6 +625,10 @@ export default function App() {
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
           userBalance={userProfile?.balance || 0}
+          walletConnected={walletConnection?.isConnected || false}
+          walletAddress={walletConnection?.address}
+          onConnectWallet={connectWallet}
+          onDisconnectWallet={disconnectWallet}
         />
 
         {/* Main Content */}
@@ -601,7 +666,7 @@ export default function App() {
                 <div className="text-center">
                   <div className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-2">
                     <Wallet className="h-8 w-8" />
-                    {formatCurrency(userProfile?.balance || 1.0)} ETH
+                    {formatCurrency(userProfile?.balance || 0.0)} HBAR
                   </div>
                   <span className="text-sm text-muted-foreground">Starting Balance</span>
                 </div>
@@ -639,7 +704,8 @@ export default function App() {
 
         {/* Toast Notifications */}
         <Toaster />
-      </div>
+        </div>
+      </UserProvider>
     </LanguageProvider>
   );
 }
