@@ -20,7 +20,8 @@
       "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\getting-started-evm-developers/**)",
       "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\getting-started-evm-developers/**)",
       "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\core-concepts\\smart-contracts/**)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

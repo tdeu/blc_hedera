@@ -1,0 +1,202 @@
+import { BettingMarket } from '../components/BettingMarkets';
+
+export interface PendingMarketSubmission {
+  id: string;
+  market: BettingMarket;
+  submittedBy: string;
+  submittedAt: Date;
+  status: 'pending' | 'approved' | 'rejected';
+  adminAction?: {
+    adminAddress: string;
+    action: 'approved' | 'rejected';
+    reason?: string;
+    timestamp: Date;
+  };
+}
+
+class PendingMarketsService {
+  private readonly STORAGE_KEY = 'blockcast_pending_markets';
+
+  /**
+   * Submit a new market for admin approval
+   */
+  submitMarket(market: BettingMarket, submitterAddress: string): void {
+    const pendingMarket: PendingMarketSubmission = {
+      id: market.id,
+      market: {
+        ...market,
+        status: 'pending' // Override status to pending
+      },
+      submittedBy: submitterAddress,
+      submittedAt: new Date(),
+      status: 'pending'
+    };
+
+    const existingMarkets = this.getPendingMarkets();
+    existingMarkets.push(pendingMarket);
+    
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(existingMarkets));
+    
+    console.log(`📝 Market submitted for approval: ${market.claim}`);
+  }
+
+  /**
+   * Get all pending markets for admin review
+   */
+  getPendingMarkets(): PendingMarketSubmission[] {
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+      if (!stored) return [];
+      
+      const markets = JSON.parse(stored);
+      
+      // Convert date strings back to Date objects
+      return markets.map((market: any) => ({
+        ...market,
+        submittedAt: new Date(market.submittedAt),
+        market: {
+          ...market.market,
+          expiresAt: new Date(market.market.expiresAt)
+        },
+        adminAction: market.adminAction ? {
+          ...market.adminAction,
+          timestamp: new Date(market.adminAction.timestamp)
+        } : undefined
+      }));
+    } catch (error) {
+      console.error('Error loading pending markets:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get only markets that are still pending approval
+   */
+  getActivePendingMarkets(): PendingMarketSubmission[] {
+    return this.getPendingMarkets().filter(market => market.status === 'pending');
+  }
+
+  /**
+   * Approve a pending market
+   */
+  approveMarket(marketId: string, adminAddress: string, reason?: string): BettingMarket | null {
+    const markets = this.getPendingMarkets();
+    const marketIndex = markets.findIndex(m => m.id === marketId);
+    
+    if (marketIndex === -1) {
+      console.error('Market not found for approval:', marketId);
+      return null;
+    }
+
+    const market = markets[marketIndex];
+    
+    // Update market status
+    markets[marketIndex] = {
+      ...market,
+      status: 'approved',
+      market: {
+        ...market.market,
+        status: 'active' // Now it becomes active for users
+      },
+      adminAction: {
+        adminAddress,
+        action: 'approved',
+        reason,
+        timestamp: new Date()
+      }
+    };
+
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(markets));
+    
+    console.log(`✅ Market approved by admin: ${market.market.claim}`);
+    return markets[marketIndex].market;
+  }
+
+  /**
+   * Reject a pending market
+   */
+  rejectMarket(marketId: string, adminAddress: string, reason: string): boolean {
+    const markets = this.getPendingMarkets();
+    const marketIndex = markets.findIndex(m => m.id === marketId);
+    
+    if (marketIndex === -1) {
+      console.error('Market not found for rejection:', marketId);
+      return false;
+    }
+
+    const market = markets[marketIndex];
+    
+    // Update market status
+    markets[marketIndex] = {
+      ...market,
+      status: 'rejected',
+      adminAction: {
+        adminAddress,
+        action: 'rejected',
+        reason,
+        timestamp: new Date()
+      }
+    };
+
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(markets));
+    
+    console.log(`❌ Market rejected by admin: ${market.market.claim} - Reason: ${reason}`);
+    return true;
+  }
+
+  /**
+   * Get approved markets that should be added to the main markets list
+   */
+  getApprovedMarkets(): BettingMarket[] {
+    return this.getPendingMarkets()
+      .filter(market => market.status === 'approved')
+      .map(market => market.market);
+  }
+
+  /**
+   * Clear processed markets (optional cleanup)
+   */
+  clearProcessedMarkets(): void {
+    const markets = this.getPendingMarkets();
+    const stillPending = markets.filter(market => market.status === 'pending');
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(stillPending));
+  }
+
+  /**
+   * Get statistics for admin dashboard
+   */
+  getStats() {
+    const markets = this.getPendingMarkets();
+    return {
+      totalSubmitted: markets.length,
+      pending: markets.filter(m => m.status === 'pending').length,
+      approved: markets.filter(m => m.status === 'approved').length,
+      rejected: markets.filter(m => m.status === 'rejected').length
+    };
+  }
+
+  /**
+   * Convert PendingMarketSubmission to the format expected by admin components
+   */
+  toPendingMarketFormat(submission: PendingMarketSubmission): import('./adminService').PendingMarket {
+    return {
+      id: submission.id,
+      question: submission.market.claim,
+      creator: submission.submittedBy,
+      createdAt: submission.submittedAt,
+      category: submission.market.category,
+      endTime: submission.market.expiresAt,
+      description: submission.market.description,
+      tags: [
+        submission.market.country,
+        submission.market.region,
+        submission.market.marketType,
+        submission.market.confidenceLevel
+      ].filter(Boolean) as string[],
+      status: submission.status as any
+    };
+  }
+}
+
+// Export singleton instance
+export const pendingMarketsService = new PendingMarketsService();

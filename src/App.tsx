@@ -19,6 +19,10 @@ import Settings from './components/Settings';
 import MarketPage from './components/MarketPage';
 import Categories from './components/Categories';
 import CreateMarket from './components/CreateMarket';
+import Admin from './components/admin/Admin';
+import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
+import { adminService } from './utils/adminService';
+import { pendingMarketsService } from './utils/pendingMarketsService';
 import { UserProvider } from './contexts/UserContext';
 import { BettingMarket, realTimeMarkets } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
@@ -52,7 +56,7 @@ const isValidPage = (tab: string): boolean => {
   const validPages = [
     'markets', 'market-detail', 'portfolio', 'verify', 'community', 
     'social', 'settings', 'about', 'contact', 'categories',
-    'privacy', 'terms', 'create-market'
+    'privacy', 'terms', 'create-market', 'admin'
   ];
   return validPages.includes(tab);
 };
@@ -86,6 +90,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
   
   // User state
   const [userId] = useState(generateUserId());
@@ -97,7 +102,7 @@ export default function App() {
   const [marketContracts, setMarketContracts] = useState<Record<string, string>>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userBets, setUserBets] = useState<UserBet[]>([]);
-  const [markets] = useState<BettingMarket[]>(realTimeMarkets);
+  const [markets, setMarkets] = useState<BettingMarket[]>(realTimeMarkets);
   
   // Verification state
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
@@ -131,6 +136,12 @@ export default function App() {
     // Check onboarding status
     const needsOnboarding = shouldShowOnboarding();
     setShowOnboarding(needsOnboarding);
+
+    // Load approved markets into homepage
+    loadApprovedMarkets();
+
+    // Set up callback for when markets are approved by admin
+    adminService.setMarketApprovalCallback(addApprovedMarketToHomepage);
     
     // Initialize user profile
     const profile: UserProfile = {
@@ -225,6 +236,55 @@ export default function App() {
   const handleToggleDarkMode = () => {
     const newMode = toggleDarkMode(isDarkMode);
     setIsDarkMode(newMode);
+  };
+
+  // Handle admin mode switching
+  const handleAdminModeChange = (mode: 'user' | 'admin') => {
+    setAdminMode(mode);
+    if (mode === 'admin') {
+      setCurrentTab('admin');
+      toast.success('Switched to Admin Mode');
+    } else {
+      setCurrentTab('markets');
+      toast.success('Switched to User Mode');
+    }
+  };
+
+  // Load approved markets and merge with existing markets
+  const loadApprovedMarkets = () => {
+    try {
+      const approvedMarkets = pendingMarketsService.getApprovedMarkets();
+      
+      // Merge approved markets with existing markets, avoiding duplicates
+      setMarkets(currentMarkets => {
+        const existingIds = new Set(currentMarkets.map(m => m.id));
+        const newApprovedMarkets = approvedMarkets.filter(m => !existingIds.has(m.id));
+        
+        if (newApprovedMarkets.length > 0) {
+          console.log(`🎉 Adding ${newApprovedMarkets.length} approved markets to homepage`);
+          return [...currentMarkets, ...newApprovedMarkets];
+        }
+        
+        return currentMarkets;
+      });
+    } catch (error) {
+      console.error('Error loading approved markets:', error);
+    }
+  };
+
+  // Add a specific approved market immediately to the markets list
+  const addApprovedMarketToHomepage = (market: BettingMarket) => {
+    setMarkets(currentMarkets => {
+      // Check if market already exists
+      const exists = currentMarkets.some(m => m.id === market.id);
+      
+      if (!exists) {
+        console.log(`🎉 Market approved and added to homepage: ${market.claim}`);
+        return [...currentMarkets, market];
+      }
+      
+      return currentMarkets;
+    });
   };
 
   // Handle onboarding completion
@@ -456,9 +516,15 @@ export default function App() {
     setCurrentTab('create-market');
   };
 
-  // Handle new market submission - Enhanced with Hedera integration
+  // Handle new market submission - Enhanced with Hedera integration and admin approval
   const handleSubmitNewMarket = async (marketData: Partial<BettingMarket>) => {
     try {
+      // Check if user is connected
+      if (!walletConnection?.address) {
+        toast.error('Please connect your wallet to create a market');
+        return;
+      }
+
       // Generate market ID
       const marketId = `market_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
@@ -475,7 +541,7 @@ export default function App() {
         noOdds: 2.0,
         totalCasters: 0,
         expiresAt: marketData.expiresAt || new Date(),
-        status: 'active',
+        status: 'pending', // Changed: Markets now start as pending
         trending: false,
         country: marketData.country,
         region: marketData.region,
@@ -496,9 +562,10 @@ export default function App() {
         });
       }
 
-      // Add to local markets (in real app, this would come from backend)
-      // For now, we'll just show success
-      toast.success('Market created successfully! It will be reviewed and activated shortly.');
+      // Submit to pending markets for admin approval
+      pendingMarketsService.submitMarket(newMarket, walletConnection.address);
+
+      toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');
       setCurrentTab('markets');
     } catch (error) {
       toast.error('Failed to create market. Please try again.');
@@ -589,6 +656,24 @@ export default function App() {
         return <PrivacyPolicy />;
       case 'terms':
         return <TermsOfService />;
+      case 'admin':
+        // Only show admin panel if user is in admin mode and is authorized
+        if (adminMode === 'admin' && walletConnection?.address && 
+            adminService.isAdmin(walletConnection.address)) {
+          return <Admin walletConnection={walletConnection} />;
+        } else {
+          // Redirect to markets if trying to access admin without proper mode/permissions
+          setCurrentTab('markets');
+          return (
+            <BettingMarkets 
+              onPlaceBet={handlePlaceBet} 
+              userBalance={userProfile?.balance || 0}
+              onMarketSelect={handleMarketSelect}
+              markets={markets}
+              onCreateMarket={handleCreateMarket}
+            />
+          );
+        }
       default:
         return (
           <BettingMarkets 
@@ -630,6 +715,18 @@ export default function App() {
           onConnectWallet={connectWallet}
           onDisconnectWallet={disconnectWallet}
         />
+
+        {/* Admin Mode Switcher - Only show for admin users */}
+        {walletConnection?.isConnected && walletConnection?.address && 
+         adminService.isAdmin(walletConnection.address) && (
+          <div className="container mx-auto px-4 pt-4 max-w-7xl lg:px-8">
+            <AdminModeSwitcher
+              walletAddress={walletConnection.address}
+              currentMode={adminMode}
+              onModeChange={handleAdminModeChange}
+            />
+          </div>
+        )}
 
         {/* Main Content */}
         <main className="flex-1 container mx-auto px-4 py-6 max-w-7xl lg:px-8 pb-20 lg:pb-6">
