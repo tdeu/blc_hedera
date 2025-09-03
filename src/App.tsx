@@ -25,7 +25,7 @@ import { adminService } from './utils/adminService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
 import { UserProvider } from './contexts/UserContext';
-import { BettingMarket, realTimeMarkets } from './components/BettingMarkets';
+import { BettingMarket } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import { Button } from './components/ui/button';
@@ -63,7 +63,11 @@ const isValidPage = (tab: string): boolean => {
 };
 
 const shouldShowOnboarding = (): boolean => {
-  return !localStorage.getItem('blockcast_onboarded');
+  const onboarded = localStorage.getItem('blockcast_onboarded');
+  console.log('🔍 Onboarding check:', { onboarded, shouldShow: !onboarded });
+  // Force skip onboarding - it's causing issues
+  localStorage.setItem('blockcast_onboarded', 'true');
+  return false;
 };
 
 const markOnboardingComplete = (): void => {
@@ -85,7 +89,9 @@ const toggleDarkMode = (current: boolean): boolean => {
 };
 
 export default function App() {
-  // Core state
+  console.log('🔥 APP COMPONENT RENDER - timestamp:', Date.now());
+  
+  // Restore all the original state
   const [currentTab, setCurrentTab] = useState('markets');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -103,7 +109,7 @@ export default function App() {
   const [marketContracts, setMarketContracts] = useState<Record<string, string>>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userBets, setUserBets] = useState<UserBet[]>([]);
-  const [markets, setMarkets] = useState<BettingMarket[]>(realTimeMarkets);
+  const [markets, setMarkets] = useState<BettingMarket[]>([]);
   
   // Verification state
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
@@ -124,48 +130,79 @@ export default function App() {
 
   // Initialize app on mount
   useEffect(() => {
+    console.log('🔥 MAIN useEffect triggered - will call initializeApp');
     initializeApp();
   }, []);
-
+  
+  // Debug all state changes
+  useEffect(() => {
+    console.log('🔥 State changed - isLoading:', isLoading, 'showOnboarding:', showOnboarding, 'currentTab:', currentTab);
+    
+    // Check if something is setting showOnboarding to true after initialization
+    if (showOnboarding) {
+      console.log('🚨 ALERT: showOnboarding became true! This will cause blank screen!');
+    }
+  }, [isLoading, showOnboarding, currentTab]);
+  
+  useEffect(() => {
+    console.log('🔥 Markets changed - count:', markets.length, markets.length === 0 ? '(empty - loading from Supabase)' : '(loaded from Supabase)');
+  }, [markets]);
+  
+  useEffect(() => {
+    console.log('🔥 UserProfile changed:', userProfile ? 'exists' : 'null');
+  }, [userProfile]);
   const initializeApp = async () => {
+    console.log('🚀 Starting app initialization...');
     setIsLoading(true);
     
-    // Initialize dark mode
-    const darkModeEnabled = initializeDarkMode();
-    setIsDarkMode(darkModeEnabled);
-    
-    // Check onboarding status
-    const needsOnboarding = shouldShowOnboarding();
-    setShowOnboarding(needsOnboarding);
+    try {
+      // Initialize dark mode
+      console.log('🌙 Setting up dark mode...');
+      const darkModeEnabled = initializeDarkMode();
+      setIsDarkMode(darkModeEnabled);
+      
+      // Check onboarding status
+      console.log('📚 Checking onboarding status...');
+      const needsOnboarding = shouldShowOnboarding();
+      setShowOnboarding(needsOnboarding);
 
-    // Load approved markets into homepage
-    await loadApprovedMarkets();
+      // Load approved markets into homepage
+      console.log('📊 Loading approved markets...');
+      await loadApprovedMarkets();
 
-    // Set up callback for when markets are approved by admin
-    adminService.setMarketApprovalCallback(addApprovedMarketToHomepage);
-    
-    // Initialize user profile
-    const profile: UserProfile = {
-      id: userId,
-      balance: walletConnection?.balance ? parseFloat(walletConnection.balance) : 0.0, // Use real wallet balance
-      totalBets: 0,
-      totalWinnings: 0,
-      verificationCount: 0,
-      level: 'Novice Verifier',
-      isNew: !localStorage.getItem('blockcast_welcomed')
-    };
-    
-    setUserProfile(profile);
+      // Set up callback for when markets are approved by admin
+      console.log('⚙️ Setting up admin callbacks...');
+      adminService.setMarketApprovalCallback(addApprovedMarketToHomepage);
+      
+      // Initialize user profile
+      console.log('👤 Creating user profile...');
+      const profile: UserProfile = {
+        id: userId,
+        balance: walletConnection?.balance ? parseFloat(walletConnection.balance) : 0.0, // Use real wallet balance
+        totalBets: 0,
+        totalWinnings: 0,
+        verificationCount: 0,
+        level: 'Novice Verifier',
+        isNew: !localStorage.getItem('blockcast_welcomed')
+      };
+      
+      setUserProfile(profile);
 
-    // Try to auto-connect wallet if previously connected
-    tryAutoConnectWallet();
-    
-    // Show welcome for new users
-    if (profile.isNew && !needsOnboarding) {
-      setShowWelcomeDialog(true);
+      // Try to auto-connect wallet if previously connected
+      console.log('💳 Attempting auto-wallet connection...');
+      tryAutoConnectWallet();
+      
+      // Show welcome for new users
+      if (profile.isNew && !needsOnboarding) {
+        setShowWelcomeDialog(true);
+      }
+      
+      console.log('✅ App initialization complete!');
+      setIsLoading(false);
+    } catch (error) {
+      console.error('❌ App initialization failed:', error);
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   // Wallet connection functions
@@ -605,31 +642,46 @@ export default function App() {
 
   // Render current page
   const renderCurrentPage = () => {
+    console.log('🎯 renderCurrentPage called, isLoading:', isLoading, 'currentTab:', currentTab);
+    
     if (isLoading) {
+      console.log('🔄 Showing loading screen');
       return (
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <h3>Loading Blockcast...</h3>
-            <p className="text-muted-foreground">
-              Connecting to African truth verification network
-            </p>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '400px',
+          backgroundColor: 'white',
+          color: 'black'
+        }}>
+          <div style={{textAlign: 'center'}}>
+            <div>Loading Blockcast...</div>
+            <div>Please wait while we initialize...</div>
           </div>
         </div>
       );
     }
 
-    switch (currentTab) {
-      case 'markets':
-        return (
-          <BettingMarkets 
-            onPlaceBet={handlePlaceBet} 
-            userBalance={userProfile?.balance || 0}
-            onMarketSelect={handleMarketSelect}
-            markets={markets}
-            onCreateMarket={handleCreateMarket}
-          />
-        );
+    console.log('🎯 About to render main content');
+    
+    try {
+      switch (currentTab) {
+        case 'markets':
+          console.log('🏪 Rendering markets with', markets.length, 'markets');
+          if (!markets || markets.length === 0) {
+            return <div style={{padding: '20px', background: 'yellow', color: 'black'}}>No markets available</div>;
+          }
+          
+          return (
+            <BettingMarkets 
+              onPlaceBet={handlePlaceBet} 
+              userBalance={userProfile?.balance || 0}
+              onMarketSelect={handleMarketSelect}
+              markets={markets}
+              onCreateMarket={handleCreateMarket}
+            />
+          );
       case 'market-detail':
         return selectedMarket ? (
           <MarketPage
@@ -716,10 +768,22 @@ export default function App() {
           />
         );
     }
+    } catch (error) {
+      console.error('❌ Error rendering main content:', error);
+      return (
+        <div style={{padding: '20px', background: 'red', color: 'white', position: 'fixed', top: 0, left: 0, zIndex: 10000}}>
+          <h1>RENDER ERROR</h1>
+          <p>Error: {error.message}</p>
+          <p>Stack: {error.stack}</p>
+        </div>
+      );
+    }
   };
 
-  // Show onboarding if needed
-  if (showOnboarding) {
+
+  // Show onboarding if needed - BUT PREVENT IT FROM SHOWING AFTER INITIALIZATION
+  if (showOnboarding && isLoading) {
+    console.log('📚 Would show onboarding, but preventing it');
     return (
       <LanguageProvider>
         <div className="min-h-screen bg-background">
