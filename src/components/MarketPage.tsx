@@ -20,6 +20,11 @@ import { useLanguage } from './LanguageContext';
 import { BettingMarket } from './BettingMarkets';
 import { generateMockComments, getMarketRules, formatTimeAgo, MarketComment, MarketRule } from '../utils/marketData';
 import { debugClickHandler, validateButtonState, logCastingOperation } from '../utils/testHelpers';
+import ResolutionStatus from './ResolutionStatus';
+import DisputeModal, { DisputeFormData } from './DisputeModal';
+import { MarketResolution } from '../utils/supabase';
+import { disputeService } from '../utils/disputeService';
+import { resolutionService } from '../utils/resolutionService';
 
 interface MarketPageProps {
   market: BettingMarket;
@@ -43,6 +48,12 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'comments' | 'rules' | 'analysis'>('overview');
+  
+  // Resolution and dispute state
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [resolution, setResolution] = useState<MarketResolution | null>(null);
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+  const [userTokenBalance, setUserTokenBalance] = useState(1000); // Mock balance for now
 
   // Helper function to get translated text
   const getTranslatedText = (text: string, translations?: { en: string; fr: string; sw: string }) => {
@@ -143,6 +154,55 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
     toast.success('Comment posted successfully!');
     setNewComment('');
     setCommentPosition('neutral');
+  };
+
+  // Resolution and dispute handlers
+  const handleDisputeClick = () => {
+    setShowDisputeModal(true);
+  };
+
+  const handleDisputeSubmit = async (disputeData: DisputeFormData) => {
+    setIsSubmittingDispute(true);
+    try {
+      await disputeService.submitDispute(
+        market.id,
+        'current-user-id', // This would come from wallet context
+        disputeData
+      );
+      toast.success('Dispute submitted successfully');
+      setShowDisputeModal(false);
+    } catch (error) {
+      console.error('Failed to submit dispute:', error);
+      toast.error('Failed to submit dispute. Please try again.');
+    } finally {
+      setIsSubmittingDispute(false);
+    }
+  };
+
+  // Mock resolution data based on market status
+  const getResolutionData = (): MarketResolution | undefined => {
+    if (!market.resolution_data) return undefined;
+    
+    return {
+      id: `resolution-${market.id}`,
+      market_id: market.id,
+      outcome: market.resolution_data.outcome,
+      source: market.resolution_data.source || 'api',
+      api_data: null,
+      confidence: market.resolution_data.confidence,
+      timestamp: market.resolution_data.timestamp || new Date().toISOString(),
+      dispute_period_end: market.dispute_period_end || new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      final_outcome: market.resolution_data.final_outcome,
+      resolved_by: market.resolution_data.resolved_by,
+      admin_notes: market.resolution_data.admin_notes,
+      hcs_topic_id: market.resolution_data.hcs_topic_id,
+      hts_token_id: 'mock-token-id',
+      contract_id: market.resolution_data.hcs_topic_id,
+      transaction_id: market.resolution_data.transaction_id,
+      consensus_timestamp: market.resolution_data.consensus_timestamp,
+      created_at: market.resolution_data.timestamp || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
   };
 
   const handleLikeComment = (commentId: string) => {
@@ -386,6 +446,25 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                     expert analysis to determine the most accurate outcome.
                   </p>
                 </div>
+                
+                <Separator />
+
+                {/* Resolution Status - Show if market has resolution data or is not active */}
+                {(market.status !== 'active' || market.resolution_data) && (
+                  <>
+                    <ResolutionStatus
+                      market={market}
+                      resolution={getResolutionData()}
+                      onDispute={handleDisputeClick}
+                      hcsTopicId={market.resolution_data?.hcs_topic_id}
+                      transactionId={market.resolution_data?.transaction_id}
+                      consensusTimestamp={market.resolution_data?.consensus_timestamp ? new Date(market.resolution_data.consensus_timestamp) : undefined}
+                      disputeCount={market.dispute_count || 0}
+                      canDispute={market.status === 'pending_resolution' && !!market.dispute_period_end && new Date() < new Date(market.dispute_period_end)}
+                    />
+                    <Separator />
+                  </>
+                )}
                 
                 <Separator />
                 
@@ -755,6 +834,20 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
           </Card>
         </div>
       </div>
+
+      {/* Dispute Modal */}
+      <DisputeModal
+        isOpen={showDisputeModal}
+        marketId={market.id}
+        market={market}
+        resolution={getResolutionData() || {} as MarketResolution}
+        onSubmit={handleDisputeSubmit}
+        onClose={() => setShowDisputeModal(false)}
+        bondAmount={100} // Mock bond amount
+        userTokenBalance={userTokenBalance}
+        htsTokenId="mock-token-id"
+        isSubmitting={isSubmittingDispute}
+      />
     </div>
   );
 }

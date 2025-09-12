@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Plus, Minus, Eye, BarChart3, PieChart, Activity } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Eye, BarChart3, PieChart, Activity } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 export interface UserBet {
@@ -27,14 +27,9 @@ export interface UserBet {
 interface BettingPortfolioProps {
   userBalance: number;
   userBets: UserBet[];
-  onAddFunds?: () => void;
-  onWithdraw?: () => void;
 }
 
-export default function BettingPortfolio({ userBalance, userBets, onAddFunds, onWithdraw }: BettingPortfolioProps) {
-  // Default handlers if not provided
-  const handleAddFunds = onAddFunds || (() => { window.alert('Add funds functionality coming soon!'); });
-  const handleWithdraw = onWithdraw || (() => { window.alert('Withdraw functionality coming soon!'); });
+export default function BettingPortfolio({ userBalance, userBets }: BettingPortfolioProps) {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Calculate portfolio stats
@@ -47,8 +42,8 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
   const winRate = resolvedCasts.length > 0 ? (wonCasts.length / resolvedCasts.length) * 100 : 0;
   const totalPnL = totalWinnings - resolvedCasts.reduce((sum, cast) => sum + cast.amount, 0);
 
-  // Truth casting accuracy (simulated)
-  const truthAccuracy = 87.3; // Percentage of correct truth predictions
+  // Truth casting accuracy - coming later
+  const truthAccuracy = null; // Will be calculated from resolved predictions later
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -107,13 +102,22 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
             Track your truth verification positions • Monitor accuracy • Manage funds
           </p>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={handleAddFunds} className="gap-2 bg-primary hover:bg-primary/90">
-            <Plus className="h-4 w-4" />
+
+        {/* Wallet Actions */}
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => toast.success("Add Funds: Feature coming soon! Connect external wallet to deposit HBAR.")}
+            className="gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+          >
+            <DollarSign className="h-4 w-4" />
             Add Funds
           </Button>
-          <Button onClick={handleWithdraw} variant="outline" className="gap-2">
-            <Minus className="h-4 w-4" />
+          <Button 
+            variant="outline" 
+            onClick={() => toast.success("Withdrawal: Feature coming soon! Funds will be sent to your connected wallet.")}
+            className="gap-2"
+          >
+            <TrendingDown className="h-4 w-4" />
             Withdraw
           </Button>
         </div>
@@ -149,7 +153,9 @@ export default function BettingPortfolio({ userBalance, userBets, onAddFunds, on
               <Target className="h-5 w-5 text-green-500" />
               <span className="font-semibold text-green-500">Truth Accuracy</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">{truthAccuracy}%</p>
+            <p className="text-2xl font-bold text-foreground">
+              {resolvedCasts.length > 0 ? `${winRate.toFixed(1)}%` : '0.0%'}
+            </p>
             <p className="text-sm text-muted-foreground">Verification success rate</p>
           </CardContent>
         </Card>

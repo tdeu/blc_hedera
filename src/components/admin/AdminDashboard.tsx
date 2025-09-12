@@ -13,6 +13,9 @@ import {
   Activity
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
+import AdminDisputePanel from '../AdminDisputePanel';
+import { disputeService } from '../../utils/disputeService';
+import { MarketDispute } from '../../utils/supabase';
 
 interface AdminOverviewProps {
   userProfile?: {
@@ -24,9 +27,12 @@ interface AdminOverviewProps {
 const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [disputes, setDisputes] = useState<MarketDispute[]>([]);
+  const [disputesLoading, setDisputesLoading] = useState(false);
 
   useEffect(() => {
     loadAdminStats();
+    loadDisputes();
   }, []);
 
   const loadAdminStats = async () => {
@@ -38,6 +44,30 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
       console.error('Error loading admin stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDisputes = async () => {
+    try {
+      setDisputesLoading(true);
+      const pendingDisputes = await disputeService.getPendingDisputes();
+      setDisputes(pendingDisputes);
+    } catch (error) {
+      console.error('Error loading disputes:', error);
+    } finally {
+      setDisputesLoading(false);
+    }
+  };
+
+  const handleReviewDispute = async (disputeId: string, decision: any) => {
+    try {
+      await disputeService.reviewDispute(disputeId, decision);
+      // Reload disputes after review
+      await loadDisputes();
+      await loadAdminStats(); // Update stats as well
+    } catch (error) {
+      console.error('Error reviewing dispute:', error);
+      throw error; // Re-throw to let the component handle the error
     }
   };
 
@@ -249,6 +279,20 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dispute Management Section */}
+      {stats && stats.activeDisputes > 0 && (
+        <div className="mt-6">
+          <AdminDisputePanel
+            disputes={disputes}
+            onReviewDispute={handleReviewDispute}
+            showHCSHistory={true}
+            showBondTransactions={true}
+            enableContractArbitration={false}
+            isLoading={disputesLoading}
+          />
+        </div>
+      )}
 
       {/* System Status */}
       <Card>

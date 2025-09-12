@@ -42,7 +42,21 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
   ];
 
   const handleNavClick = (tabId: string) => {
-    onTabChange(tabId);
+    // Handle settings with tab parameters
+    if (tabId.includes('?tab=')) {
+      const [mainTab, params] = tabId.split('?');
+      onTabChange(mainTab);
+      // Update URL to include tab parameter
+      const url = new URL(window.location.href);
+      url.search = params;
+      window.history.replaceState({}, '', url.toString());
+    } else {
+      onTabChange(tabId);
+      // Clear URL parameters for non-settings tabs
+      if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
     setShowMobileMenu(false);
   };
 
@@ -97,7 +111,7 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                   <span className="hidden lg:inline text-xs">{languageOptions.find(l => l.code === language)?.flag}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="z-[100]">
                 {languageOptions.map((lang) => (
                   <DropdownMenuItem 
                     key={lang.code}
@@ -156,7 +170,7 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                     <ChevronDown className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-48 z-[100]">
                   <div className="flex items-center gap-2 p-2">
                     <Avatar className="h-6 w-6">
                       <AvatarImage src={profile?.avatar} />
@@ -174,7 +188,24 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                     </div>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleNavClick('settings')}>
+                  <DropdownMenuItem onClick={() => handleNavClick('profile')}>
+                    <User className="h-4 w-4 mr-2" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNavClick('portfolio')}>
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Portfolio
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNavClick('settings?tab=markets')}>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    My Markets
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNavClick('settings?tab=history')}>
+                    <Bell className="h-4 w-4 mr-2" />
+                    History
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleNavClick('settings?tab=preferences')}>
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
                   </DropdownMenuItem>
@@ -264,6 +295,26 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                         </Button>
                       );
                     })}
+                  </div>
+
+                  {/* Account Settings (Mobile) */}
+                  <div className="mt-4">
+                    <Button
+                      variant={currentTab === 'profile' ? "default" : "ghost"}
+                      onClick={() => handleNavClick('profile')}
+                      className="w-full justify-start gap-3 h-12"
+                    >
+                      <User className="h-5 w-5" />
+                      <span className="font-medium">Profile</span>
+                    </Button>
+                    <Button
+                      variant={currentTab === 'settings' ? "default" : "ghost"}
+                      onClick={() => handleNavClick('settings')}
+                      className="w-full justify-start gap-3 h-12"
+                    >
+                      <Settings className="h-5 w-5" />
+                      <span className="font-medium">Account Settings</span>
+                    </Button>
                   </div>
 
                   {/* Language Selector Mobile */}

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { userProfileService, UserProfile } from '../utils/userProfileService';
+import { userDataService } from '../utils/userDataService';
 import { WalletConnection } from '../utils/walletService';
 
 interface UserContextType {
@@ -43,6 +44,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children, walletConn
       // Create profile if it doesn't exist
       if (!userProfile) {
         console.log('👤 Profile not found, creating new profile');
+        // Get real stats from userDataService
+        const realStats = await userDataService.getUserStats(walletAddress);
         userProfile = await userProfileService.createProfile(walletAddress, {
           displayName: `User ${walletAddress.slice(-6)}`,
           preferences: {
@@ -52,8 +55,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children, walletConn
             theme: 'system'
           }
         });
+        // Update with real stats
+        userProfile.stats = realStats;
         console.log('✅ New profile created');
       } else {
+        // Update stats with real data
+        console.log('🔄 Updating profile with real stats');
+        const realStats = await userDataService.getUserStats(walletAddress);
+        userProfile.stats = realStats;
         console.log('✅ Profile loaded successfully');
       }
       

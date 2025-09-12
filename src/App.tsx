@@ -16,6 +16,7 @@ import VerificationInput from './components/VerificationInput';
 import VerificationResults, { VerificationResult } from './components/VerificationResults';
 import VerificationHistory from './components/VerificationHistory';
 import Settings from './components/Settings';
+import Profile from './components/Profile';
 import MarketPage from './components/MarketPage';
 import Categories from './components/Categories';
 import CreateMarket from './components/CreateMarket';
@@ -24,6 +25,7 @@ import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
 import { adminService } from './utils/adminService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
+import { userDataService } from './utils/userDataService';
 import { UserProvider } from './contexts/UserContext';
 import { BettingMarket } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
@@ -507,6 +509,17 @@ export default function App() {
     
     setUserBets(prev => [newBet, ...prev]);
     
+    // Record bet in userDataService for persistence
+    userDataService.recordBet(
+      walletConnection.address,
+      marketId,
+      market.claim,
+      position,
+      amount,
+      '0', // shares - would be calculated from blockchain
+      'pending' // transactionHash - will be updated after blockchain confirmation
+    );
+    
     // Update user profile immediately
     setUserProfile({
       ...userProfile,
@@ -632,6 +645,14 @@ export default function App() {
 
       // Submit to pending markets for admin approval
       pendingMarketsService.submitMarket(newMarket, walletConnection.address);
+      
+      // Record market creation in userDataService
+      userDataService.recordMarketCreation(
+        walletConnection.address,
+        marketId,
+        newMarket.claim,
+        'pending' // Will be updated with actual transaction hash when available
+      );
 
       toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');
       setCurrentTab('markets');
@@ -722,6 +743,10 @@ export default function App() {
             onCreateMarket={handleSubmitNewMarket}
           />
         );
+      case 'profile':
+        return <Profile 
+          userBalance={userProfile?.balance || 0}
+        />;
       case 'settings':
         return <Settings 
           isDarkMode={isDarkMode} 

@@ -71,6 +71,9 @@
             "build": "vite build",
             "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
             "setup:hcs": "node scripts/create-hcs-topics.js",
+            "setup:resolution": "node scripts/setup-resolution-system.js",
+            "setup:existing": "node scripts/setup-existing-topics.js",
+            "test:hedera": "node scripts/test-hedera-connection.js",
             "test:contracts": "hardhat test --network hederaTestnet"
       },
       "type": "module"

@@ -37,7 +37,7 @@ export interface BettingMarket {
   noOdds: number;
   totalCasters: number;
   expiresAt: Date;
-  status: 'active' | 'resolving' | 'resolved';
+  status: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked';
   resolution?: 'yes' | 'no';
   trending: boolean;
   imageUrl?: string;
@@ -45,6 +45,21 @@ export interface BettingMarket {
   region?: string;
   marketType: 'present' | 'future';
   confidenceLevel: 'high' | 'medium' | 'low';
+  // Resolution system fields
+  resolution_data?: {
+    outcome?: 'yes' | 'no';
+    source?: string;
+    confidence?: 'high' | 'medium' | 'low';
+    timestamp?: string;
+    final_outcome?: 'yes' | 'no';
+    resolved_by?: 'api' | 'admin' | 'contract';
+    admin_notes?: string;
+    hcs_topic_id?: string;
+    transaction_id?: string;
+    consensus_timestamp?: string;
+  };
+  dispute_count?: number;
+  dispute_period_end?: string;
 }
 
 interface BettingMarketsProps {

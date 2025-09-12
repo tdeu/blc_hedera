@@ -8,13 +8,15 @@ import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Settings as SettingsIcon, User, Bell, Shield, Globe, Palette, Database, Smartphone, Languages, Moon, Sun, Volume2, VolumeX, Wallet, History, Save, Edit } from 'lucide-react';
+import { Settings as SettingsIcon, User, Globe, Palette, Database, Languages, Moon, Sun, Wallet, History, BarChart3, Bell, Shield, Lock, Smartphone } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useLanguage } from './LanguageContext';
 import { toast } from 'sonner@2.0.3';
 import BettingPortfolio, { UserBet } from './BettingPortfolio';
 import VerificationHistory, { VerificationResult } from './VerificationHistory';
+import UserCreatedMarkets from './UserCreatedMarkets';
 import { useUser } from '../contexts/UserContext';
+import { userDataService } from '../utils/userDataService';
 import { Textarea } from './ui/textarea';
 
 interface SettingsProps {
@@ -29,39 +31,62 @@ interface SettingsProps {
 export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, userBets = [], verificationHistory = [], onSelectVerification }: SettingsProps) {
   const { language, setLanguage, t } = useLanguage();
   const { profile, updateUserProfile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState('profile');
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    displayName: '',
-    username: '',
-    bio: '',
-    avatar: ''
-  });
+  
+  // Get initial tab from URL parameters
+  const getInitialTab = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    
+    if (tabParam && ['portfolio', 'markets', 'history', 'preferences', 'data'].includes(tabParam)) {
+      return tabParam;
+    }
+    return 'portfolio';
+  };
+  
+  const [activeTab, setActiveTab] = useState(getInitialTab());
+  const [realUserBets, setRealUserBets] = useState<UserBet[]>([]);
   const [notifications, setNotifications] = useState({
-    truthMarkets: true,
-    communityUpdates: true,
-    governance: false,
-    marketing: false,
-    soundEnabled: true
-  });
-  const [privacy, setPrivacy] = useState({
-    profileVisible: true,
-    historyVisible: false,
-    activityVisible: true
+    soundEnabled: true,
+    emailAlerts: true,
+    pushNotifications: true,
+    weeklyReports: false
   });
 
-  // Initialize profile form when profile loads
+  // Load real user data when profile loads
   useEffect(() => {
-    if (profile && !editingProfile) {
-      setProfileForm({
-        displayName: profile.displayName || '',
-        username: profile.username || '',
-        bio: profile.bio || '',
-        avatar: profile.avatar || ''
-      });
+    if (profile) {
+      loadUserBets();
     }
-  }, [profile, editingProfile]);
+  }, [profile]);
+
+  // Listen for URL parameter changes to update active tab
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const newTab = getInitialTab();
+      if (newTab !== activeTab) {
+        setActiveTab(newTab);
+      }
+    };
+    
+    // Listen for popstate events (back/forward navigation)
+    window.addEventListener('popstate', handleUrlChange);
+    
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, [activeTab]);
+
+  const loadUserBets = async () => {
+    if (!profile?.walletAddress) return;
+    
+    try {
+      const bettingHistory = await userDataService.getUserBettingHistory(profile.walletAddress);
+      const convertedBets = userDataService.convertToUserBets(bettingHistory);
+      setRealUserBets(convertedBets);
+    } catch (error) {
+      console.error('Error loading user bets:', error);
+    }
+  };
 
   const languageOptions = [
     { code: 'en', name: 'English', flag: '🇬🇧', native: 'English' },
@@ -74,15 +99,6 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
     toast.success(`Language changed to ${languageOptions.find(l => l.code === newLanguage)?.native}`);
   };
 
-  const handleNotificationChange = (key: string, value: boolean) => {
-    setNotifications(prev => ({ ...prev, [key]: value }));
-    toast.success(value ? 'Notification enabled' : 'Notification disabled');
-  };
-
-  const handlePrivacyChange = (key: string, value: boolean) => {
-    setPrivacy(prev => ({ ...prev, [key]: value }));
-    toast.success('Privacy setting updated');
-  };
 
   const handleExportData = () => {
     toast.success('Data export started! You will receive an email when ready.');
@@ -92,45 +108,14 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
     toast.error('Account deletion requires email confirmation. Check your inbox.');
   };
 
-  const handleEditProfile = () => {
-    setEditingProfile(true);
+  const handleNotificationChange = (key: string, value: boolean) => {
+    setNotifications(prev => ({
+      ...prev,
+      [key]: value
+    }));
+    toast.success(`${key} ${value ? 'enabled' : 'disabled'}`);
   };
 
-  const handleSaveProfile = async () => {
-    try {
-      setSaving(true);
-      await updateUserProfile({
-        displayName: profileForm.displayName,
-        username: profileForm.username,
-        bio: profileForm.bio,
-        avatar: profileForm.avatar
-      });
-      setEditingProfile(false);
-      toast.success('Profile updated successfully!');
-    } catch (error) {
-      console.error('Error saving profile:', error);
-      toast.error('Failed to save profile. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingProfile(false);
-    // Reset form to current profile values
-    if (profile) {
-      setProfileForm({
-        displayName: profile.displayName || '',
-        username: profile.username || '',
-        bio: profile.bio || '',
-        avatar: profile.avatar || ''
-      });
-    }
-  };
-
-  const updateProfileForm = (field: keyof typeof profileForm, value: string) => {
-    setProfileForm(prev => ({ ...prev, [field]: value }));
-  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -150,13 +135,13 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
       {/* Settings Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-7">
-          <TabsTrigger value="profile" className="gap-2">
-            <User className="h-4 w-4" />
-            Profile
-          </TabsTrigger>
           <TabsTrigger value="portfolio" className="gap-2">
             <Wallet className="h-4 w-4" />
             Portfolio
+          </TabsTrigger>
+          <TabsTrigger value="markets" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            My Markets
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
             <History className="h-4 w-4" />
@@ -181,7 +166,27 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-6">
-          <BettingPortfolio userBalance={userBalance} userBets={userBets} />
+          <BettingPortfolio 
+            userBalance={userBalance} 
+            userBets={realUserBets.length > 0 ? realUserBets : userBets} 
+          />
+        </TabsContent>
+
+        <TabsContent value="markets" className="space-y-6">
+          {profile?.walletAddress && (
+            <UserCreatedMarkets 
+              walletAddress={profile.walletAddress}
+              onCreateNewMarket={() => {
+                // Navigate to create market page
+                window.location.hash = '#verify-claims';
+                setActiveTab('profile');
+              }}
+              onViewMarket={(marketId) => {
+                // Navigate to market details
+                console.log('View market:', marketId);
+              }}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
@@ -191,177 +196,6 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
           />
         </TabsContent>
 
-        <TabsContent value="profile" className="space-y-6">
-          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Profile Information</CardTitle>
-                  <CardDescription>
-                    Manage your public profile and account details
-                  </CardDescription>
-                </div>
-                {!editingProfile && (
-                  <Button onClick={handleEditProfile} variant="outline" size="sm">
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit Profile
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-pulse">Loading profile...</div>
-                </div>
-              ) : !profile ? (
-                <div className="text-center py-8">
-                  <p>Please connect your wallet to view your profile.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Profile Picture */}
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={editingProfile ? profileForm.avatar : profile.avatar} />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                        {(editingProfile ? profileForm.displayName : profile.displayName)?.charAt(0)?.toUpperCase() ||
-                         (editingProfile ? profileForm.username : profile.username)?.charAt(0)?.toUpperCase() || 
-                         'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="space-y-2">
-                      {editingProfile ? (
-                        <div className="space-y-2">
-                          <Input
-                            placeholder="Avatar URL"
-                            value={profileForm.avatar}
-                            onChange={(e) => updateProfileForm('avatar', e.target.value)}
-                            className="w-48"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Recommended: Square image, at least 400x400px
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="text-sm text-muted-foreground">
-                            {profile.avatar ? 'Custom avatar set' : 'Using default avatar'}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Click "Edit Profile" to change your avatar
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Basic Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="displayName">Display Name</Label>
-                      {editingProfile ? (
-                        <Input
-                          id="displayName"
-                          value={profileForm.displayName}
-                          onChange={(e) => updateProfileForm('displayName', e.target.value)}
-                          placeholder="Your display name"
-                        />
-                      ) : (
-                        <div className="p-2 bg-muted/50 rounded-md text-sm">
-                          {profile.displayName || 'No display name set'}
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      {editingProfile ? (
-                        <Input
-                          id="username"
-                          value={profileForm.username}
-                          onChange={(e) => updateProfileForm('username', e.target.value)}
-                          placeholder="@username"
-                        />
-                      ) : (
-                        <div className="p-2 bg-muted/50 rounded-md text-sm">
-                          {profile.username ? `@${profile.username}` : 'No username set'}
-                        </div>
-                      )}
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <Label htmlFor="walletAddress">Wallet Address</Label>
-                      <div className="p-2 bg-muted/50 rounded-md text-sm font-mono">
-                        {profile.walletAddress}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bio */}
-                  <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    {editingProfile ? (
-                      <Textarea
-                        id="bio"
-                        value={profileForm.bio}
-                        onChange={(e) => updateProfileForm('bio', e.target.value)}
-                        placeholder="Tell the community about yourself and your truth verification interests..."
-                        rows={4}
-                      />
-                    ) : (
-                      <div className="p-3 bg-muted/50 rounded-md text-sm min-h-[100px]">
-                        {profile.bio || 'No bio provided'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* User Statistics */}
-                  <div className="p-4 bg-muted/20 rounded-lg">
-                    <h4 className="font-semibold text-foreground mb-3">Your Statistics</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold text-primary">{profile.stats.marketsCreated}</div>
-                        <div className="text-xs text-muted-foreground">Markets Created</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-primary">{profile.stats.totalBetsPlaced}</div>
-                        <div className="text-xs text-muted-foreground">Bets Placed</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-primary">{profile.stats.correctPredictions}</div>
-                        <div className="text-xs text-muted-foreground">Correct Predictions</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-primary">{profile.stats.reputationScore}</div>
-                        <div className="text-xs text-muted-foreground">Reputation</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  {editingProfile ? (
-                    <div className="flex gap-2">
-                      <Button onClick={handleCancelEdit} variant="outline" className="flex-1">
-                        Cancel
-                      </Button>
-                      <Button onClick={handleSaveProfile} disabled={saving} className="flex-1">
-                        {saving ? (
-                          'Saving...'
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4 mr-2" />
-                            Save Changes
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="preferences" className="space-y-6">
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
@@ -495,138 +329,60 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
             <CardHeader>
               <CardTitle>Notification Preferences</CardTitle>
               <CardDescription>
-                Choose what updates you want to receive
+                Choose how and when you want to be notified
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Truth Markets */}
+              {/* Email Notifications */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Truth Markets</h4>
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">Email Notifications</h4>
+                </div>
                 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Market Resolutions</Label>
-                    <p className="text-sm text-muted-foreground">When markets you participated in are resolved</p>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Market Resolution Alerts</Label>
+                      <p className="text-sm text-muted-foreground">Get notified when your truth casts resolve</p>
+                    </div>
+                    <Switch 
+                      checked={notifications.emailAlerts}
+                      onCheckedChange={(checked) => handleNotificationChange('emailAlerts', checked)}
+                    />
                   </div>
-                  <Switch 
-                    checked={notifications.truthMarkets}
-                    onCheckedChange={(checked) => handleNotificationChange('truthMarkets', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>New African Markets</Label>
-                    <p className="text-sm text-muted-foreground">When new truth markets are created in your region</p>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Weekly Performance Reports</Label>
+                      <p className="text-sm text-muted-foreground">Weekly summary of your truth casting activity</p>
+                    </div>
+                    <Switch 
+                      checked={notifications.weeklyReports}
+                      onCheckedChange={(checked) => handleNotificationChange('weeklyReports', checked)}
+                    />
                   </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Price Alerts</Label>
-                    <p className="text-sm text-muted-foreground">When odds change significantly on your positions</p>
-                  </div>
-                  <Switch />
                 </div>
               </div>
 
               <Separator />
 
-              {/* Community */}
+              {/* Push Notifications */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Community</h4>
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">Push Notifications</h4>
+                </div>
                 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Community Updates</Label>
-                    <p className="text-sm text-muted-foreground">Posts and discussions from your communities</p>
+                    <Label>Browser Notifications</Label>
+                    <p className="text-sm text-muted-foreground">Real-time alerts in your browser</p>
                   </div>
                   <Switch 
-                    checked={notifications.communityUpdates}
-                    onCheckedChange={(checked) => handleNotificationChange('communityUpdates', checked)}
+                    checked={notifications.pushNotifications}
+                    onCheckedChange={(checked) => handleNotificationChange('pushNotifications', checked)}
                   />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Mentions</Label>
-                    <p className="text-sm text-muted-foreground">When someone mentions you in discussions</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Followers</Label>
-                    <p className="text-sm text-muted-foreground">When someone follows your truth verification activity</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Governance */}
-              <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Governance</h4>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>New Proposals</Label>
-                    <p className="text-sm text-muted-foreground">When new governance proposals are submitted</p>
-                  </div>
-                  <Switch 
-                    checked={notifications.governance}
-                    onCheckedChange={(checked) => handleNotificationChange('governance', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Voting Reminders</Label>
-                    <p className="text-sm text-muted-foreground">Reminders before voting deadlines</p>
-                  </div>
-                  <Switch />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Results</Label>
-                    <p className="text-sm text-muted-foreground">When proposals you voted on are resolved</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Delivery Methods */}
-              <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Delivery Methods</h4>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Email Notifications</Label>
-                    <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Push Notifications</Label>
-                    <p className="text-sm text-muted-foreground">Browser and mobile push notifications</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>SMS Alerts</Label>
-                    <p className="text-sm text-muted-foreground">Important alerts via SMS (fees may apply)</p>
-                  </div>
-                  <Switch />
                 </div>
               </div>
             </CardContent>
@@ -636,103 +392,81 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
         <TabsContent value="privacy" className="space-y-6">
           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Privacy & Security</CardTitle>
+              <CardTitle>Privacy Settings</CardTitle>
               <CardDescription>
-                Control who can see your information and activity
+                Control your privacy and data sharing preferences
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Profile Visibility */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Profile Visibility</h4>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">Profile Visibility</h4>
+                </div>
                 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Public Profile</Label>
-                    <p className="text-sm text-muted-foreground">Allow others to view your profile and stats</p>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Public Profile</Label>
+                      <p className="text-sm text-muted-foreground">Allow others to view your truth casting statistics</p>
+                    </div>
+                    <Switch defaultChecked />
                   </div>
-                  <Switch 
-                    checked={privacy.profileVisible}
-                    onCheckedChange={(checked) => handlePrivacyChange('profileVisible', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Verification History</Label>
-                    <p className="text-sm text-muted-foreground">Show your truth verification history publicly</p>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Show Betting History</Label>
+                      <p className="text-sm text-muted-foreground">Display your resolved truth casts publicly</p>
+                    </div>
+                    <Switch />
                   </div>
-                  <Switch 
-                    checked={privacy.historyVisible}
-                    onCheckedChange={(checked) => handlePrivacyChange('historyVisible', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Activity Status</Label>
-                    <p className="text-sm text-muted-foreground">Show when you're online or active</p>
-                  </div>
-                  <Switch 
-                    checked={privacy.activityVisible}
-                    onCheckedChange={(checked) => handlePrivacyChange('activityVisible', checked)}
-                  />
                 </div>
               </div>
 
               <Separator />
 
-              {/* Security Settings */}
+              {/* Data Sharing */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Security</h4>
+                <div className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">Data Sharing</h4>
+                </div>
                 
-                <Button variant="outline" className="w-full justify-start">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Change Password
-                </Button>
-
-                <Button variant="outline" className="w-full justify-start">
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  Setup Two-Factor Authentication
-                </Button>
-
-                <Button variant="outline" className="w-full justify-start">
-                  <Globe className="h-4 w-4 mr-2" />
-                  Active Sessions
-                </Button>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Analytics</Label>
+                      <p className="text-sm text-muted-foreground">Share anonymous usage data to improve Blockcast</p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Performance Metrics</Label>
+                      <p className="text-sm text-muted-foreground">Allow aggregated performance data for research</p>
+                    </div>
+                    <Switch />
+                  </div>
+                </div>
               </div>
 
               <Separator />
 
-              {/* Data Control */}
+              {/* Wallet Privacy */}
               <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Data Control</h4>
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">Wallet Privacy</h4>
+                </div>
                 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Analytics Tracking</Label>
-                    <p className="text-sm text-muted-foreground">Help improve the platform with usage data</p>
+                    <Label>Hide Wallet Address</Label>
+                    <p className="text-sm text-muted-foreground">Don't display your full wallet address publicly</p>
                   </div>
                   <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Personalized Content</Label>
-                    <p className="text-sm text-muted-foreground">Show content based on your activity</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Marketing Communications</Label>
-                    <p className="text-sm text-muted-foreground">Receive updates about new features</p>
-                  </div>
-                  <Switch 
-                    checked={notifications.marketing}
-                    onCheckedChange={(checked) => handleNotificationChange('marketing', checked)}
-                  />
                 </div>
               </div>
             </CardContent>

@@ -21,7 +21,13 @@
       "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\getting-started-evm-developers/**)",
       "Read(C:\\Users\\thoma\\Bureau\\hedera-docs\\core-concepts\\smart-contracts/**)",
       "Bash(curl:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Read(//c/Users/thoma/Bureau/hedera-agent-kit/**)",
+      "Read(//c/Users/thoma/Bureau/hedera-docs/core-concepts/smart-contracts/**)",
+      "Read(//c/Users/thoma/Bureau/hedera-docs/core-concepts/tokens/hedera-token-service-hts-native-tokenization/**)",
+      "Bash(npm run setup:resolution:*)",
+      "Bash(npm run test:hedera:*)",
+      "Bash(npm run setup:existing:*)"
     ],
     "deny": [],
     "ask": []
