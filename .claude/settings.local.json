@@ -27,7 +27,8 @@
       "Read(//c/Users/thoma/Bureau/hedera-docs/core-concepts/tokens/hedera-token-service-hts-native-tokenization/**)",
       "Bash(npm run setup:resolution:*)",
       "Bash(npm run test:hedera:*)",
-      "Bash(npm run setup:existing:*)"
+      "Bash(npm run setup:existing:*)",
+      "Bash(npm run test:ai-agent:*)"
     ],
     "deny": [],
     "ask": []

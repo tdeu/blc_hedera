@@ -3,7 +3,10 @@
       "version": "0.1.0",
       "private": true,
       "dependencies": {
-            "@hashgraph/sdk": "^2.71.1",
+            "@hashgraph/sdk": "^2.72.0",
+            "@langchain/anthropic": "^0.3.27",
+            "@langchain/core": "^0.3.75",
+            "@langchain/openai": "^0.6.11",
             "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
             "@nomicfoundation/hardhat-ethers": "^4.0.0",
             "@nomicfoundation/hardhat-network-helpers": "^3.0.0",
@@ -43,9 +46,11 @@
             "date-fns": "^4.1.0",
             "embla-carousel-react": "^8.6.0",
             "ethers": "^6.15.0",
+            "hedera-agent-kit": "^3.2.0",
             "hono": "^4.0.0",
             "input-otp": "^1.4.2",
             "ipfs-http-client": "^60.0.1",
+            "langchain": "^0.3.33",
             "lucide-react": "^0.487.0",
             "next-themes": "^0.4.6",
             "react": "^18.3.1",
@@ -64,6 +69,7 @@
             "@vitejs/plugin-react-swc": "^3.10.2",
             "dotenv": "^17.2.1",
             "hardhat": "^3.0.3",
+            "tsx": "^4.20.5",
             "vite": "6.3.5"
       },
       "scripts": {
@@ -74,7 +80,8 @@
             "setup:resolution": "node scripts/setup-resolution-system.js",
             "setup:existing": "node scripts/setup-existing-topics.js",
             "test:hedera": "node scripts/test-hedera-connection.js",
-            "test:contracts": "hardhat test --network hederaTestnet"
+            "test:contracts": "hardhat test --network hederaTestnet",
+            "test:ai-agent": "npx tsx src/test/testAIAgent.ts"
       },
       "type": "module"
 }

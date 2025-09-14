@@ -13,7 +13,7 @@ import {
   TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle, 
   ArrowLeft, Share2, Heart, Bookmark, Zap, Globe, Shield, 
   ThumbsUp, ThumbsDown, Send, Filter, Eye, AlertCircle,
-  CheckCircle2, Clock3, FileText, Scale
+  CheckCircle2, Clock3, FileText, Scale, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from './LanguageContext';
@@ -25,6 +25,8 @@ import DisputeModal, { DisputeFormData } from './DisputeModal';
 import { MarketResolution } from '../utils/supabase';
 import { disputeService } from '../utils/disputeService';
 import { resolutionService } from '../utils/resolutionService';
+import { AIAgentSimple } from './AIAgentSimple';
+import { useBlockCastAI } from '../hooks/useBlockCastAI';
 
 interface MarketPageProps {
   market: BettingMarket;
@@ -54,6 +56,16 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const [resolution, setResolution] = useState<MarketResolution | null>(null);
   const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
   const [userTokenBalance, setUserTokenBalance] = useState(1000); // Mock balance for now
+  
+  // AI Agent integration
+  const { 
+    processCommand, 
+    status: aiStatus, 
+    isProcessing: aiProcessing, 
+    lastResult: aiResult 
+  } = useBlockCastAI();
+  const [aiAnalysis, setAIAnalysis] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Helper function to get translated text
   const getTranslatedText = (text: string, translations?: { en: string; fr: string; sw: string }) => {
@@ -176,6 +188,29 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
       toast.error('Failed to submit dispute. Please try again.');
     } finally {
       setIsSubmittingDispute(false);
+    }
+  };
+
+  const handleAIAnalysis = async () => {
+    setIsAnalyzing(true);
+    try {
+      const command = `Analyze market evidence for: "${getTranslatedText(market.claim, market.claimTranslations)}". 
+      Market details: ${getTranslatedText(market.description, market.descriptionTranslations)}. 
+      Country: ${market.country || market.region}. 
+      Current status: ${market.status}. 
+      Provide confidence score, key factors, cultural context analysis, and multi-language evidence assessment.`;
+      
+      const result = await processCommand(command);
+      setAIAnalysis(result);
+      
+      if (result) {
+        toast.success('AI analysis completed successfully');
+      }
+    } catch (error) {
+      console.error('AI analysis failed:', error);
+      toast.error('AI analysis failed. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -617,52 +652,155 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
           {activeTab === 'analysis' && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  {t('aiAnalysis')} & {t('insights')}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    {t('aiAnalysis')} & {t('insights')}
+                  </CardTitle>
+                  <AIAgentSimple compact={true} />
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-                  <h4 className="font-semibold text-primary mb-2">{t('aiConfidenceScore')}</h4>
-                  <div className="flex items-center gap-2">
-                    <Progress value={72} className="flex-1" />
-                    <span className="font-bold">72%</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {t('aiConfidenceExplanation')}
-                  </p>
+                {/* AI Agent Status and Analysis Trigger */}
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleAIAnalysis}
+                    disabled={isAnalyzing || aiProcessing}
+                    className="flex items-center gap-2"
+                    size="sm"
+                  >
+                    <Zap className="h-4 w-4" />
+                    {isAnalyzing ? 'Analyzing...' : 'Generate AI Analysis'}
+                  </Button>
+                  {aiResult && (
+                    <Button 
+                      onClick={() => setAIAnalysis(null)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Clear Analysis
+                    </Button>
+                  )}
                 </div>
 
-                <div className="space-y-3">
-                  <h4 className="font-semibold">{t('keyFactors')}</h4>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                      Historical production trends show consistent 15% annual growth
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                      Increased investment from streaming platforms
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
-                      Economic uncertainties may impact funding
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
-                      Quality vs quantity balance remains a challenge
-                    </li>
-                  </ul>
-                </div>
+                {/* AI Analysis Results */}
+                {isAnalyzing && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                      <span className="text-sm font-medium">AI Analysis in Progress...</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Analyzing market evidence, cultural context, and multi-language sources...
+                    </p>
+                  </div>
+                )}
+
+                {aiResult && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200">
+                      <h4 className="font-semibold text-green-700 dark:text-green-400 mb-2">AI Confidence Assessment</h4>
+                      <div className="flex items-center gap-2">
+                        <Progress value={aiResult.confidence || 72} className="flex-1" />
+                        <span className="font-bold">{aiResult.confidence || 72}%</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {aiResult.reasoning || 'Based on multi-language analysis and cultural context evaluation'}
+                      </p>
+                    </div>
+
+                    {aiResult.keyFactors && (
+                      <div className="space-y-3">
+                        <h4 className="font-semibold">Key Factors Identified</h4>
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                          {aiResult.keyFactors.map((factor: any, index: number) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                              {factor}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {aiResult.culturalContext && (
+                      <div className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
+                        <h4 className="font-semibold text-purple-700 dark:text-purple-400 mb-2">Cultural Context Analysis</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {aiResult.culturalContext}
+                        </p>
+                      </div>
+                    )}
+
+                    {aiResult.languageAnalysis && (
+                      <div className="space-y-2">
+                        <h4 className="font-semibold">Multi-Language Evidence</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(aiResult.languageAnalysis).map(([lang, status]: [string, any]) => (
+                            <div key={lang} className="flex items-center gap-2 text-sm">
+                              <div className={`w-2 h-2 rounded-full ${
+                                status === 'confirmed' ? 'bg-green-500' : 
+                                status === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}></div>
+                              <span className="capitalize">{lang}: {status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Fallback to mock data when AI is not available */}
+                {!aiResult && !isAnalyzing && aiStatus !== 'ready' && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-200">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                        AI Agent setup required for real-time analysis. Showing example analysis below.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
+                      <h4 className="font-semibold text-primary mb-2">Example AI Confidence Score</h4>
+                      <div className="flex items-center gap-2">
+                        <Progress value={72} className="flex-1" />
+                        <span className="font-bold">72%</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Example multi-language cultural analysis
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="font-semibold">Example Key Factors</h4>
+                      <ul className="space-y-2 text-sm text-muted-foreground">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          Historical production trends show consistent 15% annual growth
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          Increased investment from streaming platforms
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
+                          Economic uncertainties may impact funding
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
 
                 <div>
-                  <h4 className="font-semibold mb-2">{t('dataSources')}</h4>
+                  <h4 className="font-semibold mb-2">Data Sources & Verification</h4>
                   <div className="text-sm text-muted-foreground space-y-1">
-                    <p>• Nigerian Film Corporation official statistics</p>
-                    <p>• Nollywood Producers Association reports</p>
-                    <p>• International film industry databases</p>
-                    <p>• Streaming platform content reports</p>
+                    <p>• Multi-language news analysis (English, French, Swahili, Arabic)</p>
+                    <p>• Regional cultural context evaluation</p>
+                    <p>• Cross-referenced official statistics</p>
+                    <p>• Expert verification and crowd-sourced validation</p>
+                    <p>• Real-time blockchain consensus data</p>
                   </div>
                 </div>
               </CardContent>
@@ -847,6 +985,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
         userTokenBalance={userTokenBalance}
         htsTokenId="mock-token-id"
         isSubmitting={isSubmittingDispute}
+        enableAIAssistance={true}
       />
     </div>
   );

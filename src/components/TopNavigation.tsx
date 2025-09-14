@@ -32,7 +32,6 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
     { id: 'markets', label: 'Truth Markets', icon: TrendingUp },
     { id: 'verify', label: 'Verify Truth', icon: Shield },
     { id: 'community', label: 'Community', icon: Users },
-    { id: 'social', label: 'Social Hub', icon: Users },
   ];
 
   const languageOptions = [

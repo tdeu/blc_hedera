@@ -10,12 +10,14 @@ import {
   TrendingUp,
   Clock,
   DollarSign,
-  Activity
+  Activity,
+  Brain
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
 import { disputeService } from '../../utils/disputeService';
 import { MarketDispute } from '../../utils/supabase';
+import { AIAgentSimple } from '../AIAgentSimple';
 
 interface AdminOverviewProps {
   userProfile?: {
@@ -297,25 +299,58 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
       {/* System Status */}
       <Card>
         <CardHeader>
-          <CardTitle>System Status</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            System Status
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm">Hedera Network: Online</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-muted-foreground">Blockchain Services</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-3 bg-green-500 rounded-full"></div>
+                  <span className="text-sm">Hedera Network: Online</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-3 bg-green-500 rounded-full"></div>
+                  <span className="text-sm">Smart Contracts: Active</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-3 bg-green-500 rounded-full"></div>
+                  <span className="text-sm">HCS Topics: Healthy</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm">Smart Contracts: Active</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm">HCS Topics: Healthy</span>
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-muted-foreground">AI Agent Status</h4>
+              <AIAgentSimple compact={true} />
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Agent Panel - Temporarily disabled for debugging */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <div className="p-6 border rounded-lg bg-muted/50">
+            <h3 className="text-lg font-medium mb-2">AI Agent Integration</h3>
+            <p className="text-sm text-muted-foreground">
+              AI Agent components temporarily disabled while debugging. 
+              The BlockCast AI Agent with multi-language support and cultural context will be restored once dependencies are resolved.
+            </p>
+          </div>
+        </div>
+        <div>
+          <div className="p-6 border rounded-lg bg-muted/50">
+            <h4 className="font-medium mb-2">Coming Soon</h4>
+            <p className="text-xs text-muted-foreground">
+              Advanced AI status panel with real-time dispute analysis
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
