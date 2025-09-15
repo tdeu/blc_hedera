@@ -43,9 +43,11 @@
             "class-variance-authority": "^0.7.1",
             "clsx": "*",
             "cmdk": "^1.1.1",
+            "cors": "^2.8.5",
             "date-fns": "^4.1.0",
             "embla-carousel-react": "^8.6.0",
             "ethers": "^6.15.0",
+            "express": "^5.1.0",
             "hedera-agent-kit": "^3.2.0",
             "hono": "^4.0.0",
             "input-otp": "^1.4.2",
@@ -65,9 +67,11 @@
       },
       "devDependencies": {
             "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+            "@types/cors": "^2.8.19",
+            "@types/express": "^5.0.3",
             "@types/node": "^20.10.0",
             "@vitejs/plugin-react-swc": "^3.10.2",
-            "dotenv": "^17.2.1",
+            "dotenv": "^17.2.2",
             "hardhat": "^3.0.3",
             "tsx": "^4.20.5",
             "vite": "6.3.5"
@@ -75,6 +79,7 @@
       "scripts": {
             "dev": "vite",
             "build": "vite build",
+            "server": "npx tsx src/api/anthropic-proxy.ts",
             "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
             "setup:hcs": "node scripts/create-hcs-topics.js",
             "setup:resolution": "node scripts/setup-resolution-system.js",

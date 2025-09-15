@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+// Load environment variables first
+dotenv.config();
+
 import { getBlockCastAIAgent, MarketResolutionRequest, DisputeProcessingRequest } from '../services/blockcastAIAgent';
 
 /**
@@ -189,7 +193,12 @@ async function testAIAgentIntegration() {
 }
 
 // Run test if called directly (ESM compatible)
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectlyExecuted = import.meta.url.endsWith('testAIAgent.ts') &&
+                           (import.meta.url.includes(`file:///${process.argv[1].replace(/\\/g, '/')}`)) ||
+                           process.argv[1].includes('testAIAgent.ts');
+
+if (isDirectlyExecuted) {
+  console.log('🚀 Starting BlockCast AI Agent test execution...');
   testAIAgentIntegration().catch(console.error);
 }
 

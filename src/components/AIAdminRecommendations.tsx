@@ -3,19 +3,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
-import { 
-  Brain, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  Globe, 
+import {
+  Brain,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Globe,
   TrendingUp,
   Users,
   Loader2,
   RefreshCw,
   Eye,
   Award,
-  Slash
+  Slash,
+  Clock,
+  Gavel
 } from 'lucide-react';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
 import { AIAgentStatus } from './AIAgentStatus';
@@ -49,45 +51,35 @@ export const AIAdminRecommendations: React.FC<AIAdminRecommendationsProps> = ({
   marketData,
   onRecommendationReceived
 }) => {
-  const { status, processing, generateAdminRecommendations } = useBlockCastAI();
+  const { status, isProcessing, processCommand } = useBlockCastAI();
   const [recommendations, setRecommendations] = useState<any>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   // Generate recommendations when component mounts or data changes
   useEffect(() => {
-    if (status.initialized && marketData && !processing.processing) {
+    if (status === 'ready' && marketData && !isProcessing) {
       generateRecommendations();
     }
-  }, [status.initialized, marketId, marketData]);
+  }, [status, marketId, marketData]);
 
   const generateRecommendations = async () => {
-    if (!marketData || !status.initialized) return;
+    if (!marketData || status !== 'ready') return;
 
     try {
-      const request: AdminRecommendationRequest = {
-        marketId,
-        aiResolution: marketData.aiResolution || {
-          primaryOutcome: 'UNKNOWN',
-          confidence: 0.5,
-          reasoning: 'No AI resolution available'
-        },
-        disputes: marketData.disputes || [],
-        evidenceAnalysis: {
-          totalEvidence: marketData.disputes?.length || 0,
-          languages: ['en'], // Default to English if not specified
-          averageQuality: marketData.disputes?.reduce((sum, d) => sum + (d.qualityScore || 0.5), 0) / Math.max(marketData.disputes?.length || 1, 1)
-        },
-        culturalContext: marketData.region || 'general'
-      };
+      const command = `Generate admin recommendations for market ${marketId}.
+        AI Resolution: ${JSON.stringify(marketData.aiResolution)}
+        Disputes: ${marketData.disputes?.length || 0}
+        Region: ${marketData.region || 'general'}`;
 
-      const result = await generateAdminRecommendations(request);
-      setRecommendations(result);
-      
+      const result = await processCommand(command);
+      setRecommendations({ success: true, recommendations: result });
+
       if (onRecommendationReceived) {
         onRecommendationReceived(result);
       }
     } catch (error) {
       console.error('Failed to generate AI recommendations:', error);
+      setRecommendations({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
 
@@ -123,7 +115,7 @@ export const AIAdminRecommendations: React.FC<AIAdminRecommendationsProps> = ({
     }
   };
 
-  if (!status.initialized) {
+  if (status !== 'ready') {
     return (
       <Card>
         <CardHeader>
@@ -136,7 +128,10 @@ export const AIAdminRecommendations: React.FC<AIAdminRecommendationsProps> = ({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AIAgentStatus compact={false} showDetails={true} />
+          <div className="flex items-center gap-2">
+            {status === 'initializing' && <Loader2 className="h-4 w-4 animate-spin" />}
+            <span>Status: {status}</span>
+          </div>
         </CardContent>
       </Card>
     );
@@ -164,10 +159,10 @@ export const AIAdminRecommendations: React.FC<AIAdminRecommendationsProps> = ({
               variant="ghost"
               size="sm"
               onClick={generateRecommendations}
-              disabled={processing.processing || !marketData}
+              disabled={isProcessing || !marketData}
               className="flex items-center gap-1"
             >
-              <RefreshCw className={`h-3 w-3 ${processing.processing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3 w-3 ${isProcessing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -175,14 +170,14 @@ export const AIAdminRecommendations: React.FC<AIAdminRecommendationsProps> = ({
       </Card>
 
       {/* Processing Status */}
-      {processing.processing && (
+      {isProcessing && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin" />
               <div>
                 <p className="font-medium">AI Analysis in Progress</p>
-                <p className="text-sm text-muted-foreground">{processing.progress}</p>
+                <p className="text-sm text-muted-foreground">Analyzing market data and generating recommendations...</p>
               </div>
             </div>
           </CardContent>

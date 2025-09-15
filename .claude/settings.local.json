@@ -28,7 +28,10 @@
       "Bash(npm run setup:resolution:*)",
       "Bash(npm run test:hedera:*)",
       "Bash(npm run setup:existing:*)",
-      "Bash(npm run test:ai-agent:*)"
+      "Bash(npm run test:ai-agent:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm run server:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

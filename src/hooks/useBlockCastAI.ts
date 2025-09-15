@@ -29,26 +29,21 @@ export function useBlockCastAI(): UseBlockCastAIResult {
     const initializeAI = async () => {
       try {
         // Check for AI provider API keys
-        const hasAnthropic = import.meta.env?.VITE_ANTHROPIC_API_KEY || 
+        const hasAnthropic = import.meta.env?.VITE_ANTHROPIC_API_KEY ||
                             import.meta.env?.ANTHROPIC_API_KEY;
-        const hasOpenAI = import.meta.env?.VITE_OPENAI_API_KEY || 
+        const hasOpenAI = import.meta.env?.VITE_OPENAI_API_KEY ||
                          import.meta.env?.OPENAI_API_KEY;
-        
-        const hasHederaCredentials = 
+
+        const hasHederaCredentials =
           (import.meta.env?.VITE_HEDERA_TESTNET_ACCOUNT_ID && import.meta.env?.VITE_HEDERA_TESTNET_PRIVATE_KEY) ||
           (import.meta.env?.HEDERA_ACCOUNT_ID && import.meta.env?.HEDERA_PRIVATE_KEY);
-        
+
         if (hasAnthropic || hasOpenAI) {
           setStatus('ready');
           setError(null);
-          
-          // Initialize Anthropic client if available
-          if (hasAnthropic) {
-            const apiKey = import.meta.env?.VITE_ANTHROPIC_API_KEY || import.meta.env?.ANTHROPIC_API_KEY;
-            if (apiKey) {
-              setAnthropicClient(new AnthropicClient(apiKey));
-            }
-          }
+
+          // Initialize Anthropic client (using backend proxy)
+          setAnthropicClient(new AnthropicClient());
         } else {
           setStatus('error');
           setError('Missing AI provider API key. Please add ANTHROPIC_API_KEY or OPENAI_API_KEY to your .env file.');
@@ -76,10 +71,10 @@ export function useBlockCastAI(): UseBlockCastAIResult {
         setLastResult(result);
         return result;
       }
-      
+
       // Fallback to mock response if no API client
       await new Promise(resolve => setTimeout(resolve, 3000));
-      
+
       // Mock AI response based on command type
       let mockResponse: any = {
         confidence: Math.floor(Math.random() * 30) + 70, // 70-100%
@@ -99,7 +94,7 @@ export function useBlockCastAI(): UseBlockCastAIResult {
           culturalContext: 'Analysis considers regional reporting patterns and cultural factors specific to the market location.',
           languageAnalysis: {
             'English': 'confirmed',
-            'French': 'confirmed', 
+            'French': 'confirmed',
             'Swahili': 'partial',
             'Arabic': 'partial'
           }

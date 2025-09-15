@@ -704,14 +704,11 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                         <Progress value={aiResult.confidence || 72} className="flex-1" />
                         <span className="font-bold">{aiResult.confidence || 72}%</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        {aiResult.reasoning || 'Based on multi-language analysis and cultural context evaluation'}
-                      </p>
                     </div>
 
                     {aiResult.keyFactors && (
                       <div className="space-y-3">
-                        <h4 className="font-semibold">Key Factors Identified</h4>
+                        <h4 className="font-semibold">5 facts that may help you to cast your vote</h4>
                         <ul className="space-y-2 text-sm text-muted-foreground">
                           {aiResult.keyFactors.map((factor: any, index: number) => (
                             <li key={index} className="flex items-start gap-2">
@@ -720,32 +717,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                             </li>
                           ))}
                         </ul>
-                      </div>
-                    )}
-
-                    {aiResult.culturalContext && (
-                      <div className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
-                        <h4 className="font-semibold text-purple-700 dark:text-purple-400 mb-2">Cultural Context Analysis</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {aiResult.culturalContext}
-                        </p>
-                      </div>
-                    )}
-
-                    {aiResult.languageAnalysis && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold">Multi-Language Evidence</h4>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(aiResult.languageAnalysis).map(([lang, status]: [string, any]) => (
-                            <div key={lang} className="flex items-center gap-2 text-sm">
-                              <div className={`w-2 h-2 rounded-full ${
-                                status === 'confirmed' ? 'bg-green-500' : 
-                                status === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}></div>
-                              <span className="capitalize">{lang}: {status}</span>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -759,50 +730,43 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                         AI Agent setup required for real-time analysis. Showing example analysis below.
                       </p>
                     </div>
-                    
-                    <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-                      <h4 className="font-semibold text-primary mb-2">Example AI Confidence Score</h4>
+
+                    <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200">
+                      <h4 className="font-semibold text-green-700 dark:text-green-400 mb-2">AI Confidence Assessment</h4>
                       <div className="flex items-center gap-2">
-                        <Progress value={72} className="flex-1" />
-                        <span className="font-bold">72%</span>
+                        <Progress value={74} className="flex-1" />
+                        <span className="font-bold">74%</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Example multi-language cultural analysis
-                      </p>
                     </div>
 
                     <div className="space-y-3">
-                      <h4 className="font-semibold">Example Key Factors</h4>
+                      <h4 className="font-semibold">5 facts that may help you to cast your vote</h4>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                          Historical production trends show consistent 15% annual growth
+                          Historical analysis of this topic involves examining multiple scholarly sources and contemporary records
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                          Increased investment from streaming platforms
+                          Most academic historians distinguish between historical evidence and theological claims
                         </li>
                         <li className="flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
-                          Economic uncertainties may impact funding
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          Cross-cultural perspectives and regional context should be considered in the analysis
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          The resolution criteria require clear, verifiable evidence from reliable sources
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                          Community consensus and expert verification help ensure accuracy of outcomes
                         </li>
                       </ul>
                     </div>
                   </div>
                 )}
 
-                <Separator />
-
-                <div>
-                  <h4 className="font-semibold mb-2">Data Sources & Verification</h4>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>• Multi-language news analysis (English, French, Swahili, Arabic)</p>
-                    <p>• Regional cultural context evaluation</p>
-                    <p>• Cross-referenced official statistics</p>
-                    <p>• Expert verification and crowd-sourced validation</p>
-                    <p>• Real-time blockchain consensus data</p>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           )}
