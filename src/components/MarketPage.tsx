@@ -506,9 +506,14 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                 <div>
                   <h3 className="font-semibold mb-2">{t('marketStatus')}</h3>
                   <div className="flex items-center gap-2">
-                    <Badge variant={market.status === 'active' ? 'default' : 'secondary'}>
+                    <Badge variant={market.status === 'active' ? 'default' : (market.status === 'resolved' ? 'secondary' : 'secondary')}>
                       {market.status.toUpperCase()}
                     </Badge>
+                    {(market as any).contractAddress && (
+                      <Badge variant="outline" className="ml-2 text-[10px]">
+                        {(market as any).contractAddress}
+                      </Badge>
+                    )}
                     <span className="text-sm text-muted-foreground">
                       {t('expiresIn')} {getTimeRemaining(market.expiresAt)}
                     </span>
@@ -774,141 +779,152 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
 
         {/* Sidebar - Casting Interface */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                {t('castYourPosition')}
-              </CardTitle>
-              <CardDescription>
-                {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Quick Cast Buttons */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">{t('quickCastTruth')}</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickCastAmounts.slice(0, 4).map((amount) => (
-                    <Button
-                      key={`yes-${amount}`}
-                      variant="outline"
-                      size="sm"
-                      className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleQuickCast('yes', amount);
-                      }}
-                      disabled={amount > userBalance}
-                    >
-                      <span className="text-primary font-semibold">TRUE</span>
-                      <span className="ml-2">{amount} HBAR</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">{t('quickCastFalse')}</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickCastAmounts.slice(0, 4).map((amount) => (
-                    <Button
-                      key={`no-${amount}`}
-                      variant="outline"
-                      size="sm"
-                      className="bg-secondary/5 border-secondary/20 hover:bg-secondary/10 transition-colors"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleQuickCast('no', amount);
-                      }}
-                      disabled={amount > userBalance}
-                    >
-                      <span className="text-secondary font-semibold">FALSE</span>
-                      <span className="ml-2">{amount} HBAR</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Custom Cast */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">{t('customAmount')}</Label>
+          {market.status === 'active' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  {t('castYourPosition')}
+                </CardTitle>
+                <CardDescription>
+                  {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Quick Cast Buttons */}
                 <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Select value={castPosition} onValueChange={(value: any) => handlePositionChange(value)}>
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="yes">{t('truth')}</SelectItem>
-                        <SelectItem value="no">{t('false')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0"
-                      value={castAmount}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="flex-1"
-                    />
+                  <Label className="text-sm font-medium">{t('quickCastTruth')}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickCastAmounts.slice(0, 4).map((amount) => (
+                      <Button
+                        key={`yes-${amount}`}
+                        variant="outline"
+                        size="sm"
+                        className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleQuickCast('yes', amount);
+                        }}
+                        disabled={amount > userBalance}
+                      >
+                        <span className="text-primary font-semibold">TRUE</span>
+                        <span className="ml-2">{amount} HBAR</span>
+                      </Button>
+                    ))}
                   </div>
-                  
-                  {/* Real-time Profit Calculator */}
-                  {profitCalculation && (
-                    <div className="p-3 bg-muted/30 rounded-lg border border-border">
-                      <h4 className="text-sm font-medium mb-2 text-primary">Profit Calculator</h4>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Your Stake:</span>
-                          <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Odds:</span>
-                          <span className="font-medium">{(castPosition === 'yes' ? market.yesOdds : market.noOdds).toFixed(2)}x</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Potential Return:</span>
-                          <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
-                        </div>
-                        <div className="flex justify-between border-t border-border pt-1 mt-2">
-                          <span className="text-muted-foreground">Profit if Correct:</span>
-                          <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Loss if Wrong:</span>
-                          <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">{t('quickCastFalse')}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickCastAmounts.slice(0, 4).map((amount) => (
+                      <Button
+                        key={`no-${amount}`}
+                        variant="outline"
+                        size="sm"
+                        className="bg-secondary/5 border-secondary/20 hover:bg-secondary/10 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleQuickCast('no', amount);
+                        }}
+                        disabled={amount > userBalance}
+                      >
+                        <span className="text-secondary font-semibold">FALSE</span>
+                        <span className="ml-2">{amount} HBAR</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Custom Cast */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">{t('customAmount')}</Label>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <Select value={castPosition} onValueChange={(value: any) => handlePositionChange(value)}>
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">{t('truth')}</SelectItem>
+                          <SelectItem value="no">{t('false')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        value={castAmount}
+                        onChange={(e) => handleAmountChange(e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                    
+                    {/* Real-time Profit Calculator */}
+                    {profitCalculation && (
+                      <div className="p-3 bg-muted/30 rounded-lg border border-border">
+                        <h4 className="text-sm font-medium mb-2 text-primary">Profit Calculator</h4>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Your Stake:</span>
+                            <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Odds:</span>
+                            <span className="font-medium">{(castPosition === 'yes' ? market.yesOdds : market.noOdds).toFixed(2)}x</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Potential Return:</span>
+                            <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
+                          </div>
+                          <div className="flex justify-between border-t border-border pt-1 mt-2">
+                            <span className="text-muted-foreground">Profit if Correct:</span>
+                            <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Loss if Wrong:</span>
+                            <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-                <Button 
-                  onClick={handleCustomCast} 
-                  className="w-full gap-2"
-                  disabled={!castAmount || parseFloat(castAmount) > userBalance}
-                >
-                  <Target className="h-4 w-4" />
-                  {t('castPosition')}
-                </Button>
-              </div>
-
-              {/* Potential Return */}
-              {castAmount && !isNaN(parseFloat(castAmount)) && (
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
-                  <div className="font-semibold text-green-400">
-                    {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
+                    )}
                   </div>
+                  <Button 
+                    onClick={handleCustomCast} 
+                    className="w-full gap-2"
+                    disabled={!castAmount || parseFloat(castAmount) > userBalance}
+                  >
+                    <Target className="h-4 w-4" />
+                    {t('castPosition')}
+                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                {/* Potential Return */}
+                {castAmount && !isNaN(parseFloat(castAmount)) && (
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
+                    <div className="font-semibold text-green-400">
+                      {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Market Not Active</CardTitle>
+                <CardDescription>
+                  This market is {market.status}. Placing new positions is disabled.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
 
           {/* Market Stats */}
           <Card>

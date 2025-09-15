@@ -181,22 +181,34 @@ class ApprovedMarketsService {
    * Convert Supabase ApprovedMarket to BettingMarket format
    */
   private convertToBettingMarket(approvedMarket: ApprovedMarket): BettingMarket {
+    // Map Supabase ApprovedMarket to UI BettingMarket with resolution fields
+    const status = (approvedMarket.status as BettingMarket['status']) || 'active';
     return {
       id: approvedMarket.id,
       claim: approvedMarket.claim,
-      description: approvedMarket.description,
+      description: approvedMarket.description || '',
       category: approvedMarket.category,
       country: approvedMarket.country,
       region: approvedMarket.region,
-      marketType: approvedMarket.market_type,
-      confidenceLevel: approvedMarket.confidence_level,
+      marketType: (approvedMarket.market_type as any) || 'present',
+      confidenceLevel: (approvedMarket.confidence_level as any) || 'medium',
       expiresAt: new Date(approvedMarket.expires_at),
-      status: 'active' as const, // All approved markets are active
-      yesPrice: 0.45, // Default values - these would normally come from blockchain
-      noPrice: 0.55,
-      volume: 0,
-      participants: 0
-    };
+      status,
+      resolution_data: approvedMarket.resolution_data as any,
+      dispute_count: approvedMarket.dispute_count,
+      dispute_period_end: approvedMarket.dispute_period_end || undefined,
+      // UI fields without on-chain data yet
+      yesOdds: 2.0,
+      noOdds: 2.0,
+      totalPool: 0,
+      yesPool: 0,
+      noPool: 0,
+      totalCasters: 0,
+      trending: false,
+      // Optional: surface contract address for debugging in UI (non-breaking)
+      // @ts-ignore augment at runtime for display
+      contractAddress: (approvedMarket as any).contract_address
+    } as unknown as BettingMarket;
   }
 }
 

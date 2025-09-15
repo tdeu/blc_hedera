@@ -113,7 +113,7 @@ export const AIAgentSimple: React.FC<AIAgentSimpleProps> = ({ compact = false })
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            BlockCast AI Agent
+            AI Proxy (OpenAI)
           </CardTitle>
           <Badge variant={getStatusColor()}>
             {status === 'ready' ? 'Online' : status === 'error' ? 'Offline' : 'Starting'}

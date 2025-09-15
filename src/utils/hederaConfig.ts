@@ -57,11 +57,12 @@ const NETWORK_CONFIGS = {
 // Initialize Hedera configuration
 export function initializeHederaConfig(): HederaConfig {
   const network = (process.env.HEDERA_NETWORK || 'testnet') as 'testnet' | 'mainnet' | 'previewnet';
-  const operatorAccountId = process.env.HEDERA_ACCOUNT_ID || '';
-  const operatorPrivateKey = process.env.HEDERA_PRIVATE_KEY || '';
+  // Prefer server-side env for SDK, fallback to VITE_* which may carry Ed25519 keys
+  const operatorAccountId = process.env.HEDERA_ACCOUNT_ID || process.env.VITE_HEDERA_TESTNET_ACCOUNT_ID || '';
+  const operatorPrivateKey = process.env.HEDERA_PRIVATE_KEY || process.env.VITE_HEDERA_TESTNET_PRIVATE_KEY || '';
   
   if (!operatorAccountId || !operatorPrivateKey) {
-    throw new Error('Missing HEDERA_ACCOUNT_ID or HEDERA_PRIVATE_KEY in environment variables');
+    throw new Error('Missing Hedera operator credentials. Please set HEDERA_ACCOUNT_ID/HEDERA_PRIVATE_KEY or VITE_HEDERA_TESTNET_ACCOUNT_ID/VITE_HEDERA_TESTNET_PRIVATE_KEY');
   }
 
   // Create Hedera client

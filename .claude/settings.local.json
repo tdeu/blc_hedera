@@ -31,7 +31,14 @@
       "Bash(npm run test:ai-agent:*)",
       "Bash(npx tsx:*)",
       "Bash(npm run server:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(npm run monitor:*)",
+      "Bash(PORT=3002 npx tsx src/api/anthropic-proxy.ts)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(lsof:*)",
+      "Bash(npx kill-port:*)"
     ],
     "deny": [],
     "ask": []

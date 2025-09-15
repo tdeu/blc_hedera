@@ -167,6 +167,45 @@ export class HederaEVMService {
         
         console.log('🏆 Market created successfully:', { marketId, marketAddress });
 
+        try {
+          // Persist contract address to approved_markets if available in browser env
+          const supabaseUrl = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_URL || (typeof window !== 'undefined' ? (window as any).VITE_SUPABASE_URL : undefined);
+          const supabaseAnon = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_ANON_KEY || (typeof window !== 'undefined' ? (window as any).VITE_SUPABASE_ANON_KEY : undefined);
+          // Fallback: call backend if you have one. For now, we will skip direct write if env not present.
+          if (supabaseUrl && supabaseAnon) {
+            // dynamic import to avoid bundling if not used
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(supabaseUrl, supabaseAnon);
+            // 1) Try by exact market ID (bytes32 as string)
+            let { data, error } = await supabase
+              .from('approved_markets')
+              .update({ contract_address: marketAddress })
+              .eq('id', String(marketId))
+              .select('id');
+            if (error) {
+              console.warn('⚠️ Failed to persist by id:', error.message);
+            }
+            if (!error && (!data || data.length === 0)) {
+              // 2) Fallback by claim (if IDs don't match pre-chain/chain ids)
+              const { data: byClaim, error: claimErr } = await supabase
+                .from('approved_markets')
+                .update({ contract_address: marketAddress })
+                .eq('claim', claim)
+                .is('contract_address', null)
+                .select('id');
+              if (claimErr) console.warn('⚠️ Fallback persist by claim failed:', claimErr.message);
+              else if (byClaim && byClaim.length > 0) console.log('✅ Persisted contract address to approved_markets by claim');
+              else console.log('ℹ️ No matching approved market found to persist contract address');
+            } else {
+              console.log('✅ Persisted contract address to approved_markets by id');
+            }
+          } else {
+            console.log('ℹ️ Supabase env not available in this context; skip persistence');
+          }
+        } catch (persistErr) {
+          console.warn('⚠️ Could not persist contract address to Supabase:', persistErr);
+        }
+
         return {
           contractId: marketAddress,
           topicId: `market-${marketId}`, // Use market ID as topic reference

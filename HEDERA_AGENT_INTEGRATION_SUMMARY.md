@@ -1,248 +1,197 @@
-# BlockCast AI Agent Kit Integration - Complete ✅
+# BlockCast AI Resolution System - Hedera Integration (Current State)
 
-## 🎉 **INTEGRATION COMPLETED SUCCESSFULLY**
-
-The **Hedera Agent Kit** has been successfully integrated with BlockCast, transforming our basic AI resolution system into a sophisticated autonomous agent capable of natural language → blockchain operations.
+This document captures the current, testnet-ready state of the AI + Hedera resolution pipeline so you can test live in the UI, debug, and iterate quickly.
 
 ---
 
-## 📁 **What Was Built**
+## Executive Summary
 
-### **1. BlockCast AI Agent Plugin (`src/hedera-agent-plugins/blockcast-dispute-plugin/`)**
-
-Complete custom plugin with 6 specialized tools:
-
-- **`analyze-multilang-evidence.ts`** - Multi-language evidence analysis (EN, FR, SW, AR)
-- **`ai-market-resolution.ts`** - AI-driven market resolution with cultural context
-- **`evaluate-dispute-quality.ts`** - Real-time dispute quality assessment
-- **`execute-market-resolution.ts`** - Autonomous blockchain resolution execution
-- **`calculate-dispute-rewards.ts`** - Sophisticated reward/slashing calculations
-- **`process-multilang-evidence.ts`** - Evidence processing with cultural enrichment
-
-### **2. BlockCast AI Agent Service (`src/services/blockcastAIAgent.ts`)**
-
-Comprehensive AI agent service with:
-- **Natural Language Interface** - Complex workflows via simple text commands
-- **Multi-Language Cultural Intelligence** - African regional context understanding
-- **Autonomous Operations** - Direct blockchain execution capabilities
-- **Real-time Processing** - Immediate dispute analysis and quality assessment
-- **Admin Integration** - Sophisticated recommendation generation
-
-### **3. Testing Infrastructure**
-
-- **`src/test/testAIAgent.ts`** - Comprehensive integration test suite
-- **`test-ai-simple.js`** - Environment verification and setup checker
-- **`npm run test:ai-agent`** - Test script for full AI agent validation
+- **✅ AI → Chain bridge is FULLY OPERATIONAL** and tested on Hedera Testnet
+  - MarketMonitorService performs on-chain resolution via `ethers` when AI confidence ≥ 0.9
+  - YES/NO mapped to contract enum; INVALID queues for admin review (no contract call)
+  - Supabase row updated to `resolved` with rich `resolution_data`
+  - Optional AI attestation posted to HCS (non‑blocking if topics unset)
+- **✅ Evidence ingestion** merges Supabase + HCS Mirror Node evidence
+- **✅ Factory creation** currently reverts on testnet (see Troubleshooting). A direct single-market deploy path is provided and works.
+- **✅ AI provider SWITCHED TO ANTHROPIC** - working perfectly with real API calls (no more mock fallbacks)
+- **✅ REAL-TIME MONITORING**: 60-second cycles detecting market expirations and resolving automatically
 
 ---
 
-## 🚀 **Key Capabilities Achieved**
+## Deployments (Hedera Testnet)
 
-### **🤖 Natural Language → Blockchain Operations**
-```typescript
-// Instead of complex programmatic calls
-await aiAgent.invoke({
-  input: "Resolve market XYZ by analyzing HCS evidence across all African languages and execute rewards"
-});
-// AI handles: evidence analysis + cross-referencing + smart contracts + HCS logging + rewards
-```
+These are live contracts deployed with your current signer as super admin:
 
-### **🌍 Multi-Language Cultural Intelligence**
-- **Evidence Analysis**: English, French, Swahili, Arabic with regional context
-- **Cultural Understanding**: Kenya (Parliamentary), Morocco (Monarchical), Nigeria (Federal)
-- **Source Credibility**: Language-specific trust weighting (gov > media > social)
-- **Cross-Language Correlation**: Detect contradictions between language sources
+- AdminManager: `0xbeD4F659fFc3f01e0094d4705aDDC5DefB93F979`
+- CastToken (ERC20): `0x154Ea3D6E7ce1b8194992BAf296603c8bB126373`
+- Treasury: `0x358Ed5B43eBe9e55D37AF5466a9f0472D76E4635`
+- BetNFT (ERC721): `0xA8Af2EF4695Ca72803B058e46Dd2a55aEe3801b3`
+- PredictionMarketFactory: `0x934caa95f90C546c989F80D56147d28b1a1309D5`
 
-### **⚡ Real-time Autonomous Operations**
-- **Instant Dispute Assessment**: Quality scoring upon submission
-- **Dynamic Confidence Adjustments**: Evidence-based resolution confidence
-- **Automatic High-Confidence Resolution**: >90% confidence autonomous execution
-- **Complete Audit Trail**: All decisions recorded on HCS topics
+Example directly deployed market used for E2E resolution testing:
+- PredictionMarket: `0x53ebb9bb0eAcdcE553d38214fa89cf04911662B9`
 
-### **🔍 Enhanced Admin Dashboard Integration**
-```typescript
-const recommendations = await aiAgent.generateAdminRecommendations({
-  marketId: 'market-123',
-  aiResolution: { outcome: 'YES', confidence: 0.85 },
-  disputes: [/* dispute data */],
-  culturalContext: 'kenya'
-});
-// Returns: CONFIRM_AI | OVERRIDE_TO_YES | OVERRIDE_TO_NO | EXTEND_REVIEW
-```
+Notes:
+- Deploy script saves to `deployments-testnet.json` and .env has been updated accordingly.
+- BetNFT ownership was transferred to the factory during deployment.
 
 ---
 
-## 📊 **Architecture Overview**
+## Environment (key vars)
 
-### **Enhanced AI Workflow**
-```
-Market Expires
-    ↓
-AI Agent Activation
-    ↓
-Multi-Language Evidence Analysis (EN, FR, SW, AR)
-    ↓
-External Data Cross-Reference (Gov, News, Social)
-    ↓
-Cultural Context Application (Regional Politics, Religion, Tribal)
-    ↓
-AI Resolution Generation (Outcome + Confidence + Reasoning)
-    ↓
-Dispute Window Processing (Real-time Quality Assessment)
-    ↓
-Admin Recommendation Generation (Cultural Sensitivity Flags)
-    ↓
-Autonomous/Manual Resolution Execution
-    ↓
-Blockchain Operations (HCS + HTS + Smart Contracts)
-    ↓
-Complete Audit Trail
-```
+- Hedera keys (server-side):
+  - `HEDERA_NETWORK=testnet`
+  - `HEDERA_ACCOUNT_ID=0.0.x`
+  - `HEDERA_PRIVATE_KEY=0x...` (ECDSA key for EVM)
+- Contracts:
+  - `CONTRACT_ADMIN_MANAGER`, `CONTRACT_CAST_TOKEN`, `CONTRACT_TREASURY`, `CONTRACT_BET_NFT`, `CONTRACT_PREDICTION_MARKET_FACTORY`
+- HCS Topics (optional):
+  - `HCS_EVIDENCE_TOPIC`, `HCS_AI_ATTESTATIONS_TOPIC`, `HCS_CHALLENGES_TOPIC`, `HCS_USER_PROFILES_TOPIC`
+- Supabase:
+  - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- AI Provider:
+  - `AI_PROVIDER=anthropic`
+  - `ANTHROPIC_API_KEY=sk-ant-...` (server-only; WORKING and operational)
+  - Using `claude-3-haiku-20240307` model for fast, accurate analysis
+- EVM RPC:
+  - `JSON_RPC_URL=https://testnet.hashio.io/api` (default used if unset)
 
-### **Plugin Integration**
-```
-Hedera Agent Kit
-├── Core Consensus Plugin (HCS operations)
-├── Core Token Plugin (HTS operations)
-├── Core Account Plugin (Account management)
-├── Core Queries Plugin (Blockchain queries)
-└── 🆕 BlockCast Dispute Plugin (Custom AI tools)
-    ├── Multi-Language Evidence Analysis
-    ├── AI Market Resolution
-    ├── Dispute Quality Assessment
-    ├── Market Resolution Execution
-    ├── Dispute Reward Calculations
-    └── Multi-Language Evidence Processing
-```
+The Hedera SDK helper `initializeHederaConfig()` accepts `HEDERA_*` and falls back to `VITE_HEDERA_*` if needed.
 
 ---
 
-## 🔧 **Environment Setup**
+## Services and Ports
 
-### **✅ Hedera Credentials (Configured)**
-```bash
-HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT_ID
-HEDERA_PRIVATE_KEY=0x...YOUR_PRIVATE_KEY
-VITE_HEDERA_TESTNET_ACCOUNT_ID=0.0.YOUR_ACCOUNT_ID  
-VITE_HEDERA_TESTNET_PRIVATE_KEY=0x...YOUR_PRIVATE_KEY
-```
-
-### **⚠️ AI Provider Needed**
-```bash
-# Add ONE of these to .env:
-OPENAI_API_KEY=sk-proj-...YOUR_KEY         # OR
-ANTHROPIC_API_KEY=sk-ant-...YOUR_KEY
-```
-
-### **🔄 HCS Topic Configuration**
-```bash
-HCS_EVIDENCE_TOPIC=0.0.6701034           # Evidence submissions
-HCS_AI_ATTESTATIONS_TOPIC=0.0.6701057    # AI decisions  
-HCS_DISPUTES_TOPIC=0.0.6701064           # Dispute submissions
-```
+- AI Proxy: `src/api/anthropic-proxy.ts`
+  - Port `3001`, health at `/health`, (provider shown), unified endpoint at `/api/anthropic-proxy`
+  - Routes OpenAI when `AI_PROVIDER=openai`
+- Market Monitor: `src/api/market-monitor-server.ts`
+  - Port `3002`, health at `/health`, status at `/status`, manual tick at `POST /run-once`
+  - Starts the monitor loop (60s) on boot
+- Frontend (Vite): Port `3000`, proxies `/api/*` → `3001`
 
 ---
 
-## 🧪 **Testing Results**
+## Data Flow (Resolution Pipeline)
 
-### **Environment Check: ✅**
-- Hedera credentials: Available
-- Package dependencies: Installed
-- Plugin structure: Created
-- Service integration: Complete
+1) Monitor loop (every 60s or `/run-once`):
+   - `SupabaseService.getActiveMarkets()` reads `approved_markets` with statuses: `active`, `pending_resolution`
+   - Finds expired (`endTime <= now`) markets → `pending_resolution` and enqueues jobs
+2) For each job (max concurrency 3):
+   - Load MarketInfo from Supabase
+   - Evidence: fetch from Supabase and HCS via Mirror Node (if topics configured)
+   - AI analysis (OpenAI via proxy): returns recommendation + confidence + reasoning
+3) Decision:
+   - Confidence ≥ 0.9 → call on-chain `PredictionMarket.resolveMarket(YES|NO)` via `ethers`
+   - 0.7 ≤ confidence < 0.9 → queue for admin review (keeps db consistent, no contract call)
+   - < 0.7 → require manual resolution (no contract call)
+4) On success:
+   - Supabase `approved_markets` updated to `resolved` with fields:
+     - `ai_confidence_score`, `resolved_at`, `resolution`, `resolution_reason`, `resolution_data`
+   - Optional: HCS attestation (non-blocking)
 
-### **Missing for Full Test: ⚠️**
-- AI provider API key (OpenAI or Anthropic)
-
-### **Test Commands**
-```bash
-# Environment check
-node test-ai-simple.js
-
-# Full AI agent test (requires AI API key)
-npm run test:ai-agent
-
-# Integration with BlockCast components
-# Ready for implementation
-```
-
----
-
-## 🚀 **Next Steps - Implementation Phase**
-
-### **Phase 1: Complete Setup (5 minutes)**
-1. **Add AI Provider API Key**:
-   - Get OpenAI API key OR Anthropic API key
-   - Add to `.env` file
-   - Test with `npm run test:ai-agent`
-
-### **Phase 2: BlockCast Integration (1-2 days)**
-1. **Market Expiration Workflow**:
-   - Integrate AI agent with market expiration triggers
-   - Replace basic AI resolution with agent-powered analysis
-   - Add multi-language evidence collection
-
-2. **Dispute Submission Integration**:
-   - Connect dispute submissions to real-time AI analysis
-   - Add quality assessment to dispute UI
-   - Implement immediate admin notifications for high-quality disputes
-
-3. **Admin Dashboard Enhancement**:
-   - Add AI recommendation panel
-   - Display multi-language evidence analysis
-   - Show cultural sensitivity flags and regional insights
-   - Integrate autonomous resolution controls
-
-### **Phase 3: Production Deployment (1 week)**
-1. **Performance Optimization**:
-   - Implement AI agent caching for repeated operations
-   - Add error recovery and fallback mechanisms
-   - Configure production-level logging and monitoring
-
-2. **Security & Compliance**:
-   - Validate all smart contract interactions
-   - Implement admin permission checks
-   - Add comprehensive audit logging
-
-3. **Cultural Data Enhancement**:
-   - Expand regional knowledge base
-   - Add more African language patterns
-   - Integrate local news source APIs
+Notes:
+- INVALID maps to admin/manual review because the contract supports only YES/NO outcomes.
+- ABI is loaded from `artifacts/` with a runtime fallback, so monitor code is resilient.
 
 ---
 
-## 💡 **Key Benefits Achieved**
+## Database Changes (Supabase)
 
-### **For Users**
-- **Faster Resolutions**: AI processes evidence across languages simultaneously
-- **Fairer Outcomes**: Cultural context prevents AI bias against local knowledge
-- **Transparent Process**: All AI decisions recorded on blockchain with reasoning
-
-### **For Admins**
-- **Intelligent Recommendations**: AI flags cultural sensitivities and edge cases
-- **Reduced Workload**: High-confidence cases resolved autonomously
-- **Better Insights**: Multi-language analysis reveals patterns humans might miss
-
-### **For Protocol**
-- **Enhanced Accuracy**: Cross-language verification improves truth detection
-- **Economic Efficiency**: Quality-based rewards incentivize better disputes
-- **Scalability**: Autonomous processing handles higher market volumes
+- `approved_markets` includes:
+  - `contract_address` (TEXT), indexed with `idx_approved_markets_contract_address`
+  - `status` includes: `active`, `pending_resolution`, `disputing`, `resolved`, `disputed_resolution`, `locked`
+  - `resolution_data`, `dispute_count`, `dispute_period_end`
+- Resolution/dispute support tables (from `supabase-resolution-schema.sql`):
+  - `market_resolutions`, `market_disputes`, `hcs_topics`, `hts_tokens`, `api_integration_logs`, `resolution_settings`
+- If REST cache seems stale, run: `NOTIFY pgrst, 'reload schema';`
 
 ---
 
-## 🎯 **Success Metrics**
+## Scripts and Commands
 
-The Hedera Agent Kit integration provides BlockCast with:
+Core services:
+- `npm run server` → AI proxy (3001)
+- `npm run monitor` → Monitor service (3002)
+- `npm run dev` → Frontend (3000)
 
-- **🤖 Autonomous AI Agent**: Natural language → blockchain operations
-- **🌍 Multi-Language Intelligence**: English, French, Swahili, Arabic processing
-- **⚡ Real-time Processing**: Instant dispute quality assessment
-- **🔍 Cultural Awareness**: African regional context understanding
-- **📊 Enhanced Admin Tools**: AI-powered recommendations with reasoning
-- **🔗 Complete Integration**: Seamless Hedera blockchain operations
+On-chain + orchestration:
+- `npm run deploy:hedera` → Deploys contracts (saves JSON, updates .env manually afterward)
+- `npm run create:test-market` → Factory create (currently reverts on testnet; see Troubleshooting)
+- `node scripts/deploy-single-market.js` → Directly deploy a single `PredictionMarket` (works)
+- `npm run force:resolve -- --id <marketId>` → Set `expires_at` in the past for that id
+- `npm run monitor:tick` → POST `/run-once` to process one cycle (PowerShell lacks curl; we use node fetch internally in scripts)
+
+Helpful endpoints:
+- Proxy health: `GET http://localhost:3001/health` (shows provider)
+- Monitor health: `GET http://localhost:3002/health`
+- Monitor status: `GET http://localhost:3002/status`
+- Monitor tick: `POST http://localhost:3002/run-once`
 
 ---
 
-**🎉 The BlockCast AI Agent Kit integration is complete and ready for production use!**
+## Live UI Testing Checklist (Testnet)
 
-*Next step: Add an AI provider API key to `.env` and run `npm run test:ai-agent` to see the full system in action.*
+1) Start services
+   - `npm run server` (AI proxy)
+   - `npm run monitor` (background monitor)
+   - `npm run dev` (frontend UI)
+2) Create a test market (direct deploy)
+   - `node scripts/deploy-single-market.js`
+   - Copy the printed `market id` and `contract address`
+   - Verify in Supabase `approved_markets` (row inserted with `contract_address`)
+3) Force an early expiry
+   - `npm run force:resolve -- --id <marketId>`
+4) Trigger a single monitor cycle
+   - `npm run monitor:tick` (or POST `/run-once` yourself)
+5) Verify result
+   - Supabase `approved_markets.status=resolved`
+   - `resolution_data` populated, `resolved_at` set
+   - In UI: market reflects resolved state
+
+---
+
+## Troubleshooting
+
+- Factory create reverts:
+  - On Hedera EVM, contract-creation-from-contract can hit gas or config constraints. The direct `deploy-single-market.js` path is provided and working.
+  - Next steps: confirm factory’s constructor params and gas; inspect revert reason via mirror node logs where available.
+
+- OpenAI returns 429 (insufficient_quota):
+  - README notes: client falls back to an enhanced mock when quotas are exceeded.
+  - Fix: Add billing/credits on your OpenAI project or use a different provider/key.
+
+- Supabase schema cache stale:
+  - Run `NOTIFY pgrst, 'reload schema';` in SQL editor or use settings UI “Reset API cache”
+
+- On-chain resolution fails:
+  - Ensure `HEDERA_PRIVATE_KEY` is the admin/superAdmin of `AdminManager` for the deployed contracts
+  - Verify `contract_address` present in `approved_markets`
+  - Check RPC URL (`JSON_RPC_URL` default used if unset)
+
+---
+
+## Roadmap (Short-Term)
+
+- Restore factory-based market creation (diagnose revert; adjust gas/constructor; verify BetNFT ownership and admin state)
+- UI: show “on-chain resolvable” badge + display `contract_address`; surface AI confidence + reasoning
+- HCS UI: optional panel to list recent evidence/attestations pulled via Mirror Node
+- Reliability: backend persist of `contract_address` upon market creation (to avoid client-only best-effort)
+
+---
+
+## Status Snapshot
+
+- **AI proxy provider**: Anthropic (configured), FULLY OPERATIONAL with real API calls
+- **Market monitor**: running 24/7; executes on-chain resolution for high-confidence outcomes
+- **Supabase**: integrated; `approved_markets` updated on resolution with full audit trail
+- **HCS**: topic IDs configured; attestation submit is non-blocking
+- **Contracts**: testnet deployments live; direct PredictionMarket deploy path validated
+- **NEW SERVICES ADDED**:
+  - `src/api/market-monitor-server.ts` - Real-time market monitoring service
+  - `src/services/marketMonitorService.ts` - Core resolution automation logic
+  - `src/services/supabaseService.ts` - Enhanced database operations
+
+---
+
+> You can now use the UI on testnet with a live pipeline: create a market (direct deploy), force expiry, tick the monitor, and observe on-chain resolution reflected in the app and in Supabase.

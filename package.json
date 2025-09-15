@@ -38,7 +38,7 @@
             "@radix-ui/react-toggle": "^1.1.2",
             "@radix-ui/react-toggle-group": "^1.1.2",
             "@radix-ui/react-tooltip": "^1.1.8",
-            "@supabase/supabase-js": "^2.57.0",
+            "@supabase/supabase-js": "^2.57.4",
             "chai": "^6.0.1",
             "class-variance-authority": "^0.7.1",
             "clsx": "*",
@@ -80,13 +80,17 @@
             "dev": "vite",
             "build": "vite build",
             "server": "npx tsx src/api/anthropic-proxy.ts",
+            "monitor": "npx tsx src/api/market-monitor-server.ts",
             "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
             "setup:hcs": "node scripts/create-hcs-topics.js",
             "setup:resolution": "node scripts/setup-resolution-system.js",
             "setup:existing": "node scripts/setup-existing-topics.js",
             "test:hedera": "node scripts/test-hedera-connection.js",
             "test:contracts": "hardhat test --network hederaTestnet",
-            "test:ai-agent": "npx tsx src/test/testAIAgent.ts"
+            "test:ai-agent": "npx tsx src/test/testAIAgent.ts",
+"create:test-market": "node scripts/create-test-market-and-approve.js",
+"force:resolve": "node scripts/force-resolve-test-market.js",
+"monitor:tick": "curl -s -X POST http://localhost:3002/run-once | jq ."
       },
       "type": "module"
 }

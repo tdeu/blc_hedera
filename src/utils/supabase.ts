@@ -25,6 +25,7 @@ export interface ApprovedMarket {
   approved_by: string;
   approval_reason?: string;
   submitter_address: string;
+  contract_address?: string;
   // New resolution fields
   status?: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked';
   resolution_data?: any;

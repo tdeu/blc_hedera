@@ -1,5 +1,5 @@
 export class AnthropicClient {
-  private baseUrl = '/api/anthropic-proxy'; // Point to your backend proxy
+  private baseUrl = (typeof window !== 'undefined' ? '/api/anthropic-proxy' : 'http://localhost:3001/api/anthropic-proxy'); // Point to your backend proxy
 
   constructor() {
     // No API key needed - handled by backend proxy
@@ -7,7 +7,7 @@ export class AnthropicClient {
 
   async generateAnalysis(prompt: string): Promise<any> {
     try {
-      console.log('🔄 Attempting Anthropic API call via proxy...');
+      console.log('🔄 Attempting AI proxy call via backend...');
       console.log('🌐 Testing fetch capability...');
       
       // Test if fetch is working at all
