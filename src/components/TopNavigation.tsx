@@ -30,7 +30,7 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
   // Simplified main navigation - only core features
   const mainNavItems = [
     { id: 'markets', label: 'Truth Markets', icon: TrendingUp },
-    { id: 'verify', label: 'Verify Truth', icon: Shield },
+    { id: 'verify-truth', label: 'Verify Truth', icon: Shield },
     { id: 'community', label: 'Community', icon: Users },
   ];
 

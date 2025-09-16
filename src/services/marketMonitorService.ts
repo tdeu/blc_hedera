@@ -2,6 +2,7 @@ import { Client } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 import { AnthropicClient } from './anthropicClient';
 import { SupabaseService } from './supabaseService';
+import { getBlockCastAIAgent, MarketResolutionRequest } from './blockcastAIAgent';
 import { initializeHederaConfig } from '../utils/hederaConfig';
 import { HCSService } from '../utils/hcsService';
 import fs from 'fs';
@@ -133,27 +134,31 @@ export class MarketMonitorService {
   }
 
   /**
-   * Handle a single expired market
+   * Handle a single expired market - start evidence submission period
    */
   private async handleExpiredMarket(market: MarketInfo): Promise<void> {
     console.log(`⏰ Processing expired market: ${market.id} - "${market.question}"`);
 
     try {
-      // Update market status to pending_resolution
-      await this.updateMarketStatus(market.id, 'pending_resolution');
+      // Update market status to pending_resolution and set evidence period
+      const evidencePeriodHours = 48; // 48 hours for evidence submission
+      const evidencePeriodEnd = new Date(Date.now() + evidencePeriodHours * 60 * 60 * 1000);
 
-      // Add to resolution queue
+      await this.supabaseService.updateMarketStatus(market.id, 'pending_resolution', {
+        dispute_period_end: evidencePeriodEnd.toISOString()
+      });
+
+      // Schedule resolution job AFTER evidence period ends
       const resolutionJob: ResolutionJob = {
         marketId: market.id,
         contractAddress: market.contractAddress,
-        scheduledAt: new Date(),
+        scheduledAt: evidencePeriodEnd, // Important: Schedule for AFTER evidence period
         status: 'pending',
         attempts: 0
       };
 
       this.resolutionQueue.push(resolutionJob);
-
-      console.log(`📝 Added market ${market.id} to resolution queue`);
+      console.log(`📋 Market ${market.id} entered evidence period. Resolution scheduled for: ${evidencePeriodEnd.toISOString()}`);
 
     } catch (error) {
       console.error(`❌ Error handling expired market ${market.id}:`, error);
@@ -161,16 +166,28 @@ export class MarketMonitorService {
   }
 
   /**
-   * Process the resolution queue
+   * Process the resolution queue - only process jobs whose evidence period has ended
    */
   private async processResolutionQueue(): Promise<void> {
-    const pendingJobs = this.resolutionQueue.filter(job => job.status === 'pending');
+    const now = new Date();
+    const pendingJobs = this.resolutionQueue.filter(job =>
+      job.status === 'pending' && job.scheduledAt <= now
+    );
 
     if (pendingJobs.length === 0) {
+      // Check if there are jobs waiting for evidence period to end
+      const waitingJobs = this.resolutionQueue.filter(job =>
+        job.status === 'pending' && job.scheduledAt > now
+      );
+      if (waitingJobs.length > 0) {
+        const nextJob = waitingJobs.sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0];
+        const waitTime = Math.ceil((nextJob.scheduledAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+        console.log(`⏳ ${waitingJobs.length} markets in evidence period. Next resolution in ${waitTime} hours`);
+      }
       return;
     }
 
-    console.log(`🔄 Processing ${pendingJobs.length} resolution jobs...`);
+    console.log(`🔄 Processing ${pendingJobs.length} resolution jobs (evidence period ended)...`);
 
     for (const job of pendingJobs.slice(0, 3)) { // Process max 3 at a time
       await this.processResolutionJob(job);
@@ -367,59 +384,128 @@ export class MarketMonitorService {
   }
 
   /**
-   * Get AI resolution analysis
+   * Get AI resolution analysis using BlockCast AI Agent
    */
   private async getAIResolution(marketData: MarketInfo, evidence: any[]): Promise<any> {
-    const prompt = `
-    Analyze this BlockCast prediction market for resolution:
-
-    Market: "${marketData.question}"
-    Market ID: ${marketData.id}
-    End Time: ${marketData.endTime.toISOString()}
-    Evidence Count: ${evidence.length}
-
-    Evidence Summary:
-    ${evidence.map(e => `- ${e.type}: ${e.content} (credibility: ${e.credibility})`).join('\n')}
-
-    Provide a resolution decision with:
-    1. Recommended outcome (YES/NO/INVALID)
-    2. Confidence score (0-1)
-    3. Key reasoning (2-3 sentences)
-    4. Risk factors
-
-    Format as JSON:
-    {
-      "recommendation": "YES|NO|INVALID",
-      "confidence": 0.85,
-      "reasoning": "Brief explanation...",
-      "riskFactors": ["factor1", "factor2"]
-    }
-    `;
-
     try {
-      const result = await this.anthropicClient.generateAnalysis(prompt);
-      // Normalize OpenAI/Anthropic result shape; if quota errors force high confidence for demo
-      let confidence = result.confidence || 0.5;
-      let recommendation = (result.recommendedOutcome || result.recommendation || 'INVALID');
-      // If API fell back to mock (due to quota), push confidence high to drive on-chain demo
-      if (confidence < 0.9 && (result.isRealAPI === false || (result.rawResponse && String(result.rawResponse).includes('[MOCK]')))) {
-        confidence = 0.95;
-        recommendation = recommendation === 'INVALID' ? 'YES' : recommendation;
+      console.log(`🤖 Using BlockCast AI Agent for market ${marketData.id} resolution...`);
+      
+      // Get the BlockCast AI Agent instance
+      const aiAgent = getBlockCastAIAgent();
+      
+      // Prepare the market resolution request
+      const resolutionRequest: MarketResolutionRequest = {
+        marketId: marketData.id,
+        region: 'africa', // Default to Africa for BlockCast
+        languages: ['en', 'fr', 'sw', 'ar'], // Multi-language support
+        evidenceTopics: [process.env.HCS_EVIDENCE_TOPIC || 'evidence-topic'],
+        culturalContext: 'general_african_context',
+        marketType: 'general',
+        complexity: evidence.length > 5 ? 'high' : evidence.length > 2 ? 'medium' : 'low',
+        timeWindowStart: marketData.endTime.toISOString(),
+        timeWindowEnd: new Date().toISOString()
+      };
+
+      // Call the sophisticated AI agent
+      const aiResult = await aiAgent.resolveMarket(resolutionRequest);
+      
+      if (!aiResult.success) {
+        throw new Error(aiResult.error || 'AI Agent resolution failed');
       }
+
+      // Parse the AI response - try to extract structured data
+      const aiResponse = aiResult.aiResponse;
+      let recommendation = 'INVALID';
+      let confidence = 0.5;
+      let reasoning = 'AI analysis completed via BlockCast Agent';
+      let riskFactors: string[] = [];
+
+      // Try to parse structured response or extract from text
+      if (typeof aiResponse === 'string') {
+        // Extract recommendation
+        if (aiResponse.toLowerCase().includes('yes') && !aiResponse.toLowerCase().includes('no')) {
+          recommendation = 'YES';
+        } else if (aiResponse.toLowerCase().includes('no') && !aiResponse.toLowerCase().includes('yes')) {
+          recommendation = 'NO';
+        }
+        
+        // Extract confidence score (look for patterns like "confidence: 0.85" or "85%")
+        const confidenceMatch = aiResponse.match(/confidence[:\s]*([0-9.]+)/i) || 
+                              aiResponse.match(/([0-9.]+)%/);
+        if (confidenceMatch) {
+          const conf = parseFloat(confidenceMatch[1]);
+          confidence = conf > 1 ? conf / 100 : conf; // Handle percentage format
+        }
+        
+        // Use full response as reasoning
+        reasoning = aiResponse.substring(0, 500) + (aiResponse.length > 500 ? '...' : '');
+      } else if (typeof aiResponse === 'object') {
+        // Handle structured response
+        recommendation = aiResponse.recommendation || aiResponse.outcome || 'INVALID';
+        confidence = aiResponse.confidence || 0.5;
+        reasoning = aiResponse.reasoning || aiResponse.analysis || 'AI analysis completed';
+        riskFactors = aiResponse.riskFactors || aiResponse.risks || [];
+      }
+
+      // Ensure recommendation is valid
+      recommendation = recommendation.toUpperCase();
+      if (!['YES', 'NO', 'INVALID'].includes(recommendation)) {
+        recommendation = 'INVALID';
+        confidence = 0.1;
+      }
+
+      // Clamp confidence to valid range
+      confidence = Math.max(0, Math.min(1, confidence));
+
+      console.log(`✅ BlockCast AI Analysis for ${marketData.id}:`, {
+        recommendation,
+        confidence,
+        reasoning: reasoning.substring(0, 100) + '...'
+      });
+
       return {
         recommendation,
         confidence,
-        reasoning: result.reasoning || 'Analysis completed',
-        riskFactors: result.riskFactors || []
+        reasoning,
+        riskFactors,
+        aiAgentResponse: aiResult,
+        usedBlockCastAgent: true
       };
+
     } catch (error) {
-      console.error('❌ AI analysis failed:', error);
-      // Fallback for AI failures
+      console.error('❌ BlockCast AI Agent failed, falling back to simple analysis:', error);
+      
+      // Fallback to simple evidence-based analysis
+      const evidenceSupportsYes = evidence.filter(e => 
+        e.content.toLowerCase().includes('yes') || 
+        e.content.toLowerCase().includes('true') ||
+        e.content.toLowerCase().includes('confirm')
+      ).length;
+      
+      const evidenceSupportsNo = evidence.filter(e => 
+        e.content.toLowerCase().includes('no') || 
+        e.content.toLowerCase().includes('false') ||
+        e.content.toLowerCase().includes('deny')
+      ).length;
+
+      let recommendation = 'INVALID';
+      let confidence = 0.3;
+      
+      if (evidenceSupportsYes > evidenceSupportsNo) {
+        recommendation = 'YES';
+        confidence = Math.min(0.7, 0.5 + (evidenceSupportsYes - evidenceSupportsNo) * 0.1);
+      } else if (evidenceSupportsNo > evidenceSupportsYes) {
+        recommendation = 'NO';
+        confidence = Math.min(0.7, 0.5 + (evidenceSupportsNo - evidenceSupportsYes) * 0.1);
+      }
+
       return {
-        recommendation: 'INVALID',
-        confidence: 0.1,
-        reasoning: 'AI analysis failed, manual review required',
-        riskFactors: ['AI_SYSTEM_ERROR']
+        recommendation,
+        confidence,
+        reasoning: `Fallback analysis: ${evidenceSupportsYes} supporting, ${evidenceSupportsNo} opposing evidence. BlockCast AI Agent error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        riskFactors: ['AI_AGENT_FAILURE', 'FALLBACK_ANALYSIS'],
+        usedBlockCastAgent: false,
+        fallbackReason: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }

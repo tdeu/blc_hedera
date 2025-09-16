@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import AdminLayout from './AdminLayout';
 import AdminOverview from './AdminDashboard';
 import MarketApproval from './MarketApproval';
+import EvidenceResolutionPanel from './EvidenceResolutionPanel';
 import { adminService } from '../../utils/adminService';
 import { useUser } from '../../contexts/UserContext';
 import { toast } from 'sonner';
@@ -14,10 +15,16 @@ interface AdminProps {
     address: string;
     isConnected: boolean;
   } | null;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
-const Admin: React.FC<AdminProps> = ({ walletConnection }) => {
-  const [activeTab, setActiveTab] = useState('overview');
+const Admin: React.FC<AdminProps> = ({
+  walletConnection,
+  activeTab: propActiveTab = 'overview',
+  onTabChange
+}) => {
+  const [activeTab, setActiveTab] = useState(propActiveTab);
   const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const { profile } = useUser();
@@ -25,6 +32,17 @@ const Admin: React.FC<AdminProps> = ({ walletConnection }) => {
   useEffect(() => {
     verifyAdminAccess();
   }, [walletConnection?.address, walletConnection?.isConnected]);
+
+  useEffect(() => {
+    setActiveTab(propActiveTab);
+  }, [propActiveTab]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (onTabChange) {
+      onTabChange(tab);
+    }
+  };
 
   const verifyAdminAccess = () => {
     setIsVerifyingAdmin(true);
@@ -139,6 +157,10 @@ const Admin: React.FC<AdminProps> = ({ walletConnection }) => {
           />
         );
       
+      case 'evidence':
+        // Evidence & Resolution uses full width, rendered outside AdminLayout
+        return null;
+      
       case 'users':
         return (
           <Card>
@@ -177,7 +199,7 @@ const Admin: React.FC<AdminProps> = ({ walletConnection }) => {
   return (
     <AdminLayout
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={handleTabChange}
       userProfile={{
         walletAddress: walletConnection.address,
         displayName: profile?.displayName

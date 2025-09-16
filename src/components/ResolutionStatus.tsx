@@ -358,20 +358,7 @@ export default function ResolutionStatus({
           </div>
         )}
 
-        {/* Action Buttons */}
-        {market.status === 'pending_resolution' && timeRemaining !== 'Expired' && canDispute && onDispute && (
-          <div className="pt-4">
-            <Button 
-              onClick={onDispute}
-              variant="outline" 
-              className="w-full"
-              size="sm"
-            >
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              Dispute Resolution
-            </Button>
-          </div>
-        )}
+        {/* Dispute actions moved to main market page */}
 
         {/* AI Resolution Validation */}
         {enableAIAnalysis && resolution && (

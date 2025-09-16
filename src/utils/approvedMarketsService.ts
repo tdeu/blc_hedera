@@ -182,7 +182,18 @@ class ApprovedMarketsService {
    */
   private convertToBettingMarket(approvedMarket: ApprovedMarket): BettingMarket {
     // Map Supabase ApprovedMarket to UI BettingMarket with resolution fields
+    // Preserve the actual status from database, don't default to 'active'
     const status = (approvedMarket.status as BettingMarket['status']) || 'active';
+    
+    // Debug log to see what status we're getting
+    if (approvedMarket.id === 'market_1756833834386_ojc6efguh') {
+      console.log('🔍 Converting market status:', {
+        id: approvedMarket.id,
+        rawStatus: approvedMarket.status,
+        convertedStatus: status,
+        expiresAt: approvedMarket.expires_at
+      });
+    }
     return {
       id: approvedMarket.id,
       claim: approvedMarket.claim,

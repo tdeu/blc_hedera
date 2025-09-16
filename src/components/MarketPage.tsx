@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -9,11 +9,11 @@ import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { 
-  TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle, 
-  ArrowLeft, Share2, Heart, Bookmark, Zap, Globe, Shield, 
+import {
+  TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle,
+  ArrowLeft, Share2, Heart, Bookmark, Zap, Globe, Shield,
   ThumbsUp, ThumbsDown, Send, Filter, Eye, AlertCircle,
-  CheckCircle2, Clock3, FileText, Scale, Loader2
+  CheckCircle2, Clock3, FileText, Scale, Loader2, Brain
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from './LanguageContext';
@@ -25,6 +25,8 @@ import DisputeModal, { DisputeFormData } from './DisputeModal';
 import { MarketResolution } from '../utils/supabase';
 import { disputeService } from '../utils/disputeService';
 import { resolutionService } from '../utils/resolutionService';
+import { evidenceService } from '../utils/evidenceService';
+import { walletService } from '../utils/walletService';
 import { AIAgentSimple } from './AIAgentSimple';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
 
@@ -56,13 +58,21 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const [resolution, setResolution] = useState<MarketResolution | null>(null);
   const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
   const [userTokenBalance, setUserTokenBalance] = useState(1000); // Mock balance for now
-  
+
+  // Evidence submission state
+  const [evidenceText, setEvidenceText] = useState('');
+  const [evidenceLinks, setEvidenceLinks] = useState<string[]>(['']);
+  const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'validating' | 'payment' | 'storing' | 'complete'>('idle');
+  const [userWalletBalance, setUserWalletBalance] = useState<number>(0);
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+
   // AI Agent integration
-  const { 
-    processCommand, 
-    status: aiStatus, 
-    isProcessing: aiProcessing, 
-    lastResult: aiResult 
+  const {
+    processCommand,
+    status: aiStatus,
+    isProcessing: aiProcessing,
+    lastResult: aiResult
   } = useBlockCastAI();
   const [aiAnalysis, setAIAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -194,15 +204,15 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const handleAIAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const command = `Analyze market evidence for: "${getTranslatedText(market.claim, market.claimTranslations)}". 
-      Market details: ${getTranslatedText(market.description, market.descriptionTranslations)}. 
-      Country: ${market.country || market.region}. 
-      Current status: ${market.status}. 
+      const command = `Analyze market evidence for: "${getTranslatedText(market.claim, market.claimTranslations)}".
+      Market details: ${getTranslatedText(market.description, market.descriptionTranslations)}.
+      Country: ${market.country || market.region}.
+      Current status: ${market.status}.
       Provide confidence score, key factors, cultural context analysis, and multi-language evidence assessment.`;
-      
+
       const result = await processCommand(command);
       setAIAnalysis(result);
-      
+
       if (result) {
         toast.success('AI analysis completed successfully');
       }
@@ -211,6 +221,145 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
       toast.error('AI analysis failed. Please try again.');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Evidence submission handlers
+  const isMarketDisputable = (): boolean => {
+    if (!market.expiresAt || market.status === 'resolved') return false;
+    const now = new Date();
+    const disputePeriodEnd = market.dispute_period_end
+      ? new Date(market.dispute_period_end)
+      : new Date(market.expiresAt.getTime() + 48 * 60 * 60 * 1000);
+    return now <= disputePeriodEnd && (market.status === 'pending_resolution' || market.status === 'disputing');
+  };
+
+  const addEvidenceLink = () => {
+    setEvidenceLinks([...evidenceLinks, '']);
+  };
+
+  const updateEvidenceLink = (index: number, value: string) => {
+    const newLinks = [...evidenceLinks];
+    newLinks[index] = value;
+    setEvidenceLinks(newLinks);
+  };
+
+  const removeEvidenceLink = (index: number) => {
+    const newLinks = evidenceLinks.filter((_, i) => i !== index);
+    setEvidenceLinks(newLinks.length > 0 ? newLinks : ['']);
+  };
+
+  // Check wallet connection and balance on component mount
+  React.useEffect(() => {
+    const checkWalletStatus = async () => {
+      const connected = walletService.isConnected();
+      setIsWalletConnected(connected);
+
+      if (connected) {
+        try {
+          const balance = await walletService.getBalance();
+          setUserWalletBalance(parseFloat(balance));
+        } catch (error) {
+          console.error('Failed to get wallet balance:', error);
+        }
+      }
+    };
+
+    checkWalletStatus();
+
+    // Refresh balance periodically
+    const interval = setInterval(checkWalletStatus, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleConnectWallet = async () => {
+    try {
+      await walletService.connectMetaMask();
+      const connected = walletService.isConnected();
+      setIsWalletConnected(connected);
+
+      if (connected) {
+        const balance = await walletService.getBalance();
+        setUserWalletBalance(parseFloat(balance));
+        toast.success('Wallet connected successfully!');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to connect wallet');
+    }
+  };
+
+  const handleEvidenceSubmit = async () => {
+    if (!evidenceText.trim() && !evidenceLinks.some(link => link.trim())) {
+      toast.error('Please provide evidence text or at least one link');
+      return;
+    }
+
+    if (!isWalletConnected) {
+      toast.error('Please connect your MetaMask wallet first');
+      return;
+    }
+
+    const connection = walletService.getConnection();
+    if (!connection) {
+      toast.error('Wallet connection not found. Please reconnect your wallet.');
+      return;
+    }
+
+    setIsSubmittingEvidence(true);
+    setSubmissionStep('validating');
+
+    try {
+      // Show progress steps
+      setTimeout(() => setSubmissionStep('payment'), 500);
+
+      const result = await evidenceService.submitEvidence(
+        market.id,
+        connection.address, // Use actual wallet address as user ID
+        evidenceText,
+        evidenceLinks.filter(link => link.trim())
+      );
+
+      setSubmissionStep('storing');
+
+      if (result.success) {
+        setSubmissionStep('complete');
+
+        toast.success(
+          `Evidence submitted successfully! 🎉\nFee: 0.1 HBAR paid\nTX: ${result.transactionId?.slice(-8)}`,
+          { duration: 6000 }
+        );
+
+        // Clear form and refresh balance
+        setEvidenceText('');
+        setEvidenceLinks(['']);
+
+        // Refresh wallet balance after payment
+        setTimeout(async () => {
+          try {
+            const newBalance = await walletService.getBalance();
+            setUserWalletBalance(parseFloat(newBalance));
+          } catch (error) {
+            console.error('Failed to refresh balance:', error);
+          }
+        }, 2000);
+
+        // Reset UI after success
+        setTimeout(() => {
+          setSubmissionStep('idle');
+        }, 3000);
+      } else {
+        const errorMessage = result.error || 'Failed to submit evidence. Please check your balance and try again.';
+        console.error('Evidence submission failed with error:', errorMessage);
+        toast.error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('Failed to submit evidence:', error);
+      toast.error(error.message || 'Failed to submit evidence. Please try again.');
+    } finally {
+      setIsSubmittingEvidence(false);
+      if (submissionStep !== 'complete') {
+        setSubmissionStep('idle');
+      }
     }
   };
 
@@ -308,17 +457,184 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
         </div>
       </div>
 
+      {/* AI Resolution Status - Only show for disputable markets */}
+      {isMarketDisputable() && market.resolution_data && (
+        <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
+          <CardContent className="p-6">
+            <div className="text-center mb-4">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Brain className="h-6 w-6 text-amber-600" />
+                <h2 className="text-xl font-bold text-amber-800">AI Resolution</h2>
+              </div>
+              <div className="text-lg">
+                AI says this market is:
+                <Badge className={`ml-2 text-lg px-4 py-1 ${
+                  market.resolution_data.outcome === 'yes'
+                    ? 'bg-green-100 text-green-800 border-green-200'
+                    : 'bg-red-100 text-red-800 border-red-200'
+                }`}>
+                  {market.resolution_data.outcome === 'yes' ? 'YES' : 'NO'}
+                </Badge>
+              </div>
+              {market.resolution_data.confidence && (
+                <div className="mt-2 text-sm text-amber-700">
+                  Confidence: {market.resolution_data.confidence} |
+                  Source: {market.resolution_data.source || 'AI Analysis'}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
+      {/* Evidence Submission Interface - Only for disputable markets */}
+      {isMarketDisputable() && (
+        <Card className="border-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5" />
+              Do you want to dispute this resolution?
+            </CardTitle>
+            <CardDescription>
+              If you have evidence that contradicts the AI resolution, submit it here.
+              Your evidence will be reviewed by our dispute resolution system.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Wallet Connection Status */}
+            {!isWalletConnected ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-800">Wallet Required</span>
+                    </div>
+                    <div className="text-sm text-amber-700">
+                      Connect your MetaMask wallet to submit evidence and pay the 0.1 HBAR fee.
+                    </div>
+                  </div>
+                  <Button onClick={handleConnectWallet} className="bg-amber-600 hover:bg-amber-700">
+                    Connect Wallet
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-800">Evidence Submission Fee & Rewards</span>
+                </div>
+                <div className="text-sm text-blue-700 space-y-1">
+                  <div>• <strong>Submission Fee:</strong> 0.1 HBAR (paid from wallet)</div>
+                  <div>• <strong>Your Balance:</strong> {userWalletBalance.toFixed(4)} HBAR</div>
+                  <div>• <strong>Reward if Accepted:</strong> Up to 1.0 HBAR + quality bonus</div>
+                  <div>• <strong>Partial Refund:</strong> 50% fee refunded for good-faith attempts</div>
+                </div>
+                {userWalletBalance < 0.1 && (
+                  <div className="text-red-600 text-sm font-medium mt-2">
+                    ⚠️ Insufficient balance. You need at least 0.1 HBAR to submit evidence.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Evidence Text Input */}
+            <div className="space-y-2">
+              <Label htmlFor="evidence-text" className="text-sm font-medium">
+                Describe your evidence (minimum 20 characters)
+              </Label>
+              <Textarea
+                id="evidence-text"
+                placeholder="Explain why you think the AI resolution is incorrect. Be specific and cite your sources..."
+                value={evidenceText}
+                onChange={(e) => setEvidenceText(e.target.value)}
+                className="min-h-24 resize-none"
+              />
+              <div className="text-xs text-muted-foreground">
+                {evidenceText.length}/20 characters minimum
+              </div>
+            </div>
+
+            {/* Evidence Links */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Supporting links (optional)</Label>
+              {evidenceLinks.map((link, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input
+                    placeholder="https://example.com/evidence"
+                    value={link}
+                    onChange={(e) => updateEvidenceLink(index, e.target.value)}
+                    className="flex-1"
+                  />
+                  {evidenceLinks.length > 1 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => removeEvidenceLink(index)}
+                      className="px-3"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addEvidenceLink}
+                className="w-fit"
+              >
+                Add Link
+              </Button>
+            </div>
+
+            {/* Submit Evidence Button */}
+            <div className="flex justify-end pt-2">
+              <Button
+                onClick={handleEvidenceSubmit}
+                disabled={
+                  isSubmittingEvidence ||
+                  !isWalletConnected ||
+                  (!evidenceText.trim() && !evidenceLinks.some(link => link.trim())) ||
+                  userWalletBalance < 0.1
+                }
+                className="gap-2"
+              >
+                {isSubmittingEvidence ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : submissionStep === 'complete' ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {(() => {
+                  if (submissionStep === 'validating') return 'Validating Evidence...';
+                  if (submissionStep === 'payment') return 'Processing Payment...';
+                  if (submissionStep === 'storing') return 'Saving Evidence...';
+                  if (submissionStep === 'complete') return 'Evidence Submitted! ✅';
+                  if (!isWalletConnected) return 'Connect Wallet First';
+                  if (userWalletBalance < 0.1) return 'Insufficient Balance';
+                  return 'Submit Evidence (0.1 HBAR)';
+                })()}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Market Header Card */}
       <Card className="overflow-hidden">
         {market.imageUrl && (
           <div className="relative h-48 overflow-hidden">
-            <img 
-              src={market.imageUrl} 
+            <img
+              src={market.imageUrl}
               alt={getTranslatedText(market.claim, market.claimTranslations)}
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
-            
+
             {market.trending && (
               <div className="absolute top-4 left-4">
                 <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
@@ -327,7 +643,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                 </Badge>
               </div>
             )}
-            
+
             <div className="absolute bottom-4 left-4 right-4">
               <Badge variant="outline" className="text-xs mb-2 bg-background/80">
                 {market.category}
@@ -346,7 +662,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
               <p className="text-muted-foreground">
                 {getTranslatedText(market.description, market.descriptionTranslations)}
               </p>
-              
+
               {/* Location & Source */}
               <div className="flex items-center gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
@@ -369,8 +685,8 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                   <span className="text-sm font-medium">{t('truthVerificationPool')}</span>
                   <span className="text-sm font-bold">{formatCurrency(market.totalPool)}</span>
                 </div>
-                <Progress 
-                  value={(market.yesPool / market.totalPool) * 100} 
+                <Progress
+                  value={(market.yesPool / market.totalPool) * 100}
                   className="h-3"
                 />
                 <div className="grid grid-cols-2 gap-4 text-sm">

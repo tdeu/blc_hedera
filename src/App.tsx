@@ -22,6 +22,7 @@ import Categories from './components/Categories';
 import CreateMarket from './components/CreateMarket';
 import Admin from './components/admin/Admin';
 import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
+import EvidenceResolutionPanel from './components/admin/EvidenceResolutionPanel';
 import { adminService } from './utils/adminService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
@@ -57,7 +58,7 @@ const formatCurrency = (amount: number): string => {
 
 const isValidPage = (tab: string): boolean => {
   const validPages = [
-    'markets', 'market-detail', 'portfolio', 'verify', 'community', 
+    'markets', 'verify-truth', 'market-detail', 'portfolio', 'verify', 'community',
     'social', 'settings', 'about', 'contact', 'categories',
     'privacy', 'terms', 'create-market', 'admin'
   ];
@@ -100,6 +101,7 @@ export default function App() {
   const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
+  const [activeAdminTab, setActiveAdminTab] = useState('overview');
   
   // User state
   const [userId] = useState(generateUserId());
@@ -693,14 +695,28 @@ export default function App() {
           if (!markets || markets.length === 0) {
             return <div style={{padding: '20px', background: 'yellow', color: 'black'}}>No markets available</div>;
           }
-          
+
           return (
-            <BettingMarkets 
-              onPlaceBet={handlePlaceBet} 
+            <BettingMarkets
+              onPlaceBet={handlePlaceBet}
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
               onCreateMarket={handleCreateMarket}
+              statusFilter="active"
+            />
+          );
+        case 'verify-truth':
+          console.log('🔍 Rendering verify truth with', markets.length, 'markets');
+          return (
+            <BettingMarkets
+              onPlaceBet={handlePlaceBet}
+              userBalance={userProfile?.balance || 0}
+              onMarketSelect={handleMarketSelect}
+              markets={markets}
+              onCreateMarket={handleCreateMarket}
+              statusFilter="pending_resolution"
+              showEvidence={true}
             />
           );
       case 'market-detail':
@@ -766,30 +782,52 @@ export default function App() {
         return <TermsOfService />;
       case 'admin':
         // Only show admin panel if user is in admin mode and is authorized
-        if (adminMode === 'admin' && walletConnection?.address && 
+        if (adminMode === 'admin' && walletConnection?.address &&
             adminService.isAdmin(walletConnection.address)) {
-          return <Admin walletConnection={walletConnection} />;
+
+          // If evidence tab is active, render full-width evidence panel
+          if (activeAdminTab === 'evidence') {
+            return (
+              <EvidenceResolutionPanel
+                userProfile={{
+                  walletAddress: walletConnection.address,
+                  displayName: userProfile?.displayName
+                }}
+              />
+            );
+          }
+
+          // Otherwise render normal admin layout
+          return (
+            <Admin
+              walletConnection={walletConnection}
+              activeTab={activeAdminTab}
+              onTabChange={setActiveAdminTab}
+            />
+          );
         } else {
           // Redirect to markets if trying to access admin without proper mode/permissions
           setCurrentTab('markets');
           return (
-            <BettingMarkets 
-              onPlaceBet={handlePlaceBet} 
+            <BettingMarkets
+              onPlaceBet={handlePlaceBet}
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
               onCreateMarket={handleCreateMarket}
+              statusFilter="active"
             />
           );
         }
       default:
         return (
-          <BettingMarkets 
-            onPlaceBet={handlePlaceBet} 
+          <BettingMarkets
+            onPlaceBet={handlePlaceBet}
             userBalance={userProfile?.balance || 0}
             onMarketSelect={handleMarketSelect}
             markets={markets}
             onCreateMarket={handleCreateMarket}
+            statusFilter="active"
           />
         );
     }
@@ -849,7 +887,11 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 container mx-auto px-4 py-6 max-w-7xl lg:px-8 pb-20 lg:pb-6">
+        <main className={`flex-1 ${
+          adminMode === 'admin' && activeAdminTab === 'evidence'
+            ? 'w-full px-0 py-6'
+            : 'container mx-auto px-4 py-6 max-w-7xl lg:px-8'
+        } pb-20 lg:pb-6`}>
           {renderCurrentPage()}
         </main>
 
