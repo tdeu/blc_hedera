@@ -20,7 +20,7 @@ interface EvidenceResolutionPanelProps {
 interface MarketWithEvidence {
   id: string;
   claim: string;
-  status: 'pending_resolution' | 'disputing' | 'resolved';
+  status: 'pending_resolution' | 'disputing' | 'resolved' | 'disputable';
   expiresAt: Date;
   dispute_period_end?: string;
   evidence_count: number;
@@ -103,11 +103,11 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         import.meta.env.VITE_SUPABASE_ANON_KEY
       );
 
-      // Step 1: Get markets in resolution phase
+      // Step 1: Get markets in resolution phase (including disputable markets)
       const { data: marketsData, error: marketsError } = await supabase
         .from('approved_markets')
         .select('*')
-        .in('status', ['pending_resolution', 'disputing', 'resolved'])
+        .in('status', ['pending_resolution', 'disputing', 'resolved', 'disputable'])
         .order('created_at', { ascending: false });
 
       if (marketsError) {
@@ -194,9 +194,9 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       }
 
       // Filter by active tab
-      const filteredMarkets = marketsWithEvidence.filter(market => 
-        activeTab === 'pending' 
-          ? market.status === 'pending_resolution' || market.status === 'disputing'
+      const filteredMarkets = marketsWithEvidence.filter(market =>
+        activeTab === 'pending'
+          ? market.status === 'pending_resolution' || market.status === 'disputing' || market.status === 'disputable'
           : market.status === 'resolved'
       );
 
@@ -215,32 +215,68 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
   const triggerAIAnalysis = async (marketId: string) => {
     setProcessingAI(true);
     try {
-      // Here we'll call our enhanced AI resolution system
-      toast.success('AI analysis triggered! This will process external data sources and evidence.');
-      
-      // Mock AI processing - in real implementation, this calls our BlockCast AI Agent
-      setTimeout(() => {
-        // Update the market with AI results
-        setMarkets(prev => prev.map(market => 
-          market.id === marketId 
-            ? {
-                ...market,
-                ai_resolution: {
-                  recommendation: 'YES',
-                  confidence: 0.85,
-                  reasoning: 'Based on evidence analysis and external sources (BBC, Reuters), the claim appears to be supported. High confidence due to multiple corroborating sources.',
-                  timestamp: new Date().toISOString()
-                }
+      console.log('🚀 Starting real AI analysis for market:', marketId);
+
+      // Find the market
+      const market = markets.find(m => m.id === marketId);
+      if (!market) {
+        throw new Error('Market not found');
+      }
+
+      toast.info('Starting AI web scraping & analysis...');
+
+      // Import services dynamically to avoid issues if they fail
+      const { webScrapingService } = await import('../../services/webScrapingService');
+      const { aiAnalysisService } = await import('../../services/aiAnalysisService');
+
+      // Step 1: Get selected sources (for now, use default sources)
+      const selectedSources = ['bbc', 'reuters', 'ap']; // Can be made configurable from UI
+
+      // Step 2: Scrape external sources
+      toast.info('Scraping external sources...');
+      const scrapedContent = await webScrapingService.scrapeMultipleSources(
+        selectedSources,
+        market.claim
+      );
+
+      if (scrapedContent.length === 0) {
+        toast.warning('No content found from external sources. Analysis will be inconclusive.');
+      } else {
+        toast.info(`Found ${scrapedContent.length} articles. Analyzing with AI...`);
+      }
+
+      // Step 3: Analyze with AI
+      const analysisResult = await aiAnalysisService.analyzeContent(
+        market.claim,
+        scrapedContent
+      );
+
+      // Step 4: Update market with results
+      setMarkets(prev => prev.map(marketItem =>
+        marketItem.id === marketId
+          ? {
+              ...marketItem,
+              ai_resolution: {
+                recommendation: analysisResult.recommendation,
+                confidence: analysisResult.confidence,
+                reasoning: analysisResult.reasoning,
+                timestamp: new Date().toISOString(),
+                keyFactors: analysisResult.keyFactors,
+                sourceAnalysis: analysisResult.sourceAnalysis,
+                scrapedContent: scrapedContent,
+                processingTimeMs: analysisResult.processingTimeMs
               }
-            : market
-        ));
-        setProcessingAI(false);
-        toast.success('AI analysis completed! Review the results below.');
-      }, 3000);
+            }
+          : marketItem
+      ));
+
+      const confidencePercent = (analysisResult.confidence * 100).toFixed(0);
+      toast.success(`AI analysis complete! Recommendation: ${analysisResult.recommendation} (${confidencePercent}% confidence)`);
 
     } catch (error) {
-      console.error('Error triggering AI analysis:', error);
-      toast.error('Failed to trigger AI analysis');
+      console.error('❌ Error during AI analysis:', error);
+      toast.error(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
       setProcessingAI(false);
     }
   };
@@ -511,16 +547,93 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                             
                             {market.ai_resolution && market.ai_resolution.recommendation !== 'PENDING' && (
                               <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                <div className="flex items-center gap-2 mb-2">
+                                <div className="flex items-center gap-2 mb-3">
                                   <Brain className="h-4 w-4 text-green-500" />
                                   <span className="font-medium">AI Analysis Complete</span>
-                                  <Badge variant={market.ai_resolution.recommendation === 'YES' ? 'default' : 'destructive'}>
+                                  <Badge variant={
+                                    market.ai_resolution.recommendation === 'YES' ? 'default' :
+                                    market.ai_resolution.recommendation === 'NO' ? 'destructive' : 'secondary'
+                                  }>
                                     {market.ai_resolution.recommendation}
                                   </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {(market.ai_resolution.confidence * 100).toFixed(0)}% confidence
+                                  </Badge>
                                 </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                  {market.ai_resolution.reasoning}
-                                </p>
+
+                                <div className="space-y-3">
+                                  <div>
+                                    <h6 className="font-medium text-sm mb-1">Reasoning:</h6>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                      {market.ai_resolution.reasoning}
+                                    </p>
+                                  </div>
+
+                                  {market.ai_resolution.keyFactors && market.ai_resolution.keyFactors.length > 0 && (
+                                    <div>
+                                      <h6 className="font-medium text-sm mb-1">Key Factors:</h6>
+                                      <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                        {market.ai_resolution.keyFactors.map((factor, idx) => (
+                                          <li key={idx} className="flex items-start gap-2">
+                                            <span className="text-blue-500 mt-1">•</span>
+                                            <span>{factor}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {market.ai_resolution.sourceAnalysis && Object.keys(market.ai_resolution.sourceAnalysis).length > 0 && (
+                                    <div>
+                                      <h6 className="font-medium text-sm mb-2">Source Analysis:</h6>
+                                      <div className="space-y-2">
+                                        {Object.entries(market.ai_resolution.sourceAnalysis).map(([source, analysis]) => (
+                                          <div key={source} className="border border-gray-200 dark:border-gray-700 p-2 rounded text-xs">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className="font-medium">{source}</span>
+                                              <Badge size="sm" variant={
+                                                analysis.position === 'YES' ? 'default' :
+                                                analysis.position === 'NO' ? 'destructive' : 'secondary'
+                                              }>
+                                                {analysis.position}
+                                              </Badge>
+                                            </div>
+                                            <p className="text-gray-600 dark:text-gray-400">{analysis.summary}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {market.ai_resolution.scrapedContent && market.ai_resolution.scrapedContent.length > 0 && (
+                                    <div>
+                                      <h6 className="font-medium text-sm mb-2">Scraped Articles ({market.ai_resolution.scrapedContent.length}):</h6>
+                                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {market.ai_resolution.scrapedContent.map((content, idx) => (
+                                          <div key={idx} className="border border-gray-200 dark:border-gray-700 p-2 rounded text-xs">
+                                            <div className="font-medium truncate">{content.title}</div>
+                                            <div className="text-gray-500 text-xs">{content.source}</div>
+                                            <div className="text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                                              {content.content.substring(0, 100)}...
+                                            </div>
+                                            {content.url && (
+                                              <a href={content.url} target="_blank" rel="noopener noreferrer"
+                                                 className="text-blue-500 hover:text-blue-600 text-xs">
+                                                View Article →
+                                              </a>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {market.ai_resolution.processingTimeMs && (
+                                    <div className="text-xs text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                      Processing time: {(market.ai_resolution.processingTimeMs / 1000).toFixed(1)}s
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>

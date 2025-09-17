@@ -37,7 +37,7 @@ export interface BettingMarket {
   noOdds: number;
   totalCasters: number;
   expiresAt: Date;
-  status: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked';
+  status: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked' | 'disputable';
   resolution?: 'yes' | 'no';
   trending: boolean;
   imageUrl?: string;
@@ -70,12 +70,14 @@ interface BettingMarketsProps {
   onCreateMarket?: () => void;
   statusFilter?: 'active' | 'pending_resolution' | 'all';
   showEvidence?: boolean;
+  walletConnected?: boolean;
+  onConnectWallet?: () => void;
 }
 
 // No more dummy markets - all markets come from Supabase now  
 export const realTimeMarkets: BettingMarket[] = [];
 
-export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = [], onCreateMarket, statusFilter = 'all', showEvidence = false }: BettingMarketsProps) {
+export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = [], onCreateMarket, statusFilter = 'all', showEvidence = false, walletConnected = false, onConnectWallet }: BettingMarketsProps) {
   const [showBetDialog, setShowBetDialog] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket | null>(null);
   const [betPosition, setBetPosition] = useState<'yes' | 'no'>('yes');
@@ -155,8 +157,15 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
   };
 
   const handlePlaceBet = async () => {
+    if (!walletConnected && onConnectWallet) {
+      toast.info('Please connect your wallet to place bets');
+      onConnectWallet();
+      setShowBetDialog(false);
+      return;
+    }
+
     if (!selectedMarket || !betAmount) return;
-    
+
     const amount = parseFloat(betAmount);
     if (isNaN(amount) || amount <= 0) {
       toast.error('Please enter a valid amount');
@@ -200,12 +209,12 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
   };
 
   const isMarketDisputable = (market: BettingMarket): boolean => {
-    if (!market.expiresAt || market.status === 'resolved') return false;
+    if (market.status === 'resolved') return false;
 
     const now = new Date();
-    const disputePeriodEnd = market.dispute_period_end ? new Date(market.dispute_period_end) : new Date(market.expiresAt.getTime() + 48 * 60 * 60 * 1000);
+    const disputePeriodEnd = market.dispute_period_end ? new Date(market.dispute_period_end) : new Date((market.expiresAt?.getTime() || Date.now()) + 7 * 24 * 60 * 60 * 1000); // 7 days instead of 48 hours
 
-    return now <= disputePeriodEnd && (market.status === 'pending_resolution' || market.status === 'disputing');
+    return now <= disputePeriodEnd && (market.status === 'pending_resolution' || market.status === 'disputing' || market.status === 'disputable');
   };
 
   const getMarketStatusLabel = (market: BettingMarket): string => {
@@ -565,11 +574,13 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                               </div>
                             )}
 
-                            <div className="text-center mt-2">
-                              <div className="text-xs text-muted-foreground">
-                                Click to view details and submit evidence
+                            {marketDisputable && (
+                              <div className="text-center mt-2">
+                                <div className="text-xs text-muted-foreground">
+                                  Click to view details and submit evidence
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             {market.resolution_data && (
                               <>
@@ -666,7 +677,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handlePlaceBet}>
-              Cast Position
+              {!walletConnected ? 'Connect Wallet' : 'Cast Position'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

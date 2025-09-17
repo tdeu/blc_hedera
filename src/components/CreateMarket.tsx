@@ -12,9 +12,10 @@ import { BettingMarket } from './BettingMarkets';
 interface CreateMarketProps {
   onBack: () => void;
   onCreateMarket: (market: Partial<BettingMarket>) => void;
+  marketContext?: 'truth-markets' | 'verify-truth';
 }
 
-export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketProps) {
+export default function CreateMarket({ onBack, onCreateMarket, marketContext = 'truth-markets' }: CreateMarketProps) {
   const [formData, setFormData] = useState({
     claim: '',
     description: '',
@@ -48,7 +49,11 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
   };
 
   const handleSubmit = async () => {
-    if (!formData.claim || !formData.description || !formData.category || !expirationDate) {
+    // For truth markets (future events), expiration date is required
+    // For verify truth (past events), expiration date is not required
+    const requiresExpirationDate = marketContext === 'truth-markets';
+
+    if (!formData.claim || !formData.description || !formData.category || (requiresExpirationDate && !expirationDate)) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -58,7 +63,8 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
       return;
     }
 
-    if (expirationDate <= new Date()) {
+    // Only validate expiration date if it's required (truth markets)
+    if (requiresExpirationDate && expirationDate && expirationDate <= new Date()) {
       toast.error('Expiration date must be in the future');
       return;
     }
@@ -68,8 +74,8 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
     try {
       const newMarket: Partial<BettingMarket> = {
         ...formData,
-        expiresAt: expirationDate,
-        status: 'active',
+        expiresAt: marketContext === 'truth-markets' ? expirationDate : new Date(), // Past events expire immediately
+        status: marketContext === 'truth-markets' ? 'active' : 'disputable',  // Verify truth goes to disputable status
         trending: false,
         totalPool: 0,
         yesPool: 0,
@@ -99,10 +105,13 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
         <div>
           <h1 className="text-2xl font-bold text-primary flex items-center gap-2">
             <Plus className="h-6 w-6" />
-            Create Truth Market
+            {marketContext === 'truth-markets' ? 'Create Truth Market' : 'Submit Past Event'}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Create a new prediction market for community truth verification
+            {marketContext === 'truth-markets'
+              ? 'Create a new prediction market for community truth verification'
+              : 'Submit a past event for truth verification and community review'
+            }
           </p>
         </div>
       </div>
@@ -230,7 +239,7 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
           </div>
 
           {/* Confidence Level and Expiration */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${marketContext === 'truth-markets' ? 'md:grid-cols-2' : ''}`}>
             <div className="space-y-2">
               <Label>Confidence Level</Label>
               <Select value={formData.confidenceLevel} onValueChange={(value) => handleInputChange('confidenceLevel', value as 'high' | 'medium' | 'low')}>
@@ -245,20 +254,36 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expirationDate">
-                Expiration Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="expirationDate"
-                type="datetime-local"
-                value={expirationDate ? expirationDate.toISOString().slice(0, 16) : ''}
-                onChange={(e) => setExpirationDate(new Date(e.target.value))}
-                min={new Date().toISOString().slice(0, 16)}
-                className="text-sm"
-              />
-            </div>
+            {/* Only show expiration date for truth markets (future events) */}
+            {marketContext === 'truth-markets' && (
+              <div className="space-y-2">
+                <Label htmlFor="expirationDate">
+                  Expiration Date <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="expirationDate"
+                  type="datetime-local"
+                  value={expirationDate ? expirationDate.toISOString().slice(0, 16) : ''}
+                  onChange={(e) => setExpirationDate(new Date(e.target.value))}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  When should this prediction be resolved?
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* Add explanation for verify truth */}
+          {marketContext === 'verify-truth' && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Past Event Submission:</strong> This event will be published as 'disputable' for 7 days, allowing the community to provide evidence and challenge the outcome.
+                No expiration date is needed since this concerns a past event.
+              </p>
+            </div>
+          )}
 
           {/* Create Button */}
           <div className="pt-4">
@@ -275,7 +300,7 @@ export default function CreateMarket({ onBack, onCreateMarket }: CreateMarketPro
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" />
-                  Create Truth Market
+                  {marketContext === 'truth-markets' ? 'Create Truth Market' : 'Submit Past Event'}
                 </>
               )}
             </Button>

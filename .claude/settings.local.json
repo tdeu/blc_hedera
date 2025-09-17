@@ -38,7 +38,9 @@
       "Bash(findstr:*)",
       "Bash(tasklist:*)",
       "Bash(lsof:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "Bash(PORT=3001 npx tsx src/api/anthropic-proxy.ts)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

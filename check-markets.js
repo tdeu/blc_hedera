@@ -42,7 +42,7 @@ async function checkMarkets() {
       const expiresAt = new Date(market.expires_at);
       const disputePeriodEnd = market.dispute_period_end
         ? new Date(market.dispute_period_end)
-        : new Date(expiresAt.getTime() + 48 * 60 * 60 * 1000);
+        : new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);  // 7 days instead of 48 hours
 
       const isDisputable = now <= disputePeriodEnd &&
                           (market.status === 'pending_resolution' || market.status === 'disputing');

@@ -246,7 +246,7 @@ async function updateMarketResolution(marketId: string, newResolution: any): Pro
         reasoning: newResolution.reasoning,
         evidence_considered: newResolution.evidence_considered,
         timestamp: new Date().toISOString(),
-        dispute_period_end: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+        dispute_period_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()  // 7 days instead of 48 hours
       });
 
   } catch (error) {

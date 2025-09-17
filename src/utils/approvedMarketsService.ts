@@ -29,7 +29,9 @@ class ApprovedMarketsService {
         expires_at: market.expiresAt.toISOString(),
         approved_by: approvedBy,
         approval_reason: reason,
-        submitter_address: submitterAddress
+        submitter_address: submitterAddress,
+        status: market.status, // Include market status
+        dispute_period_end: (market as any).dispute_period_end // Include dispute period for disputable markets
       };
 
       const { error } = await supabase

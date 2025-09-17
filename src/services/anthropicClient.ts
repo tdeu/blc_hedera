@@ -1,13 +1,25 @@
 export class AnthropicClient {
-  private baseUrl = (typeof window !== 'undefined' ? '/api/anthropic-proxy' : 'http://localhost:3001/api/anthropic-proxy'); // Point to your backend proxy
+  private baseUrl: string;
 
   constructor() {
     // No API key needed - handled by backend proxy
+    this.baseUrl = this.getApiUrl();
+  }
+
+  private getApiUrl(): string {
+    // Check if we're in development (localhost)
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Local development - use local server
+      return 'http://localhost:3001/api/anthropic-proxy';
+    }
+    // Production or preview - use Vercel API route
+    return '/api/anthropic-proxy';
   }
 
   async generateAnalysis(prompt: string): Promise<any> {
     try {
       console.log('🔄 Attempting AI proxy call via backend...');
+      console.log('🌐 Using API URL:', this.baseUrl);
       console.log('🌐 Testing fetch capability...');
       
       // Test if fetch is working at all
@@ -48,6 +60,14 @@ export class AnthropicClient {
 
       const data = await response.json();
       console.log('✅ API Success, parsing response...');
+      console.log('📊 Full response data:', JSON.stringify(data, null, 2));
+
+      // Check if response has the expected structure
+      if (!data.content || !Array.isArray(data.content) || !data.content[0] || !data.content[0].text) {
+        console.error('❌ Unexpected response structure:', data);
+        throw new Error('Invalid response structure from API');
+      }
+
       return this.parseAIResponse(data.content[0].text, prompt);
     } catch (error) {
       console.error('❌ Anthropic API call failed:', error);

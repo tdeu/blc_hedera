@@ -102,6 +102,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [adminMode, setAdminMode] = useState<'user' | 'admin'>('user');
   const [activeAdminTab, setActiveAdminTab] = useState('overview');
+  const [marketCreationContext, setMarketCreationContext] = useState<'truth-markets' | 'verify-truth'>('truth-markets');
   
   // User state
   const [userId] = useState(generateUserId());
@@ -599,6 +600,12 @@ export default function App() {
     setCurrentTab('create-market');
   };
 
+  // Handle market creation with context
+  const handleCreateMarketWithContext = (context: 'truth-markets' | 'verify-truth') => {
+    setMarketCreationContext(context);
+    setCurrentTab('create-market');
+  };
+
   // Handle new market submission - Enhanced with Hedera integration and admin approval
   const handleSubmitNewMarket = async (marketData: Partial<BettingMarket>) => {
     try {
@@ -624,7 +631,7 @@ export default function App() {
         noOdds: 2.0,
         totalCasters: 0,
         expiresAt: marketData.expiresAt || new Date(),
-        status: 'pending', // Changed: Markets now start as pending
+        status: marketData.status || 'pending', // Use status from CreateMarket component
         trending: false,
         country: marketData.country,
         region: marketData.region,
@@ -645,19 +652,54 @@ export default function App() {
         });
       }
 
-      // Submit to pending markets for admin approval
-      pendingMarketsService.submitMarket(newMarket, walletConnection.address);
-      
-      // Record market creation in userDataService
-      userDataService.recordMarketCreation(
-        walletConnection.address,
-        marketId,
-        newMarket.claim,
-        'pending' // Will be updated with actual transaction hash when available
-      );
+      // Handle different market types differently
+      if (newMarket.status === 'disputable') {
+        // Disputable markets (Verify Truth) go directly to approved markets with dispute period
+        const disputePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-      toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');
-      setCurrentTab('markets');
+        // Create the market with dispute period
+        const disputableMarket = {
+          ...newMarket,
+          dispute_period_end: disputePeriodEnd.toISOString(),
+          status: 'disputable' as const
+        };
+
+        // Add to approved markets immediately with dispute period
+        setMarkets(prev => [...prev, disputableMarket]);
+
+        // Store in approved markets service with the disputable market data
+        approvedMarketsService.storeApprovedMarket(
+          disputableMarket,
+          'system_auto_approved', // System approval for past events
+          walletConnection.address,
+          'Past event submitted for community verification'
+        );
+
+        // Record market creation
+        userDataService.recordMarketCreation(
+          walletConnection.address,
+          marketId,
+          newMarket.claim,
+          'disputable'
+        );
+
+        toast.success('Past event published for community verification! It will be disputable for 7 days.');
+        setCurrentTab('verify-truth'); // Return to verify truth section
+      } else {
+        // Regular markets go through pending approval process
+        pendingMarketsService.submitMarket(newMarket, walletConnection.address);
+
+        // Record market creation in userDataService
+        userDataService.recordMarketCreation(
+          walletConnection.address,
+          marketId,
+          newMarket.claim,
+          'pending'
+        );
+
+        toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');
+        setCurrentTab('markets');
+      }
     } catch (error) {
       toast.error('Failed to create market. Please try again.');
     }
@@ -702,8 +744,10 @@ export default function App() {
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
-              onCreateMarket={handleCreateMarket}
+              onCreateMarket={() => handleCreateMarketWithContext('truth-markets')}
               statusFilter="active"
+              walletConnected={walletConnection?.isConnected || false}
+              onConnectWallet={connectWallet}
             />
           );
         case 'verify-truth':
@@ -714,9 +758,11 @@ export default function App() {
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
-              onCreateMarket={handleCreateMarket}
+              onCreateMarket={() => handleCreateMarketWithContext('verify-truth')}
               statusFilter="pending_resolution"
               showEvidence={true}
+              walletConnected={walletConnection?.isConnected || false}
+              onConnectWallet={connectWallet}
             />
           );
       case 'market-detail':
@@ -726,6 +772,8 @@ export default function App() {
             onPlaceBet={handlePlaceBet}
             userBalance={userProfile?.balance || 0}
             onBack={handleBackFromMarket}
+            walletConnected={walletConnection?.isConnected || false}
+            onConnectWallet={connectWallet}
           />
         ) : null;
       case 'portfolio':
@@ -754,9 +802,10 @@ export default function App() {
         return <Categories onSelectCategory={handleSelectCategory} />;
       case 'create-market':
         return (
-          <CreateMarket 
-            onBack={() => setCurrentTab('markets')}
+          <CreateMarket
+            onBack={() => setCurrentTab(marketCreationContext === 'truth-markets' ? 'markets' : 'verify-truth')}
             onCreateMarket={handleSubmitNewMarket}
+            marketContext={marketCreationContext}
           />
         );
       case 'profile':
@@ -814,8 +863,10 @@ export default function App() {
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
-              onCreateMarket={handleCreateMarket}
+              onCreateMarket={() => handleCreateMarketWithContext('truth-markets')}
               statusFilter="active"
+              walletConnected={walletConnection?.isConnected || false}
+              onConnectWallet={connectWallet}
             />
           );
         }
@@ -828,6 +879,8 @@ export default function App() {
             markets={markets}
             onCreateMarket={handleCreateMarket}
             statusFilter="active"
+            walletConnected={walletConnection?.isConnected || false}
+            onConnectWallet={connectWallet}
           />
         );
     }

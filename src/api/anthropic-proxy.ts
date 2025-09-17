@@ -1,7 +1,8 @@
-// Generic AI proxy (Anthropic or OpenAI)
+// Generic AI proxy (Anthropic or OpenAI) + Web Scraping
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import * as cheerio from 'cheerio';
 
 // Load environment variables
 dotenv.config({ override: true });
@@ -12,7 +13,7 @@ const PROVIDER = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Vite default ports
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3003'], // Vite default ports + current port
   credentials: true,
 }));
 app.use(express.json());
@@ -82,6 +83,7 @@ app.post('/api/anthropic-proxy', async (req, res) => {
       return res.status(response.status).json({ error: data });
     }
 
+    console.log('Sending response to frontend:', JSON.stringify(data, null, 2));
     return res.json(data);
   } catch (error) {
     console.error('Anthropic proxy error:', error);
@@ -105,9 +107,64 @@ app.get('/env-check', (req, res) => {
   });
 });
 
+// Web scraping endpoint - simplified for testing
+app.post('/api/scrape', async (req, res) => {
+  try {
+    const { query } = req.body;
+    console.log(`🔍 Backend scraping for: "${query}"`);
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+
+    // Simple test response for now
+    const testResults = [
+      {
+        id: 'test_1',
+        source: 'BBC News',
+        url: 'https://www.bbc.com/test-article',
+        title: `Test Article: ${query}`,
+        content: `This is a test article about ${query}. Real scraping functionality is being implemented.`,
+        publishedAt: new Date().toISOString(),
+        relevanceScore: 0.9
+      },
+      {
+        id: 'test_2',
+        source: 'Reuters',
+        url: 'https://www.reuters.com/test-article',
+        title: `Reuters Test: ${query}`,
+        content: `Reuters test content for ${query}. Backend scraping endpoint is working.`,
+        publishedAt: new Date().toISOString(),
+        relevanceScore: 0.8
+      }
+    ];
+
+    console.log(`✅ Returning ${testResults.length} test articles`);
+    res.json({ results: testResults, total: testResults.length });
+
+  } catch (error) {
+    console.error('❌ Scraping error:', error);
+    res.status(500).json({ error: 'Scraping failed', message: error.message });
+  }
+});
+
+// Simple relevance calculation
+function calculateRelevance(text: string, query: string): number {
+  const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 2);
+  const textLower = text.toLowerCase();
+
+  const matches = searchTerms.filter(term => textLower.includes(term));
+  return Math.min(matches.length / searchTerms.length, 1.0);
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Anthropic proxy server running on port ${PORT}`);
+  console.log(`📡 Available endpoints:`);
+  console.log(`   POST /api/anthropic-proxy - AI proxy`);
+  console.log(`   POST /api/scrape - Web scraping`);
+  console.log(`   GET  /health - Health check`);
+  console.log(`   GET  /env-check - Environment check`);
 });
 
 export default app;

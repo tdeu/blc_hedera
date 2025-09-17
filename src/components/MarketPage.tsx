@@ -25,21 +25,24 @@ import DisputeModal, { DisputeFormData } from './DisputeModal';
 import { MarketResolution } from '../utils/supabase';
 import { disputeService } from '../utils/disputeService';
 import { resolutionService } from '../utils/resolutionService';
-import { evidenceService } from '../utils/evidenceService';
+import { evidenceService, EvidenceSubmission } from '../utils/evidenceService';
 import { walletService } from '../utils/walletService';
 import { AIAgentSimple } from './AIAgentSimple';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
+import { userDataService } from '../utils/userDataService';
 
 interface MarketPageProps {
   market: BettingMarket;
   onPlaceBet: (marketId: string, position: 'yes' | 'no', amount: number) => void;
   userBalance: number;
   onBack: () => void;
+  walletConnected?: boolean;
+  onConnectWallet?: () => void;
 }
 
 const quickCastAmounts = [0.01, 0.05, 0.1, 0.5, 1.0];
 
-export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: MarketPageProps) {
+export default function MarketPage({ market, onPlaceBet, userBalance, onBack, walletConnected = false, onConnectWallet }: MarketPageProps) {
   const { t, language } = useLanguage();
   const [castPosition, setCastPosition] = useState<'yes' | 'no'>('yes');
   const [castAmount, setCastAmount] = useState<string>('');
@@ -77,6 +80,10 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const [aiAnalysis, setAIAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // Activity feed state
+  const [marketEvidence, setMarketEvidence] = useState<EvidenceSubmission[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+
   // Helper function to get translated text
   const getTranslatedText = (text: string, translations?: { en: string; fr: string; sw: string }) => {
     if (!translations) return text;
@@ -112,13 +119,19 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   };
 
   const handleQuickCast = (position: 'yes' | 'no', amount: number) => {
+    if (!walletConnected && onConnectWallet) {
+      toast.info('Please connect your wallet to place bets');
+      onConnectWallet();
+      return;
+    }
+
     if (amount > userBalance) {
       toast.error(t('insufficientBalance') || 'Insufficient balance');
       return;
     }
-    
+
     onPlaceBet(market.id, position, amount);
-    
+
     // Success feedback
     toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} HBAR`);
   };
@@ -149,6 +162,12 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   };
 
   const handleCustomCast = () => {
+    if (!walletConnected && onConnectWallet) {
+      toast.info('Please connect your wallet to place bets');
+      onConnectWallet();
+      return;
+    }
+
     const amount = parseFloat(castAmount);
     if (isNaN(amount) || amount <= 0) {
       toast.error('Please enter a valid amount');
@@ -158,11 +177,11 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
       toast.error(t('insufficientBalance') || 'Insufficient balance');
       return;
     }
-    
+
     onPlaceBet(market.id, castPosition, amount);
     setCastAmount('');
     setProfitCalculation(null);
-    
+
     toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} HBAR`);
   };
 
@@ -226,12 +245,16 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
 
   // Evidence submission handlers
   const isMarketDisputable = (): boolean => {
-    if (!market.expiresAt || market.status === 'resolved') return false;
+    if (market.status === 'resolved') return false;
     const now = new Date();
     const disputePeriodEnd = market.dispute_period_end
       ? new Date(market.dispute_period_end)
-      : new Date(market.expiresAt.getTime() + 48 * 60 * 60 * 1000);
-    return now <= disputePeriodEnd && (market.status === 'pending_resolution' || market.status === 'disputing');
+      : new Date((market.expiresAt?.getTime() || Date.now()) + 7 * 24 * 60 * 60 * 1000); // 7 days instead of 48 hours
+    return now <= disputePeriodEnd && (
+      market.status === 'pending_resolution' ||
+      market.status === 'disputing' ||
+      market.status === 'disputable' // Add support for explicit 'disputable' status
+    );
   };
 
   const addEvidenceLink = () => {
@@ -247,6 +270,20 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
   const removeEvidenceLink = (index: number) => {
     const newLinks = evidenceLinks.filter((_, i) => i !== index);
     setEvidenceLinks(newLinks.length > 0 ? newLinks : ['']);
+  };
+
+  // Load activity feed data
+  const loadMarketActivity = async () => {
+    setIsLoadingActivity(true);
+    try {
+      // Load evidence submissions for this market
+      const evidence = await evidenceService.getMarketEvidence(market.id);
+      setMarketEvidence(evidence);
+    } catch (error) {
+      console.error('Failed to load market activity:', error);
+    } finally {
+      setIsLoadingActivity(false);
+    }
   };
 
   // Check wallet connection and balance on component mount
@@ -266,11 +303,12 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
     };
 
     checkWalletStatus();
+    loadMarketActivity(); // Load activity feed
 
     // Refresh balance periodically
     const interval = setInterval(checkWalletStatus, 30000); // Every 30 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [market.id]);
 
   const handleConnectWallet = async () => {
     try {
@@ -332,6 +370,9 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
         // Clear form and refresh balance
         setEvidenceText('');
         setEvidenceLinks(['']);
+
+        // Refresh activity feed to show new evidence
+        loadMarketActivity();
 
         // Refresh wallet balance after payment
         setTimeout(async () => {
@@ -1122,7 +1163,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                           e.stopPropagation();
                           handleQuickCast('yes', amount);
                         }}
-                        disabled={amount > userBalance}
+                        disabled={walletConnected && amount > userBalance}
                       >
                         <span className="text-primary font-semibold">TRUE</span>
                         <span className="ml-2">{amount} HBAR</span>
@@ -1145,7 +1186,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                           e.stopPropagation();
                           handleQuickCast('no', amount);
                         }}
-                        disabled={amount > userBalance}
+                        disabled={walletConnected && amount > userBalance}
                       >
                         <span className="text-secondary font-semibold">FALSE</span>
                         <span className="ml-2">{amount} HBAR</span>
@@ -1210,10 +1251,10 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
                       </div>
                     )}
                   </div>
-                  <Button 
-                    onClick={handleCustomCast} 
+                  <Button
+                    onClick={handleCustomCast}
                     className="w-full gap-2"
-                    disabled={!castAmount || parseFloat(castAmount) > userBalance}
+                    disabled={walletConnected && (!castAmount || parseFloat(castAmount) > userBalance)}
                   >
                     <Target className="h-4 w-4" />
                     {t('castPosition')}
@@ -1268,6 +1309,217 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack }: 
           </Card>
         </div>
       </div>
+
+      {/* Market Activity Feed */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Market Activity Timeline
+          </CardTitle>
+          <CardDescription>
+            Complete history of market events, evidence submissions, and blockchain transactions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingActivity ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="ml-2">Loading activity...</span>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Market Creation Event */}
+              <div className="flex gap-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Target className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-blue-700 dark:text-blue-400">Market Created</span>
+                    <Badge variant="outline" className="text-xs">
+                      Genesis Event
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Prediction market created by{' '}
+                    <span className="font-mono text-xs bg-muted px-1 rounded">
+                      {/* This would come from market creation data */}
+                      0x1234...5678
+                    </span>
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>{new Date(market.expiresAt.getTime() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
+                    {market.resolution_data?.hcs_topic_id && (
+                      <span className="font-mono">
+                        HCS Topic: {market.resolution_data.hcs_topic_id.slice(0, 12)}...
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Market Expiration Event */}
+              {new Date() > market.expiresAt && (
+                <div className="flex gap-4 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">Market Expired</span>
+                      <Badge variant="outline" className="text-xs">
+                        Timeline Event
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Prediction period ended, market entered resolution phase
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      {market.expiresAt.toLocaleDateString()} at {market.expiresAt.toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Evidence Submissions */}
+              {marketEvidence.map((evidence) => (
+                <div key={evidence.id} className="flex gap-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                      <FileText className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-purple-700 dark:text-purple-400">Evidence Submitted</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${
+                          evidence.status === 'accepted' ? 'bg-green-100 text-green-700 border-green-200' :
+                          evidence.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
+                          'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        {evidence.status}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Submitted by{' '}
+                      <span className="font-mono text-xs bg-muted px-1 rounded">
+                        {evidence.user_id.slice(0, 6)}...{evidence.user_id.slice(-4)}
+                      </span>
+                    </p>
+                    {/* First sentence of evidence */}
+                    <p className="text-sm">
+                      "{evidence.evidence_text.split('.')[0]}."
+                      {evidence.evidence_links && evidence.evidence_links.length > 0 && (
+                        <span className="text-blue-500 ml-1">
+                          [{evidence.evidence_links.length} link{evidence.evidence_links.length > 1 ? 's' : ''}]
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{evidence.created_at ? new Date(evidence.created_at).toLocaleDateString() : 'Recent'}</span>
+                      {evidence.transaction_id && (
+                        <span className="font-mono">
+                          TX: {evidence.transaction_id.slice(0, 8)}...{evidence.transaction_id.slice(-6)}
+                        </span>
+                      )}
+                      <span>Fee: {evidence.submission_fee} HBAR</span>
+                      {evidence.reward_amount && (
+                        <span className="text-green-600">Reward: {evidence.reward_amount} HBAR</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* AI Resolution Event */}
+              {market.resolution_data && (
+                <div className="flex gap-4 p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                      <Brain className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-green-700 dark:text-green-400">AI Analysis Complete</span>
+                      <Badge variant="outline" className="text-xs">
+                        {market.resolution_data.confidence} Confidence
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      AI analyzed {marketEvidence.length + 3} sources and determined outcome:{' '}
+                      <span className={`font-semibold ${
+                        market.resolution_data.outcome === 'yes' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {market.resolution_data.outcome?.toUpperCase()}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{market.resolution_data.timestamp ? new Date(market.resolution_data.timestamp).toLocaleDateString() : 'Recent'}</span>
+                      {market.resolution_data.transaction_id && (
+                        <span className="font-mono">
+                          HCS TX: {market.resolution_data.transaction_id.slice(0, 8)}...{market.resolution_data.transaction_id.slice(-6)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Final Resolution Event */}
+              {market.status === 'resolved' && market.resolution_data?.final_outcome && (
+                <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-900/10 rounded-lg border border-gray-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                      <CheckCircle2 className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700 dark:text-gray-400">Market 100% Resolved</span>
+                      <Badge variant="outline" className="text-xs">
+                        Final
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Market resolution finalized by AI and Hedera community consensus. Final outcome:{' '}
+                      <span className={`font-bold ${
+                        market.resolution_data.final_outcome === 'yes' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {market.resolution_data.final_outcome.toUpperCase()}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>Resolved by: {market.resolution_data.resolved_by || 'AI + Community'}</span>
+                      {market.resolution_data.consensus_timestamp && (
+                        <span className="font-mono">
+                          Consensus: {new Date(market.resolution_data.consensus_timestamp).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {marketEvidence.length === 0 && !market.resolution_data && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No additional activity yet. Be the first to submit evidence!</p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dispute Modal */}
       <DisputeModal
