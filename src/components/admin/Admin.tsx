@@ -6,6 +6,7 @@ import AdminLayout from './AdminLayout';
 import AdminOverview from './AdminDashboard';
 import MarketApproval from './MarketApproval';
 import EvidenceResolutionPanel from './EvidenceResolutionPanel';
+import PredictionAnalysisPanel from './PredictionAnalysisPanel';
 import { adminService } from '../../utils/adminService';
 import { useUser } from '../../contexts/UserContext';
 import { toast } from 'sonner';
@@ -149,17 +150,33 @@ const Admin: React.FC<AdminProps> = ({
       
       case 'markets':
         return (
-          <MarketApproval 
+          <MarketApproval
             userProfile={{
               walletAddress: walletConnection.address,
               displayName: profile?.displayName
             }}
           />
         );
-      
+
+      case 'predictions':
+        return (
+          <PredictionAnalysisPanel
+            userProfile={{
+              walletAddress: walletConnection.address,
+              displayName: profile?.displayName
+            }}
+          />
+        );
+
       case 'evidence':
-        // Evidence & Resolution uses full width, rendered outside AdminLayout
-        return null;
+        return (
+          <EvidenceResolutionPanel
+            userProfile={{
+              walletAddress: walletConnection.address,
+              displayName: profile?.displayName
+            }}
+          />
+        );
       
       case 'users':
         return (

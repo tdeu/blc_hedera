@@ -40,7 +40,9 @@
       "Bash(lsof:*)",
       "Bash(npx kill-port:*)",
       "Bash(PORT=3001 npx tsx src/api/anthropic-proxy.ts)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(PORT=3001 node -r tsx/esm src/api/anthropic-proxy.ts)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

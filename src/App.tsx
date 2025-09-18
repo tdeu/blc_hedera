@@ -22,7 +22,7 @@ import Categories from './components/Categories';
 import CreateMarket from './components/CreateMarket';
 import Admin from './components/admin/Admin';
 import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
-import EvidenceResolutionPanel from './components/admin/EvidenceResolutionPanel';
+import PredictionAnalysisPanel from './components/admin/PredictionAnalysisPanel';
 import { adminService } from './utils/adminService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
@@ -834,19 +834,7 @@ export default function App() {
         if (adminMode === 'admin' && walletConnection?.address &&
             adminService.isAdmin(walletConnection.address)) {
 
-          // If evidence tab is active, render full-width evidence panel
-          if (activeAdminTab === 'evidence') {
-            return (
-              <EvidenceResolutionPanel
-                userProfile={{
-                  walletAddress: walletConnection.address,
-                  displayName: userProfile?.displayName
-                }}
-              />
-            );
-          }
-
-          // Otherwise render normal admin layout
+          // Render admin layout with all tabs
           return (
             <Admin
               walletConnection={walletConnection}
@@ -940,11 +928,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className={`flex-1 ${
-          adminMode === 'admin' && activeAdminTab === 'evidence'
-            ? 'w-full px-0 py-6'
-            : 'container mx-auto px-4 py-6 max-w-7xl lg:px-8'
-        } pb-20 lg:pb-6`}>
+        <main className="flex-1 container mx-auto px-4 py-6 max-w-7xl lg:px-8 pb-20 lg:pb-6">
           {renderCurrentPage()}
         </main>
 

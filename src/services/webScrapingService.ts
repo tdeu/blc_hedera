@@ -288,7 +288,7 @@ export class WebScrapingService {
 
     try {
       // Call backend scraping endpoint
-      const response = await fetch('http://localhost:3003/api/scrape', {
+      const response = await fetch('http://localhost:3001/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

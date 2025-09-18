@@ -31,21 +31,25 @@ export class AnthropicClient {
         throw new Error('Network connectivity issue detected');
       }
       
+      console.log('🌐 Making request to:', this.baseUrl);
+      const requestBody = {
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      };
+      console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ]
-        })
+        body: JSON.stringify(requestBody)
       });
 
       console.log('📡 API Response status:', response.status);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, BarChart3, Users, Settings, FileCheck, AlertTriangle, Brain, Gavel } from 'lucide-react';
+import { Shield, BarChart3, Users, Settings, FileCheck, AlertTriangle, Brain, Gavel, TrendingUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -23,6 +23,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const adminTabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'markets', label: 'Market Approval', icon: FileCheck },
+    { id: 'predictions', label: 'Prediction Analysis', icon: TrendingUp },
     { id: 'evidence', label: 'Evidence & Resolution', icon: Brain },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'reports', label: 'Reports & Flags', icon: AlertTriangle },
@@ -58,40 +59,31 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Admin Sidebar */}
-          <div className="lg:w-64 flex-shrink-0">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Admin Panel</CardTitle>
-              </CardHeader>
-              <CardContent className="p-2">
-                <nav className="space-y-1">
-                  {adminTabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <Button
-                        key={tab.id}
-                        variant={activeTab === tab.id ? "default" : "ghost"}
-                        className="w-full justify-start"
-                        onClick={() => onTabChange(tab.id)}
-                      >
-                        <Icon className="mr-3 h-4 w-4" />
-                        {tab.label}
-                      </Button>
-                    );
-                  })}
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Admin Content */}
-          <div className="flex-1">
-            {children}
+      {/* Admin Navigation Menu */}
+      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex space-x-8 overflow-x-auto py-4">
+            {adminTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <Button
+                  key={tab.id}
+                  variant={activeTab === tab.id ? "default" : "ghost"}
+                  className="flex-shrink-0 flex items-center space-x-2"
+                  onClick={() => onTabChange(tab.id)}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </Button>
+              );
+            })}
           </div>
         </div>
+      </nav>
+
+      {/* Admin Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
       </div>
     </div>
   );
