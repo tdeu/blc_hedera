@@ -58,7 +58,7 @@ const formatCurrency = (amount: number): string => {
 
 const isValidPage = (tab: string): boolean => {
   const validPages = [
-    'markets', 'verify-truth', 'market-detail', 'portfolio', 'verify', 'community',
+    'markets', 'market-detail', 'portfolio', 'verify', 'community',
     'social', 'settings', 'about', 'contact', 'categories',
     'privacy', 'terms', 'create-market', 'admin'
   ];
@@ -254,6 +254,14 @@ export default function App() {
 
   // Handle navigation changes
   const handleTabChange = (tab: string) => {
+    // Redirect verify-truth to unified markets for backward compatibility
+    if (tab === 'verify-truth') {
+      setCurrentTab('markets');
+      setSelectedMarket(null);
+      setVerificationResult(null);
+      return;
+    }
+
     if (isValidPage(tab)) {
       setCurrentTab(tab);
       setSelectedMarket(null);
@@ -733,7 +741,7 @@ export default function App() {
     try {
       switch (currentTab) {
         case 'markets':
-          console.log('🏪 Rendering markets with', markets.length, 'markets');
+          console.log('🏪 Rendering unified markets with', markets.length, 'markets');
           if (!markets || markets.length === 0) {
             return <div style={{padding: '20px', background: 'yellow', color: 'black'}}>No markets available</div>;
           }
@@ -744,23 +752,9 @@ export default function App() {
               userBalance={userProfile?.balance || 0}
               onMarketSelect={handleMarketSelect}
               markets={markets}
-              onCreateMarket={() => handleCreateMarketWithContext('truth-markets')}
-              statusFilter="active"
-              walletConnected={walletConnection?.isConnected || false}
-              onConnectWallet={connectWallet}
-            />
-          );
-        case 'verify-truth':
-          console.log('🔍 Rendering verify truth with', markets.length, 'markets');
-          return (
-            <BettingMarkets
-              onPlaceBet={handlePlaceBet}
-              userBalance={userProfile?.balance || 0}
-              onMarketSelect={handleMarketSelect}
-              markets={markets}
-              onCreateMarket={() => handleCreateMarketWithContext('verify-truth')}
-              statusFilter="pending_resolution"
-              showEvidence={true}
+              onCreateMarket={handleCreateMarket}
+              statusFilter="all"
+              showUnified={true}
               walletConnected={walletConnection?.isConnected || false}
               onConnectWallet={connectWallet}
             />

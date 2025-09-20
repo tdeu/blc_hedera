@@ -27,10 +27,9 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
   const { language, setLanguage } = useLanguage();
   const { profile } = useUser();
 
-  // Simplified main navigation - only core features
+  // Simplified main navigation - unified markets approach
   const mainNavItems = [
-    { id: 'markets', label: 'Truth Markets', icon: TrendingUp },
-    { id: 'verify-truth', label: 'Verify Truth', icon: Shield },
+    { id: 'markets', label: 'Markets', icon: TrendingUp },
     { id: 'community', label: 'Community', icon: Users },
   ];
 

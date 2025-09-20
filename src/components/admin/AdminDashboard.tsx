@@ -2,22 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { 
-  BarChart3, 
-  Users, 
-  FileCheck, 
-  AlertTriangle, 
+import {
+  BarChart3,
+  Users,
+  FileCheck,
+  AlertTriangle,
   TrendingUp,
   Clock,
   DollarSign,
   Activity,
-  Brain
+  Brain,
+  Calendar,
+  History,
+  Timer
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
 import { disputeService } from '../../utils/disputeService';
 import { MarketDispute } from '../../utils/supabase';
 import { AIAgentSimple } from '../AIAgentSimple';
+import { approvedMarketsService } from '../../utils/approvedMarketsService';
+import { BettingMarket } from '../BettingMarkets';
 
 interface AdminOverviewProps {
   userProfile?: {
@@ -31,10 +36,13 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const [loading, setLoading] = useState(true);
   const [disputes, setDisputes] = useState<MarketDispute[]>([]);
   const [disputesLoading, setDisputesLoading] = useState(false);
+  const [markets, setMarkets] = useState<BettingMarket[]>([]);
+  const [marketsLoading, setMarketsLoading] = useState(true);
 
   useEffect(() => {
     loadAdminStats();
     loadDisputes();
+    loadMarkets();
   }, []);
 
   const loadAdminStats = async () => {
@@ -59,6 +67,46 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
     } finally {
       setDisputesLoading(false);
     }
+  };
+
+  const loadMarkets = async () => {
+    try {
+      setMarketsLoading(true);
+      const allMarkets = await approvedMarketsService.getApprovedMarkets();
+      setMarkets(allMarkets);
+    } catch (error) {
+      console.error('Error loading markets:', error);
+    } finally {
+      setMarketsLoading(false);
+    }
+  };
+
+  // Helper functions to categorize markets
+  const categorizeMarkets = (markets: BettingMarket[]) => {
+    const now = new Date();
+
+    const futureMarkets = markets.filter(market =>
+      market.marketType === 'future' &&
+      market.status === 'active' &&
+      market.expiresAt && market.expiresAt > now
+    );
+
+    const pastMarkets = markets.filter(market =>
+      market.marketType === 'present' ||
+      (market.marketType === 'future' && market.status !== 'active')
+    );
+
+    const expiredMarkets = markets.filter(market =>
+      market.marketType === 'future' &&
+      market.expiresAt && market.expiresAt <= now
+    );
+
+    return {
+      future: futureMarkets,
+      past: pastMarkets,
+      expired: expiredMarkets,
+      total: markets.length
+    };
   };
 
   const handleReviewDispute = async (disputeId: string, decision: any) => {
@@ -148,139 +196,138 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
         </p>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Markets"
-          value={stats.totalMarkets}
-          icon={BarChart3}
-          trend="+12% from last month"
-          color="blue"
-        />
-        
-        <StatCard
-          title="Pending Approval"
-          value={stats.pendingMarkets}
-          icon={Clock}
-          trend={stats.pendingMarkets > 5 ? "High volume" : "Normal"}
-          color={stats.pendingMarkets > 5 ? "yellow" : "green"}
-        />
-        
-        <StatCard
-          title="Total Users"
-          value={stats.totalUsers.toLocaleString()}
-          icon={Users}
-          trend="+8% from last month"
-          color="green"
-        />
-        
-        <StatCard
-          title="Total Volume"
-          value={`${stats.totalVolume} HBAR`}
-          icon={DollarSign}
-          trend="+15% from last month"
-          color="blue"
-        />
-      </div>
+      {/* Key Metrics - Real Market Data */}
+      {(() => {
+        const marketData = categorizeMarkets(markets);
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Future Markets"
+              value={marketData.future.length}
+              icon={Calendar}
+              trend={`${marketData.future.length} active betting markets`}
+              color="blue"
+            />
 
-      {/* Alerts & Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileCheck className="h-5 w-5" />
-              Pending Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {stats.pendingMarkets > 0 && (
-              <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                <div>
-                  <p className="font-medium">{stats.pendingMarkets} Markets Awaiting Approval</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Review and approve new markets</p>
-                </div>
-                <Badge variant="secondary">{stats.pendingMarkets}</Badge>
-              </div>
-            )}
-            
-            {stats.flaggedContent > 0 && (
-              <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                <div>
-                  <p className="font-medium">{stats.flaggedContent} Flagged Content</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Content reported by users</p>
-                </div>
-                <Badge variant="destructive">{stats.flaggedContent}</Badge>
-              </div>
-            )}
-            
-            {stats.activeDisputes > 0 && (
-              <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                <div>
-                  <p className="font-medium">{stats.activeDisputes} Active Disputes</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Market resolution disputes</p>
-                </div>
-                <Badge variant="outline">{stats.activeDisputes}</Badge>
-              </div>
-            )}
-            
-            {stats.pendingMarkets === 0 && stats.flaggedContent === 0 && stats.activeDisputes === 0 && (
-              <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-                <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No pending actions at this time</p>
-                <p className="text-sm">Great job keeping things up to date!</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <StatCard
+              title="Past Events"
+              value={marketData.past.length}
+              icon={History}
+              trend={`${marketData.past.length} verification markets`}
+              color="green"
+            />
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start"
-              onClick={() => {/* Navigate to market approval */}}
-            >
-              <FileCheck className="h-4 w-4 mr-2" />
-              Review Pending Markets ({stats.pendingMarkets})
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              className="w-full justify-start"
-              onClick={() => {/* Navigate to user management */}}
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Manage Users
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              className="w-full justify-start"
-              onClick={() => {/* Navigate to reports */}}
-            >
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              Review Reports ({stats.flaggedContent})
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              className="w-full justify-start"
-              onClick={() => {/* Navigate to analytics */}}
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              View Analytics
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+            <StatCard
+              title="Expired Markets"
+              value={marketData.expired.length}
+              icon={Timer}
+              trend={`${marketData.expired.length} awaiting resolution`}
+              color="yellow"
+            />
+
+            <StatCard
+              title="Total Markets"
+              value={marketData.total}
+              icon={BarChart3}
+              trend={`${marketData.total} total markets`}
+              color="default"
+            />
+          </div>
+        );
+      })()}
+
+      {/* Market Listings by Type */}
+      {(() => {
+        const marketData = categorizeMarkets(markets);
+
+        const MarketCard = ({ market }: { market: BettingMarket }) => (
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex-1">
+              <p className="font-medium text-sm line-clamp-1">{market.claim}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-xs">{market.category}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {market.expiresAt ? new Date(market.expiresAt).toLocaleDateString() : 'No expiry'}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-medium">{market.totalPool.toFixed(2)} HBAR</p>
+              <p className="text-xs text-muted-foreground">{market.totalCasters} bets</p>
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Future Markets */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Future Markets ({marketData.future.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                {marketData.future.length > 0 ? (
+                  marketData.future.slice(0, 10).map(market => (
+                    <MarketCard key={market.id} market={market} />
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No future markets</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Past Events */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Past Events ({marketData.past.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                {marketData.past.length > 0 ? (
+                  marketData.past.slice(0, 10).map(market => (
+                    <MarketCard key={market.id} market={market} />
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No past events</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Expired Markets */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Timer className="h-5 w-5" />
+                  Expired Markets ({marketData.expired.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                {marketData.expired.length > 0 ? (
+                  marketData.expired.slice(0, 10).map(market => (
+                    <MarketCard key={market.id} market={market} />
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Timer className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No expired markets</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Dispute Management Section */}
       {stats && stats.activeDisputes > 0 && (

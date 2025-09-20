@@ -70,6 +70,7 @@ interface BettingMarketsProps {
   onCreateMarket?: () => void;
   statusFilter?: 'active' | 'pending_resolution' | 'all';
   showEvidence?: boolean;
+  showUnified?: boolean;
   walletConnected?: boolean;
   onConnectWallet?: () => void;
 }
@@ -77,7 +78,7 @@ interface BettingMarketsProps {
 // No more dummy markets - all markets come from Supabase now  
 export const realTimeMarkets: BettingMarket[] = [];
 
-export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = [], onCreateMarket, statusFilter = 'all', showEvidence = false, walletConnected = false, onConnectWallet }: BettingMarketsProps) {
+export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect, markets = [], onCreateMarket, statusFilter = 'all', showEvidence = false, showUnified = false, walletConnected = false, onConnectWallet }: BettingMarketsProps) {
   const [showBetDialog, setShowBetDialog] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket | null>(null);
   const [betPosition, setBetPosition] = useState<'yes' | 'no'>('yes');
@@ -118,22 +119,29 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     const matchesCountry = selectedCountry === 'all' || market.country === selectedCountry || market.region === selectedCountry;
     const matchesConfidence = selectedConfidence === 'all' || market.confidenceLevel === selectedConfidence;
 
-    // Status filtering based on statusFilter prop
+    // Status filtering based on statusFilter prop and unified mode
     const now = new Date();
     const isExpired = market.expiresAt && market.expiresAt <= now;
 
-    const matchesStatus = statusFilter === 'all' ||
-                         (statusFilter === 'active' && market.status === 'active' && !isExpired && market.marketType === 'future') ||
-                         (statusFilter === 'pending_resolution' && (
-                           // Past events created for verification
-                           market.marketType === 'present' ||
-                           // Expired markets from Truth Markets
-                           isExpired ||
-                           // Markets in resolution process
-                           market.status === 'pending_resolution' ||
-                           market.status === 'disputing' ||
-                           market.status === 'resolved'
-                         ));
+    let matchesStatus;
+    if (showUnified) {
+      // In unified mode, show all markets when statusFilter is 'all'
+      matchesStatus = statusFilter === 'all' || true; // Show all markets in unified mode
+    } else {
+      // Original filtering logic for non-unified mode
+      matchesStatus = statusFilter === 'all' ||
+                       (statusFilter === 'active' && market.status === 'active' && !isExpired && market.marketType === 'future') ||
+                       (statusFilter === 'pending_resolution' && (
+                         // Past events created for verification
+                         market.marketType === 'present' ||
+                         // Expired markets from Truth Markets
+                         isExpired ||
+                         // Markets in resolution process
+                         market.status === 'pending_resolution' ||
+                         market.status === 'disputing' ||
+                         market.status === 'resolved'
+                       ));
+    }
 
     return matchesSearch && matchesCategory && matchesCountry && matchesConfidence && matchesStatus;
   });
@@ -268,12 +276,15 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
       <div className="bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 rounded-xl p-4 md:p-6 lg:p-8 border border-primary/30">
         <div className="text-center mb-4 md:mb-6">
           <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">
-            {statusFilter === 'active' ? 'Truth Markets' :
+            {showUnified ? 'Markets' :
+             statusFilter === 'active' ? 'Truth Markets' :
              statusFilter === 'pending_resolution' ? 'Verify Truth' :
              'All Markets'}
           </h1>
           <p className="text-muted-foreground text-sm md:text-base max-w-2xl mx-auto">
-            {statusFilter === 'active' ?
+            {showUnified ?
+              'Discover, bet on, and verify truth across all markets. The system intelligently shows you the right actions - bet on future events or verify past ones.' :
+             statusFilter === 'active' ?
               'Bet on future events and trending news. Create prediction markets for upcoming events and cast your positions.' :
              statusFilter === 'pending_resolution' ?
               'Verify past events and expired predictions. Submit evidence to help resolve market outcomes and earn verification rewards.' :
@@ -289,7 +300,9 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder={statusFilter === 'active' ?
+                placeholder={showUnified ?
+                  "Search all markets, events, predictions..." :
+                  statusFilter === 'active' ?
                   "Search future events, predictions..." :
                   "Search past events, expired predictions..."
                 }
@@ -332,7 +345,13 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {statusFilter === 'active' ? (
+                {showUnified ? (
+                  <>
+                    <SelectItem value="future">Future Events</SelectItem>
+                    <SelectItem value="present">Past Events</SelectItem>
+                    <SelectItem value="expired">Expired Predictions</SelectItem>
+                  </>
+                ) : statusFilter === 'active' ? (
                   <SelectItem value="future">Future Events</SelectItem>
                 ) : (
                   <>
@@ -349,7 +368,8 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-medium text-muted-foreground">
-                {filteredMarkets.length} {statusFilter === 'active' ? 'Active' :
+                {filteredMarkets.length} {showUnified ? 'Total' :
+                                         statusFilter === 'active' ? 'Active' :
                                          statusFilter === 'pending_resolution' ? 'Pending' :
                                          'Total'} Markets
               </span>
@@ -360,7 +380,8 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 className="gap-2 bg-primary hover:bg-primary/90"
               >
                 <Plus className="h-4 w-4" />
-                {statusFilter === 'active' ? 'Create Prediction' : 'Submit Past Event'}
+                {showUnified ? 'Create Market' :
+                 statusFilter === 'active' ? 'Create Prediction' : 'Submit Past Event'}
               </Button>
             )}
           </div>
@@ -483,38 +504,132 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 </div>
 
                 {/* Action Buttons - Mobile Optimized */}
-                {statusFilter === 'active' ? (
-                  // Betting buttons for active markets
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenBetDialog(market, 'yes');
-                      }}
-                      className="flex-1 bg-green-500/10 border-green-500/30 hover:bg-green-500/20 text-green-400 hover:text-green-300 h-9 text-xs md:text-sm"
-                    >
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                      True {market.yesOdds.toFixed(2)}x
-                    </Button>
+                {(() => {
+                  // Unified mode: intelligently determine action based on market status
+                  if (showUnified) {
+                    const now = new Date();
+                    const isExpired = market.expiresAt && market.expiresAt <= now;
+                    const canBet = market.status === 'active' && !isExpired && market.marketType === 'future';
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenBetDialog(market, 'no');
-                      }}
-                      className="flex-1 bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400 hover:text-red-300 h-9 text-xs md:text-sm"
-                    >
-                      <TrendingDown className="h-3 w-3 mr-1" />
-                      False {market.noOdds.toFixed(2)}x
-                    </Button>
-                  </div>
-                ) : (
-                  // Evidence submission/dispute buttons for pending/verification markets
-                  <div className="grid grid-cols-1 gap-2">
+                    if (canBet) {
+                      // Show betting buttons for active future markets
+                      return (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenBetDialog(market, 'yes');
+                            }}
+                            className="flex-1 bg-green-500/10 border-green-500/30 hover:bg-green-500/20 text-green-400 hover:text-green-300 h-9 text-xs md:text-sm"
+                          >
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            True {market.yesOdds.toFixed(2)}x
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenBetDialog(market, 'no');
+                            }}
+                            className="flex-1 bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400 hover:text-red-300 h-9 text-xs md:text-sm"
+                          >
+                            <TrendingDown className="h-3 w-3 mr-1" />
+                            False {market.noOdds.toFixed(2)}x
+                          </Button>
+                        </div>
+                      );
+                    } else {
+                      // Show evidence/verification interface for past events or expired markets
+                      const isPastEvent = market.marketType === 'present';
+                      const marketDisputable = isMarketDisputable(market);
+                      const marketStatus = getMarketStatusLabel(market);
+                      const statusColor = getMarketStatusColor(market);
+
+                      return (
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="flex justify-center mb-2">
+                            <Badge className={`text-xs px-3 py-1 ${statusColor}`}>
+                              {marketStatus}
+                            </Badge>
+                          </div>
+
+                          <div className="text-xs text-muted-foreground text-center space-y-1">
+                            {isExpired && !isPastEvent && (
+                              <div className="text-amber-400 font-medium">⏰ Expired Prediction</div>
+                            )}
+                            {isPastEvent && (
+                              <div className="text-blue-400 font-medium">📰 Past Event Verification</div>
+                            )}
+
+                            {marketDisputable && (
+                              (() => {
+                                const disputeEnd = market.dispute_period_end ? new Date(market.dispute_period_end) : new Date(market.expiresAt!.getTime() + 48 * 60 * 60 * 1000);
+                                const now = new Date();
+                                const timeLeft = disputeEnd.getTime() - now.getTime();
+
+                                if (timeLeft > 0) {
+                                  const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+                                  const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                                  return (
+                                    <div className="text-yellow-400 font-medium">
+                                      ⏰ {hoursLeft}h {minutesLeft}m remaining
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="text-gray-400 font-medium">
+                                      ✅ Dispute Period Ended
+                                    </div>
+                                  );
+                                }
+                              })()
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+
+                  // Original mode: use statusFilter to determine interface
+                  if (statusFilter === 'active') {
+                    // Betting buttons for active markets
+                    return (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenBetDialog(market, 'yes');
+                          }}
+                          className="flex-1 bg-green-500/10 border-green-500/30 hover:bg-green-500/20 text-green-400 hover:text-green-300 h-9 text-xs md:text-sm"
+                        >
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          True {market.yesOdds.toFixed(2)}x
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenBetDialog(market, 'no');
+                          }}
+                          className="flex-1 bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400 hover:text-red-300 h-9 text-xs md:text-sm"
+                        >
+                          <TrendingDown className="h-3 w-3 mr-1" />
+                          False {market.noOdds.toFixed(2)}x
+                        </Button>
+                      </div>
+                    );
+                  } else {
+                    // Evidence submission/dispute buttons for pending/verification markets
+                    return (
+                      <div className="grid grid-cols-1 gap-2">
                     {(() => {
                       const now = new Date();
                       const isExpired = market.expiresAt && market.expiresAt <= now;
@@ -605,8 +720,10 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                         </>
                       );
                     })()}
-                  </div>
-                )}
+                      </div>
+                    );
+                  }
+                })()}
               </CardContent>
             </Card>
           ))}
