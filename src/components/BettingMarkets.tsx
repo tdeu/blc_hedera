@@ -37,7 +37,7 @@ export interface BettingMarket {
   noOdds: number;
   totalCasters: number;
   expiresAt: Date;
-  status: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked' | 'disputable';
+  status: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked' | 'disputable' | 'offline';
   resolution?: 'yes' | 'no';
   trending: boolean;
   imageUrl?: string;
@@ -87,7 +87,6 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedCountry, setSelectedCountry] = useState('all');
-  const [selectedConfidence, setSelectedConfidence] = useState('all');
   const [showDisputeDialog, setShowDisputeDialog] = useState(false);
   const [disputeMarket, setDisputeMarket] = useState<BettingMarket | null>(null);
   const [disputeReason, setDisputeReason] = useState('');
@@ -112,13 +111,14 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
   // Filter markets
   const filteredMarkets = safeMarkets.filter(market => {
+    // Always exclude offline markets from public view
+    if (market.status === 'offline') return false;
+
     const matchesSearch = (market.claim || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (market.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (market.source || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || market.category === selectedCategory;
     const matchesCountry = selectedCountry === 'all' || market.country === selectedCountry || market.region === selectedCountry;
-    const matchesConfidence = selectedConfidence === 'all' || market.confidenceLevel === selectedConfidence;
-
     // Status filtering based on statusFilter prop and unified mode
     const now = new Date();
     const isExpired = market.expiresAt && market.expiresAt <= now;
@@ -143,7 +143,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                        ));
     }
 
-    return matchesSearch && matchesCategory && matchesCountry && matchesConfidence && matchesStatus;
+    return matchesSearch && matchesCategory && matchesCountry && matchesStatus;
   });
 
   // Sort markets (trending first, then by total pool)
@@ -424,15 +424,12 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                   
-                  {/* Confidence Badge */}
-                  <Badge 
-                    className={`absolute top-2 right-2 text-xs px-2 py-1 ${
-                      market.confidenceLevel === 'high' ? 'bg-green-500/90 text-white' :
-                      market.confidenceLevel === 'medium' ? 'bg-yellow-500/90 text-white' :
-                      'bg-red-500/90 text-white'
-                    }`}
+                  {/* Category Badge */}
+                  <Badge
+                    variant="secondary"
+                    className="absolute top-2 right-2 text-xs px-2 py-1 bg-primary/90 text-primary-foreground font-medium"
                   >
-                    {(market.confidenceLevel || 'medium').toUpperCase()}
+                    {market.category.toUpperCase()}
                   </Badge>
 
                   {/* Country/Region Badge */}
@@ -446,7 +443,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <Badge variant="outline" className="text-xs shrink-0">
+                  <Badge variant="secondary" className="text-xs shrink-0 bg-primary/10 text-primary border-primary/20 font-medium">
                     {market.category}
                   </Badge>
                   <Button
@@ -699,7 +696,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
                             {market.resolution_data && (
                               <>
-                                <div>AI Confidence: {market.resolution_data.confidence || 'medium'}</div>
+                                <div>AI Analysis: {market.resolution_data.confidence ? `${(market.resolution_data.confidence * 100).toFixed(0)}% confidence` : 'Available'}</div>
                                 {market.resolution_data.outcome && (
                                   <div className={`font-medium ${
                                     market.resolution_data.outcome === 'yes' ? 'text-green-400' : 'text-red-400'

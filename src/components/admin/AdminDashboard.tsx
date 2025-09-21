@@ -14,7 +14,9 @@ import {
   Brain,
   Calendar,
   History,
-  Timer
+  Timer,
+  EyeOff,
+  Eye
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
@@ -85,26 +87,32 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const categorizeMarkets = (markets: BettingMarket[]) => {
     const now = new Date();
 
-    const futureMarkets = markets.filter(market =>
+    // Filter out offline markets for public display but include them in admin counts
+    const activeMarkets = markets.filter(market => market.status !== 'offline');
+
+    const futureMarkets = activeMarkets.filter(market =>
       market.marketType === 'future' &&
       market.status === 'active' &&
       market.expiresAt && market.expiresAt > now
     );
 
-    const pastMarkets = markets.filter(market =>
+    const pastMarkets = activeMarkets.filter(market =>
       market.marketType === 'present' ||
       (market.marketType === 'future' && market.status !== 'active')
     );
 
-    const expiredMarkets = markets.filter(market =>
+    const expiredMarkets = activeMarkets.filter(market =>
       market.marketType === 'future' &&
       market.expiresAt && market.expiresAt <= now
     );
+
+    const offlineMarkets = markets.filter(market => market.status === 'offline');
 
     return {
       future: futureMarkets,
       past: pastMarkets,
       expired: expiredMarkets,
+      offline: offlineMarkets,
       total: markets.length
     };
   };
@@ -118,6 +126,56 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
     } catch (error) {
       console.error('Error reviewing dispute:', error);
       throw error; // Re-throw to let the component handle the error
+    }
+  };
+
+  const handleOfflineMarket = async (market: BettingMarket) => {
+    if (!userProfile?.walletAddress) {
+      console.error('Admin wallet not connected');
+      return;
+    }
+
+    try {
+      const success = await adminService.offlineMarket(
+        market.id,
+        userProfile.walletAddress,
+        'Market taken offline by admin'
+      );
+
+      if (success) {
+        console.log(`Market "${market.claim}" has been taken offline`);
+        // Reload markets to reflect the change
+        await loadMarkets();
+      } else {
+        console.error('Failed to offline market');
+      }
+    } catch (error) {
+      console.error('Error offlining market:', error);
+    }
+  };
+
+  const handleOnlineMarket = async (market: BettingMarket) => {
+    if (!userProfile?.walletAddress) {
+      console.error('Admin wallet not connected');
+      return;
+    }
+
+    try {
+      const success = await adminService.onlineMarket(
+        market.id,
+        userProfile.walletAddress,
+        'Market brought back online by admin'
+      );
+
+      if (success) {
+        console.log(`Market "${market.claim}" has been brought back online`);
+        // Reload markets to reflect the change
+        await loadMarkets();
+      } else {
+        console.error('Failed to bring market online');
+      }
+    } catch (error) {
+      console.error('Error bringing market online:', error);
     }
   };
 
@@ -249,82 +307,129 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
                 <span className="text-xs text-muted-foreground">
                   {market.expiresAt ? new Date(market.expiresAt).toLocaleDateString() : 'No expiry'}
                 </span>
+                {market.status === 'offline' && (
+                  <Badge variant="secondary" className="text-xs bg-red-100 text-red-800">
+                    Offline
+                  </Badge>
+                )}
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-medium">{market.totalPool.toFixed(2)} HBAR</p>
-              <p className="text-xs text-muted-foreground">{market.totalCasters} bets</p>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-sm font-medium">{market.totalPool.toFixed(2)} HBAR</p>
+                <p className="text-xs text-muted-foreground">{market.totalCasters} bets</p>
+              </div>
+              {market.status === 'offline' ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOnlineMarket(market)}
+                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                  title="Bring market back online"
+                >
+                  <Eye className="h-3 w-3" />
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOfflineMarket(market)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Take market offline"
+                >
+                  <EyeOff className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </div>
         );
 
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Future Markets */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Future Markets ({marketData.future.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-                {marketData.future.length > 0 ? (
-                  marketData.future.slice(0, 10).map(market => (
-                    <MarketCard key={market.id} market={market} />
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No future markets</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Future Markets */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Future Markets ({marketData.future.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                  {marketData.future.length > 0 ? (
+                    marketData.future.slice(0, 10).map(market => (
+                      <MarketCard key={market.id} market={market} />
+                    ))
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No future markets</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* Past Events */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5" />
-                  Past Events ({marketData.past.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-                {marketData.past.length > 0 ? (
-                  marketData.past.slice(0, 10).map(market => (
-                    <MarketCard key={market.id} market={market} />
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No past events</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              {/* Past Events */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Past Events ({marketData.past.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                  {marketData.past.length > 0 ? (
+                    marketData.past.slice(0, 10).map(market => (
+                      <MarketCard key={market.id} market={market} />
+                    ))
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No past events</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* Expired Markets */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Timer className="h-5 w-5" />
-                  Expired Markets ({marketData.expired.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-                {marketData.expired.length > 0 ? (
-                  marketData.expired.slice(0, 10).map(market => (
+              {/* Expired Markets */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Timer className="h-5 w-5" />
+                    Expired Markets ({marketData.expired.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 max-h-80 overflow-y-auto">
+                  {marketData.expired.length > 0 ? (
+                    marketData.expired.slice(0, 10).map(market => (
+                      <MarketCard key={market.id} market={market} />
+                    ))
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Timer className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No expired markets</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Offline Markets Section */}
+            {marketData.offline.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <EyeOff className="h-5 w-5" />
+                    Offline Markets ({marketData.offline.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 max-h-60 overflow-y-auto">
+                  {marketData.offline.map(market => (
                     <MarketCard key={market.id} market={market} />
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <Timer className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No expired markets</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </div>
         );
       })()}

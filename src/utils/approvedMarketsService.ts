@@ -159,6 +159,34 @@ class ApprovedMarketsService {
   }
 
   /**
+   * Update market status (e.g., to take offline)
+   */
+  async updateMarketStatus(marketId: string, status: string): Promise<boolean> {
+    try {
+      if (!supabase) {
+        console.warn('⚠️ Supabase not configured, cannot update market status');
+        return false;
+      }
+
+      const { error } = await supabase
+        .from('approved_markets')
+        .update({ status })
+        .eq('id', marketId);
+
+      if (error) {
+        console.error('Error updating market status:', error);
+        return false;
+      }
+
+      console.log(`✅ Market ${marketId} status updated to: ${status}`);
+      return true;
+    } catch (error) {
+      console.error('Error in updateMarketStatus:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get statistics about approved markets
    */
   async getStats() {

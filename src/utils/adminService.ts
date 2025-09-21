@@ -281,6 +281,72 @@ class AdminService {
   }
 
   /**
+   * Take a market offline (remove from public view)
+   */
+  async offlineMarket(marketId: string, adminAddress: string, reason?: string): Promise<boolean> {
+    try {
+      console.log(`Admin ${adminAddress} taking market ${marketId} offline - Reason: ${reason}`);
+
+      // Update market status in Supabase
+      const success = await approvedMarketsService.updateMarketStatus(marketId, 'offline');
+
+      if (!success) {
+        return false;
+      }
+
+      // Record admin action
+      const action: AdminAction = {
+        id: `action-${Date.now()}`,
+        type: 'content_moderation',
+        adminAddress,
+        targetId: marketId,
+        reason: reason || 'Market taken offline by admin',
+        timestamp: new Date()
+      };
+
+      this.adminActionsCache.push(action);
+
+      return true;
+    } catch (error) {
+      console.error('Error offlining market:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Bring a market back online (restore to public view)
+   */
+  async onlineMarket(marketId: string, adminAddress: string, reason?: string): Promise<boolean> {
+    try {
+      console.log(`Admin ${adminAddress} bringing market ${marketId} back online - Reason: ${reason}`);
+
+      // Update market status back to active in Supabase
+      const success = await approvedMarketsService.updateMarketStatus(marketId, 'active');
+
+      if (!success) {
+        return false;
+      }
+
+      // Record admin action
+      const action: AdminAction = {
+        id: `action-${Date.now()}`,
+        type: 'content_moderation',
+        adminAddress,
+        targetId: marketId,
+        reason: reason || 'Market brought back online by admin',
+        timestamp: new Date()
+      };
+
+      this.adminActionsCache.push(action);
+
+      return true;
+    } catch (error) {
+      console.error('Error bringing market online:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get market analytics for admin review
    */
   async getMarketAnalytics(marketId: string) {
