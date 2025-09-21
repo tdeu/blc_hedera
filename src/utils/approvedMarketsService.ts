@@ -30,6 +30,7 @@ class ApprovedMarketsService {
         approved_by: approvedBy,
         approval_reason: reason,
         submitter_address: submitterAddress,
+        image_url: market.imageUrl, // Include the image URL
         status: market.status, // Include market status
         dispute_period_end: (market as any).dispute_period_end // Include dispute period for disputable markets
       };
@@ -207,6 +208,7 @@ class ApprovedMarketsService {
       confidenceLevel: (approvedMarket.confidence_level as any) || 'medium',
       expiresAt: new Date(approvedMarket.expires_at),
       status,
+      imageUrl: approvedMarket.image_url, // Include the image URL
       resolution_data: approvedMarket.resolution_data as any,
       dispute_count: approvedMarket.dispute_count,
       dispute_period_end: approvedMarket.dispute_period_end || undefined,

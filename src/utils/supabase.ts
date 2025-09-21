@@ -26,6 +26,7 @@ export interface ApprovedMarket {
   approval_reason?: string;
   submitter_address: string;
   contract_address?: string;
+  image_url?: string;
   // New resolution fields
   status?: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked';
   resolution_data?: any;
@@ -119,3 +120,55 @@ export interface ResolutionSettings {
   updated_by?: string;
   updated_at: string;
 }
+
+// Image upload utility function
+export const uploadMarketImage = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    // Generate unique filename
+    const fileExt = file.name.split('.').pop();
+    const fileName = `market-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `market-images/${fileName}`;
+
+    // Upload file to Supabase storage
+    const { data, error } = await supabase.storage
+      .from('market-assets')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+
+      // If bucket doesn't exist, provide helpful error message
+      if (error.message.includes('Bucket not found')) {
+        return {
+          success: false,
+          error: 'Storage bucket not found. Please create the "market-assets" bucket in your Supabase dashboard under Storage.'
+        };
+      }
+
+      return { success: false, error: error.message };
+    }
+
+    // Get public URL for the uploaded file
+    const { data: urlData } = supabase.storage
+      .from('market-assets')
+      .getPublicUrl(filePath);
+
+    return {
+      success: true,
+      url: urlData.publicUrl
+    };
+  } catch (error) {
+    console.error('Image upload error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Upload failed'
+    };
+  }
+};

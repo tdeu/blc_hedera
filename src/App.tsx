@@ -644,7 +644,8 @@ export default function App() {
         country: marketData.country,
         region: marketData.region,
         marketType: marketData.marketType || 'future',
-        confidenceLevel: marketData.confidenceLevel || 'medium'
+        confidenceLevel: marketData.confidenceLevel || 'medium',
+        imageUrl: marketData.imageUrl // Add the imageUrl field
       };
 
       // Submit to Hedera blockchain in background (don't let errors affect UI)
@@ -688,7 +689,8 @@ export default function App() {
           walletConnection.address,
           marketId,
           newMarket.claim,
-          'disputable'
+          `disputable-${Date.now()}`, // Use a proper transaction hash format
+          newMarket
         );
 
         toast.success('Past event published for community verification! It will be disputable for 7 days.');
@@ -698,11 +700,14 @@ export default function App() {
         pendingMarketsService.submitMarket(newMarket, walletConnection.address);
 
         // Record market creation in userDataService
+        console.log('🔥 About to call recordMarketCreation with newMarket:', newMarket);
+        console.log('🔥 newMarket.imageUrl specifically:', newMarket.imageUrl);
         userDataService.recordMarketCreation(
           walletConnection.address,
           marketId,
           newMarket.claim,
-          'pending'
+          `pending-${Date.now()}`, // Use a proper transaction hash format
+          newMarket
         );
 
         toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');

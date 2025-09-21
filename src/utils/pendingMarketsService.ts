@@ -41,6 +41,19 @@ class PendingMarketsService {
   }
 
   /**
+   * Add a pending market submission
+   */
+  addPendingMarket(submission: PendingMarketSubmission): void {
+    console.log('🔍 DEBUG: Adding pending market with imageUrl:', submission.market.imageUrl);
+    
+    const markets = this.getPendingMarkets();
+    markets.push(submission);
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(markets));
+    
+    console.log('🔍 DEBUG: Stored market data:', JSON.stringify(submission, null, 2));
+  }
+
+  /**
    * Get all pending markets for admin review
    */
   getPendingMarkets(): PendingMarketSubmission[] {
@@ -179,14 +192,26 @@ class PendingMarketsService {
    * Convert PendingMarketSubmission to the format expected by admin components
    */
   toPendingMarketFormat(submission: PendingMarketSubmission): import('./adminService').PendingMarket {
-    return {
+    console.log('🔍 DEBUG: Converting submission with imageUrl:', submission.market.imageUrl);
+    
+    const result = {
       id: submission.id,
       question: submission.market.claim,
+      description: submission.market.description,
+      category: submission.market.category,
+      source: submission.market.source,
+      country: submission.market.country,
+      region: submission.market.region,
+      confidenceLevel: submission.market.confidenceLevel,
+      marketType: submission.market.marketType,
+      expiresAt: submission.market.expiresAt,
+      submittedAt: submission.submittedAt,
+      submitterAddress: submission.submittedBy,
+      transactionHash: submission.id, // Using ID as transaction hash for now
+      imageUrl: submission.market.imageUrl, // Make sure this line exists
       creator: submission.submittedBy,
       createdAt: submission.submittedAt,
-      category: submission.market.category,
       endTime: submission.market.expiresAt,
-      description: submission.market.description,
       tags: [
         submission.market.country,
         submission.market.region,
@@ -195,6 +220,9 @@ class PendingMarketsService {
       ].filter(Boolean) as string[],
       status: submission.status as any
     };
+    
+    console.log('🔍 DEBUG: Converted to pending market format with imageUrl:', result.imageUrl);
+    return result;
   }
 }
 

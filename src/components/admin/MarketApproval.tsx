@@ -127,7 +127,16 @@ const MarketApproval: React.FC<MarketApprovalProps> = ({ userProfile }) => {
 
   const MarketCard = ({ market }: { market: PendingMarket }) => {
     const isProcessing = processingMarketId === market.id;
-    
+
+    console.log('🏛️ Admin dashboard rendering market:', {
+      id: market.id,
+      question: market.question,
+      hasImageUrl: !!market.imageUrl,
+      imageUrl: market.imageUrl,
+      imageUrlType: typeof market.imageUrl,
+      imageUrlLength: market.imageUrl?.length
+    });
+
     return (
       <Card className="hover:shadow-md transition-shadow">
         <CardHeader>
@@ -142,6 +151,40 @@ const MarketApproval: React.FC<MarketApprovalProps> = ({ userProfile }) => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Market Image */}
+          {market.imageUrl && (
+            <div className="relative">
+              <img
+                src={market.imageUrl}
+                alt="Market image"
+                className="w-full h-48 object-cover rounded-lg border"
+                onError={(e) => {
+                  // Log the failed URL and show error message
+                  console.error('🖼️ Failed to load market image:', market.imageUrl);
+                  const img = e.target as HTMLImageElement;
+                  const container = img.parentElement;
+                  if (container) {
+                    container.innerHTML = `
+                      <div class="w-full h-48 bg-gray-100 border border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500">
+                        <div class="text-4xl mb-2">🖼️</div>
+                        <div class="text-sm">Image failed to load</div>
+                        <div class="text-xs mt-1 px-2 text-center break-all">${market.imageUrl}</div>
+                      </div>
+                    `;
+                  }
+                }}
+                onLoad={() => {
+                  console.log('✅ Successfully loaded market image:', market.imageUrl);
+                }}
+              />
+              <div className="absolute top-2 right-2">
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">
+                  📷 Image Attached
+                </Badge>
+              </div>
+            </div>
+          )}
+
           {/* Market Details */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">

@@ -5,9 +5,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { ArrowLeft, Plus, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Sparkles, Upload, X, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import { BettingMarket } from './BettingMarkets';
+import { uploadMarketImage } from '../utils/supabase';
 
 interface CreateMarketProps {
   onBack: () => void;
@@ -28,6 +29,8 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
   });
   const [expirationDate, setExpirationDate] = useState<Date>();
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const categories = [
     'Politics', 'Finance', 'Sports', 'Entertainment', 
@@ -46,6 +49,55 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select a valid image file');
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size must be less than 5MB');
+        return;
+      }
+
+      setSelectedImage(file);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  const uploadImageToSupabase = async (imageFile: File): Promise<string | null> => {
+    try {
+      const result = await uploadMarketImage(imageFile);
+
+      if (result.success && result.url) {
+        return result.url;
+      } else {
+        console.error('Image upload failed:', result.error);
+        toast.error('Failed to upload image: ' + result.error);
+        return null;
+      }
+    } catch (error) {
+      console.error('Image upload error:', error);
+      toast.error('Failed to upload image');
+      return null;
+    }
   };
 
   const handleSubmit = async () => {
@@ -72,6 +124,23 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
     setIsCreating(true);
 
     try {
+      let imageUrl: string | undefined = undefined;
+
+      // Upload image first if one is selected
+      console.log('🔍 DEBUG: selectedImage exists?', !!selectedImage);
+      console.log('🔍 DEBUG: selectedImage details:', selectedImage);
+
+      if (selectedImage) {
+        console.log('🖼️ Uploading image to Supabase...', selectedImage.name);
+        imageUrl = await uploadImageToSupabase(selectedImage);
+        if (!imageUrl) {
+          // Image upload failed, stop the process
+          setIsCreating(false);
+          return;
+        }
+        console.log('✅ Image uploaded successfully:', imageUrl);
+      }
+
       const newMarket: Partial<BettingMarket> = {
         ...formData,
         expiresAt: marketContext === 'truth-markets' ? expirationDate : new Date(), // Past events expire immediately
@@ -82,8 +151,15 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
         noPool: 0,
         yesOdds: 2.0,
         noOdds: 2.0,
-        totalCasters: 0
+        totalCasters: 0,
+        imageUrl: imageUrl // Include the uploaded image URL
       };
+
+      console.log('📤 Creating market with data:', {
+        claim: newMarket.claim,
+        imageUrl: newMarket.imageUrl,
+        hasImage: !!imageUrl
+      });
 
       await onCreateMarket(newMarket);
       onBack();
@@ -154,6 +230,57 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
               placeholder="Provide context and details about this market..."
               className="min-h-[100px] text-sm"
             />
+          </div>
+
+          {/* Photo Upload */}
+          <div className="space-y-2">
+            <Label htmlFor="image-upload">
+              Upload Photo (Optional)
+            </Label>
+            <div className="space-y-3">
+              {imagePreview ? (
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt="Market preview"
+                    className="w-full h-48 object-cover rounded-lg border-2 border-border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={removeImage}
+                    className="absolute top-2 right-2"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                  <Input
+                    id="image-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <Label htmlFor="image-upload" className="cursor-pointer">
+                    <div className="flex flex-col items-center gap-2">
+                      <Image className="h-8 w-8 text-muted-foreground" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Click to upload an image</p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG up to 5MB
+                        </p>
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This photo will be visible to admins during validation and displayed on the market card once approved.
+            </p>
           </div>
 
           {/* Category and Source */}

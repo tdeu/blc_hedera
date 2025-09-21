@@ -3,6 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 // Load environment variables
 dotenv.config({ override: true });
@@ -11,12 +14,49 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const PROVIDER = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
 
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(process.cwd(), 'uploads', 'market-images');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename with timestamp
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, `market-${uniqueSuffix}${extension}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Check if file is an image
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
+
 // Middleware
 app.use(cors({
   origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3003'], // Vite default ports + current port
   credentials: true,
 }));
 app.use(express.json());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Unified AI proxy endpoint (keeps same URL for existing clients)
 app.post('/api/anthropic-proxy', async (req, res) => {
@@ -89,6 +129,31 @@ app.post('/api/anthropic-proxy', async (req, res) => {
     console.error('Anthropic proxy error:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// Photo upload endpoint for market creation
+app.post('/api/upload-market-image', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    // Return the file information
+    const fileUrl = `/uploads/market-images/${req.file.filename}`;
+    res.json({
+      success: true,
+      filename: req.file.filename,
+      url: fileUrl,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimeType: req.file.mimetype
+    });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Image upload failed'
     });
   }
 });
@@ -208,6 +273,8 @@ app.listen(PORT, () => {
   console.log(`📡 Available endpoints:`);
   console.log(`   POST /api/anthropic-proxy - AI proxy`);
   console.log(`   POST /api/scrape - Web scraping`);
+  console.log(`   POST /api/upload-market-image - Image upload`);
+  console.log(`   GET  /uploads - Static file serving`);
   console.log(`   GET  /health - Health check`);
   console.log(`   GET  /env-check - Environment check`);
 });

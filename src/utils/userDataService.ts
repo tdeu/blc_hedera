@@ -180,15 +180,25 @@ class UserDataService {
     walletAddress: string,
     marketId: string,
     claim: string,
-    transactionHash: string
+    transactionHash: string,
+    fullMarketData?: any
   ): void {
+    console.log('🚨 RECORD MARKET CREATION CALLED!', {
+      walletAddress,
+      marketId,
+      claim,
+      transactionHash,
+      fullMarketData,
+      imageUrl: fullMarketData?.imageUrl
+    });
     try {
       const creation = {
         id: marketId,
         claim,
         createdAt: new Date(),
         transactionHash,
-        submitterAddress: walletAddress.toLowerCase()
+        submitterAddress: walletAddress.toLowerCase(),
+        imageUrl: fullMarketData?.imageUrl // Add this line
       };
 
       const storageKey = `user_created_markets_${walletAddress.toLowerCase()}`;
@@ -196,6 +206,7 @@ class UserDataService {
       existingMarkets.push(creation);
       localStorage.setItem(storageKey, JSON.stringify(existingMarkets));
 
+      console.log('🔍 DEBUG: Recording market with imageUrl:', creation.imageUrl);
       console.log('✅ Market creation recorded locally:', creation);
     } catch (error) {
       console.error('Error recording market creation:', error);

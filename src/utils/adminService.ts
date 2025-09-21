@@ -33,6 +33,7 @@ export interface PendingMarket {
   description?: string;
   tags: string[];
   status: 'pending' | 'approved' | 'rejected';
+  imageUrl?: string;
 }
 
 export interface AdminAction {
