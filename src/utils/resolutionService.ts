@@ -1,5 +1,6 @@
 import { supabase, MarketResolution, ApprovedMarket, APIIntegrationLog } from './supabase';
 import { hederaResolutionService } from './hederaResolutionService';
+import { DISPUTE_PERIOD } from '../config/constants';
 
 interface APISource {
   name: string;
@@ -277,9 +278,9 @@ export class ResolutionService {
         throw lastError || new Error('All API sources failed');
       }
 
-      // Calculate dispute period end (48 hours from now by default)
+      // Calculate dispute period end (72 hours from now by default)
       const disputePeriodEnd = new Date();
-      disputePeriodEnd.setHours(disputePeriodEnd.getHours() + 48);
+      disputePeriodEnd.setMilliseconds(disputePeriodEnd.getTime() + DISPUTE_PERIOD.MILLISECONDS);
 
       // Create resolution record in database
       if (!supabase) {
@@ -339,6 +340,132 @@ export class ResolutionService {
 
     } catch (error) {
       console.error('Error initiating resolution:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Two-stage resolution - Step 1: Preliminary resolve
+  async preliminaryResolveMarket(marketId: string, outcome: 'yes' | 'no', adminAddress: string): Promise<{
+    transactionId?: string;
+    hcsTopicId?: string;
+  }> {
+    try {
+      console.log(`Starting preliminary resolution for market ${marketId}: ${outcome}`);
+
+      // Convert outcome to contract format
+      const contractOutcome = outcome === 'yes' ? 1 : 2;
+
+      // TODO: Get contract address for this market
+      const marketContract = '0x...'; // This should come from database
+
+      // TODO: Get admin signer
+      // const adminSigner = this.getAdminSigner(adminAddress);
+
+      // TODO: Call contract preliminary resolve
+      // const txHash = await contractService.preliminaryResolve(marketContract, contractOutcome, adminSigner);
+
+      // Update database to pending resolution status
+      if (supabase) {
+        await supabase
+          .from('approved_markets')
+          .update({
+            status: 'pending_resolution',
+            dispute_period_end: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString()
+          })
+          .eq('id', marketId);
+      }
+
+      // Record preliminary resolution to HCS
+      let hcsTransactionId: string | undefined;
+      try {
+        hcsTransactionId = await hederaResolutionService.submitResolutionMessage(
+          marketId,
+          {
+            step: 'preliminary',
+            outcome,
+            adminAddress,
+            disputePeriodEnd: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString()
+          },
+          'admin_preliminary'
+        );
+      } catch (hcsError) {
+        console.warn('HCS preliminary resolution submission failed:', hcsError);
+      }
+
+      return {
+        // transactionId: txHash,
+        hcsTopicId: hederaResolutionService.getTopicIds().resolution
+      };
+
+    } catch (error) {
+      console.error('Error in preliminary resolution:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Two-stage resolution - Step 2: Final resolve with confidence
+  async finalResolveMarket(marketId: string, outcome: 'yes' | 'no', confidence: number, adminAddress: string): Promise<{
+    transactionId?: string;
+    consensusTimestamp: Date;
+  }> {
+    try {
+      console.log(`Starting final resolution for market ${marketId}: ${outcome} (confidence: ${confidence}%)`);
+
+      // Convert outcome to contract format
+      const contractOutcome = outcome === 'yes' ? 1 : 2;
+
+      // TODO: Get contract address for this market
+      const marketContract = '0x...'; // This should come from database
+
+      // TODO: Get admin signer
+      // const adminSigner = this.getAdminSigner(adminAddress);
+
+      // TODO: Call contract final resolve
+      // const txHash = await contractService.finalResolve(marketContract, contractOutcome, confidence, adminSigner);
+
+      // Update database to resolved status
+      if (supabase) {
+        await supabase
+          .from('approved_markets')
+          .update({
+            status: 'resolved',
+            resolution_data: {
+              outcome,
+              confidence,
+              resolved_by: adminAddress,
+              final_resolution_time: new Date().toISOString()
+            }
+          })
+          .eq('id', marketId);
+      }
+
+      // Record final resolution to HCS
+      let hcsTransactionId: string | undefined;
+      try {
+        hcsTransactionId = await hederaResolutionService.submitAdminDecision(
+          marketId,
+          {
+            finalOutcome: outcome,
+            confidence,
+            adminAddress
+          },
+          `Final resolution: ${outcome} with ${confidence}% confidence`
+        );
+      } catch (hcsError) {
+        console.warn('HCS final resolution submission failed:', hcsError);
+      }
+
+      const consensusTimestamp = new Date();
+
+      console.log(`Final resolution completed for market ${marketId}: ${outcome} (${confidence}% confidence)`);
+
+      return {
+        // transactionId: txHash,
+        consensusTimestamp
+      };
+
+    } catch (error) {
+      console.error('Error in final resolution:', error);
       throw error;
     }
   }
@@ -429,12 +556,12 @@ export class ResolutionService {
   }
 
   // Dispute Period Management
-  async startDisputePeriod(marketId: string, durationHours: number = 48): Promise<{
+  async startDisputePeriod(marketId: string, durationHours: number = DISPUTE_PERIOD.HOURS): Promise<{
     topicId: string;
     disputePeriodEnd: Date;
   }> {
     const disputePeriodEnd = new Date();
-    disputePeriodEnd.setHours(disputePeriodEnd.getHours() + durationHours);
+    disputePeriodEnd.setTime(disputePeriodEnd.getTime() + DISPUTE_PERIOD.MILLISECONDS);
 
     // Update market status to indicate dispute period
     if (supabase) {

@@ -1,0 +1,13 @@
+{
+  "network": "testnet",
+  "deployer": "0xfd76D4c18D5A10F558d057743bFB0218130157f4",
+  "timestamp": "2025-09-22T13:23:43.043Z",
+  "note": "NEW FACTORY with correct CastToken address",
+  "contracts": {
+    "AdminManager": "0x2F151Da810275DB3C891D3189d2F5fe9bb2f84c7",
+    "CastToken": "0x5e383bD628a0cda81913bbd5EfB4DD1989fCc6e2",
+    "Treasury": "0x96EE40F2577560F024E14658Fc324a411A590389",
+    "BetNFT": "0xb639EC048b2C70E4E0BeC475DCC7f1adcc2D10a5",
+    "PredictionMarketFactory": "0x78F028E7ba957DD166A39908f1acbEeb0F01ABeF"
+  }
+}

@@ -120,9 +120,19 @@ class PendingMarketsService {
     };
 
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(markets));
-    
+
     console.log(`✅ Market approved by admin: ${market.market.claim}`);
-    return markets[marketIndex].market;
+
+    // Return the market with contract address preserved
+    const approvedMarket = {
+      ...markets[marketIndex].market,
+      contractAddress: (markets[marketIndex] as any).contractAddress // Preserve contract address from top level
+    };
+
+    console.log(`🔍 APPROVAL DEBUG: contractAddress from pending market:`, (markets[marketIndex] as any).contractAddress);
+    console.log(`🔍 APPROVAL DEBUG: final approved market contractAddress:`, approvedMarket.contractAddress);
+
+    return approvedMarket;
   }
 
   /**

@@ -43,7 +43,13 @@
       "Bash(pkill:*)",
       "Bash(PORT=3001 node -r tsx/esm src/api/anthropic-proxy.ts)",
       "Bash(npx tsc:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:claude.ai)",
+      "Read(//c/Users/thoma/Bureau/BlockCast/**)",
+      "Bash(find:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)",
+      "Read(//c/Users/thoma/**)"
     ],
     "deny": [],
     "ask": []

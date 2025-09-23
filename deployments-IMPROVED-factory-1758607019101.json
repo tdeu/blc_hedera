@@ -1,0 +1,22 @@
+{
+  "network": "testnet",
+  "deployer": "0xfd76D4c18D5A10F558d057743bFB0218130157f4",
+  "timestamp": "2025-09-23T05:56:59.087Z",
+  "note": "IMPROVED FACTORY with enhanced features",
+  "contracts": {
+    "AdminManager": "0x82B5FdaA1Fb566D1215277d40a04E369052c03E0",
+    "Treasury": "0xabbc9868cbfab2Db4336D0e192DF24754A8C8Da8",
+    "Collateral": "0x0F15071DaBb3c22203dA7071A031a404ce2B1a2d",
+    "CastToken": "0x0F15071DaBb3c22203dA7071A031a404ce2B1a2d",
+    "BetNFT": "0x3b1E8b887162e7a58b992ad0A9b2c760D57f68C1",
+    "PredictionMarketFactoryImproved": "0xa9C5D6286F38b672B7a17763d72A8565559EC13c"
+  },
+  "improvements": [
+    "Enhanced input validation",
+    "Gas-optimized market lookup",
+    "Pagination support",
+    "Emergency market removal",
+    "Better error handling",
+    "Market creation limits"
+  ]
+}

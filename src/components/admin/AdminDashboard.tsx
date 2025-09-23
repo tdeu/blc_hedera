@@ -16,7 +16,8 @@ import {
   History,
   Timer,
   EyeOff,
-  Eye
+  Eye,
+  Gavel
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
@@ -25,6 +26,7 @@ import { MarketDispute } from '../../utils/supabase';
 import { AIAgentSimple } from '../AIAgentSimple';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
 import { BettingMarket } from '../BettingMarkets';
+import TwoStageResolutionPanel from './TwoStageResolutionPanel';
 
 interface AdminOverviewProps {
   userProfile?: {
@@ -40,11 +42,14 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const [disputesLoading, setDisputesLoading] = useState(false);
   const [markets, setMarkets] = useState<BettingMarket[]>([]);
   const [marketsLoading, setMarketsLoading] = useState(true);
+  const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     loadAdminStats();
     loadDisputes();
     loadMarkets();
+    loadAIRecommendations();
   }, []);
 
   const loadAdminStats = async () => {
@@ -80,6 +85,63 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
       console.error('Error loading markets:', error);
     } finally {
       setMarketsLoading(false);
+    }
+  };
+
+  const loadAIRecommendations = async () => {
+    try {
+      setAiLoading(true);
+      // Mock AI recommendations for now - in production this would call the AI service
+      const mockRecommendations = [
+        {
+          id: 'ai-rec-1',
+          marketId: 'market-123',
+          marketTitle: 'Kenya Elections 2024 - Raila Odinga to win presidency',
+          recommendedOutcome: 'NO',
+          confidence: 92,
+          reasoning: 'Based on 15 polling stations data and 3 major news sources in English and Swahili. Cross-referenced with historical voting patterns.',
+          priority: 'HIGH',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
+          status: 'pending',
+          evidenceSources: ['Nation.co.ke', 'KBC News', 'Standard Digital'],
+          culturalContext: 'Kenyan political analysis',
+          languages: ['English', 'Swahili']
+        },
+        {
+          id: 'ai-rec-2',
+          marketId: 'market-456',
+          marketTitle: 'Nigeria GDP Growth Q3 2024 > 3%',
+          recommendedOutcome: 'YES',
+          confidence: 78,
+          reasoning: 'National Bureau of Statistics preliminary data suggests 3.1% growth. Medium confidence due to ongoing data validation.',
+          priority: 'MEDIUM',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+          status: 'pending',
+          evidenceSources: ['NBS Nigeria', 'Premium Times', 'BusinessDay'],
+          culturalContext: 'Nigerian economic indicators',
+          languages: ['English', 'Hausa']
+        },
+        {
+          id: 'ai-rec-3',
+          marketId: 'market-789',
+          marketTitle: 'South Africa Rand to reach 20:1 USD by Dec 2024',
+          recommendedOutcome: 'YES',
+          confidence: 95,
+          reasoning: 'Current trajectory at 18.7:1, multiple economic indicators point to continued weakening. High confidence - ready for auto-execution.',
+          priority: 'HIGH',
+          timestamp: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
+          status: 'auto_execute_ready',
+          evidenceSources: ['SARB', 'Bloomberg Africa', 'Business Tech'],
+          culturalContext: 'South African currency markets',
+          languages: ['English', 'Afrikaans']
+        }
+      ];
+      setAiRecommendations(mockRecommendations);
+    } catch (error) {
+      console.error('Error loading AI recommendations:', error);
+      setAiRecommendations([]);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -434,6 +496,23 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
         );
       })()}
 
+      {/* Two-Stage Resolution Panel */}
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gavel className="h-5 w-5" />
+              Market Resolution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TwoStageResolutionPanel
+              userProfile={userProfile || { walletAddress: 'unknown' }}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Dispute Management Section */}
       {stats && stats.activeDisputes > 0 && (
         <div className="mt-6">
@@ -483,26 +562,164 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
         </CardContent>
       </Card>
 
-      {/* AI Agent Panel - Temporarily disabled for debugging */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="p-6 border rounded-lg bg-muted/50">
-            <h3 className="text-lg font-medium mb-2">AI Agent Integration</h3>
-            <p className="text-sm text-muted-foreground">
-              AI Agent components temporarily disabled while debugging. 
-              The BlockCast AI Agent with multi-language support and cultural context will be restored once dependencies are resolved.
-            </p>
-          </div>
-        </div>
-        <div>
-          <div className="p-6 border rounded-lg bg-muted/50">
-            <h4 className="font-medium mb-2">Coming Soon</h4>
-            <p className="text-xs text-muted-foreground">
-              Advanced AI status panel with real-time dispute analysis
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* AI Recommendations Panel */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-blue-500" />
+            AI Recommendations
+            <Badge variant="outline" className="ml-auto">
+              {aiRecommendations.length} pending
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {aiLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+              <p className="text-sm text-muted-foreground">Loading AI recommendations...</p>
+            </div>
+          ) : aiRecommendations.length === 0 ? (
+            <div className="text-center py-8">
+              <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-sm text-muted-foreground">No AI recommendations pending</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {aiRecommendations.map((recommendation) => (
+                <div key={recommendation.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-sm leading-tight mb-2">
+                        {recommendation.marketTitle}
+                      </h4>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge
+                          variant={recommendation.recommendedOutcome === 'YES' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          Recommend: {recommendation.recommendedOutcome}
+                        </Badge>
+                        <Badge
+                          variant={
+                            recommendation.confidence >= 90 ? 'default' :
+                            recommendation.confidence >= 70 ? 'secondary' : 'outline'
+                          }
+                          className={`text-xs ${
+                            recommendation.confidence >= 90 ? 'bg-green-100 text-green-800' :
+                            recommendation.confidence >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {recommendation.confidence}% confidence
+                        </Badge>
+                        <Badge
+                          variant={recommendation.priority === 'HIGH' ? 'destructive' : 'outline'}
+                          className="text-xs"
+                        >
+                          {recommendation.priority}
+                        </Badge>
+                        {recommendation.status === 'auto_execute_ready' && (
+                          <Badge className="text-xs bg-blue-100 text-blue-800">
+                            Auto-Execute Ready
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">
+                        {recommendation.timestamp.toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+                    <p className="mb-2">{recommendation.reasoning}</p>
+                    <div className="space-y-1">
+                      <p><strong>Sources:</strong> {recommendation.evidenceSources.join(', ')}</p>
+                      <p><strong>Languages:</strong> {recommendation.languages.join(', ')}</p>
+                      <p><strong>Context:</strong> {recommendation.culturalContext}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    {recommendation.status === 'auto_execute_ready' ? (
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={() => {
+                          // TODO: Implement auto-execution
+                          console.log('Auto-executing:', recommendation.id);
+                        }}
+                      >
+                        <Activity className="h-3 w-3 mr-1" />
+                        Auto-Execute ({recommendation.confidence}%)
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => {
+                            // TODO: Implement manual approval
+                            console.log('Approving:', recommendation.id);
+                          }}
+                        >
+                          <FileCheck className="h-3 w-3 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            // TODO: Implement review request
+                            console.log('Requesting review:', recommendation.id);
+                          }}
+                        >
+                          <Clock className="h-3 w-3 mr-1" />
+                          Review
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        // TODO: Implement reject
+                        console.log('Rejecting:', recommendation.id);
+                      }}
+                    >
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-center gap-4">
+                    <span>Auto-execution threshold: ≥90% confidence</span>
+                    <span>•</span>
+                    <span>Manual review: 70-89% confidence</span>
+                    <span>•</span>
+                    <span>Flagged for review: &lt;70% confidence</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={loadAIRecommendations}
+                    disabled={aiLoading}
+                  >
+                    <Activity className="h-3 w-3 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

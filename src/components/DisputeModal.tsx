@@ -34,6 +34,9 @@ import { MarketResolution } from '../utils/supabase';
 import { toast } from 'sonner@2.0.3';
 import { AIAgentSimple } from './AIAgentSimple';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
+import DisputeBondService, { disputeBondService, DisputeValidationResult } from '../utils/disputeBondService';
+import TokenService from '../utils/tokenService';
+import { DISPUTE_PERIOD } from '../config/constants';
 
 interface DisputeModalProps {
   isOpen: boolean;
@@ -42,9 +45,8 @@ interface DisputeModalProps {
   resolution: MarketResolution;
   onSubmit: (disputeData: DisputeFormData) => Promise<void>;
   onClose: () => void;
-  bondAmount: number;
-  userTokenBalance: number;
-  htsTokenId: string;
+  userAddress?: string;
+  marketAddress?: string;
   showBondCalculator?: boolean;
   isSubmitting?: boolean;
   enableAIAssistance?: boolean;
@@ -64,66 +66,53 @@ interface BondCalculatorProps {
 }
 
 function DisputeBondCalculator({ disputeType, userReputationScore = 50, onBondCalculated }: BondCalculatorProps) {
-  const baseAmounts = {
-    evidence: 100,
-    interpretation: 250,
-    api_error: 500
-  };
+  const [bondInfo, setBondInfo] = useState<any>(null);
 
-  const baseAmount = baseAmounts[disputeType];
-  
-  // Calculate reputation multiplier
-  let reputationMultiplier = 1.0;
-  if (userReputationScore >= 100) {
-    reputationMultiplier = 0.7; // 30% discount
-  } else if (userReputationScore >= 50) {
-    reputationMultiplier = 0.85; // 15% discount
-  } else if (userReputationScore < 10) {
-    reputationMultiplier = 1.5; // 50% penalty
-  }
-
-  const finalAmount = Math.floor(baseAmount * reputationMultiplier);
-  
-  // Notify parent component
   useEffect(() => {
+    // Get bond info from the new dispute bond service
+    const bondDisplayInfo = DisputeBondService.getBondDisplayInfo();
+    setBondInfo(bondDisplayInfo);
+
+    // Use standardized bond amount from constants
+    const finalAmount = parseFloat(DISPUTE_PERIOD.BOND_AMOUNT_CAST);
     onBondCalculated(finalAmount);
-  }, [finalAmount, onBondCalculated]);
+  }, [disputeType, onBondCalculated]);
+
+  if (!bondInfo) {
+    return null;
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Calculator className="h-4 w-4" />
-          Bond Calculation
+          Dispute Bond Requirement
         </CardTitle>
         <CardDescription>
-          Required bond amount for this dispute type
+          Required bond amount standardized across all disputes
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <Label className="text-xs text-muted-foreground">Base Amount</Label>
-            <div className="font-medium">{baseAmount} BCDB</div>
+            <Label className="text-xs text-muted-foreground">Bond Amount ({bondInfo.displayToken})</Label>
+            <div className="font-medium">{bondInfo.displayAmount} {bondInfo.displayToken}</div>
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Reputation Score</Label>
-            <div className="font-medium">{userReputationScore}/100</div>
+            <Label className="text-xs text-muted-foreground">Contract Token</Label>
+            <div className="font-medium">{bondInfo.contractAmount} {bondInfo.contractToken}</div>
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Multiplier</Label>
-            <div className="font-medium">
-              {reputationMultiplier}x 
-              {reputationMultiplier < 1 && <span className="text-green-600 ml-1">(Discount)</span>}
-              {reputationMultiplier > 1 && <span className="text-red-600 ml-1">(Penalty)</span>}
-            </div>
+            <Label className="text-xs text-muted-foreground">Dispute Period</Label>
+            <div className="font-medium">{DISPUTE_PERIOD.HOURS} hours</div>
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Final Amount</Label>
-            <div className="font-bold text-lg">{finalAmount} BCDB</div>
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <div className="font-bold text-lg text-blue-600">Fixed Rate</div>
           </div>
         </div>
-        
+
         <div className="bg-muted p-3 rounded-lg">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 text-blue-500" />
@@ -131,11 +120,16 @@ function DisputeBondCalculator({ disputeType, userReputationScore = 50, onBondCa
               <div className="font-medium mb-1">Bond Policy:</div>
               <ul className="space-y-1">
                 <li>• Successful disputes: Full refund</li>
-                <li>• Failed disputes: 50% refund, 50% slashed</li>
-                <li>• Higher reputation = lower bond required</li>
+                <li>• Failed disputes: Bond forfeited</li>
+                <li>• Expired disputes: Full refund</li>
+                <li>• {DISPUTE_PERIOD.HOURS}-hour dispute period</li>
               </ul>
             </div>
           </div>
+        </div>
+
+        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <p className="text-xs text-blue-700">{bondInfo.explanation}</p>
         </div>
       </CardContent>
     </Card>
@@ -149,9 +143,8 @@ export default function DisputeModal({
   resolution,
   onSubmit,
   onClose,
-  bondAmount,
-  userTokenBalance,
-  htsTokenId,
+  userAddress,
+  marketAddress,
   showBondCalculator = true,
   isSubmitting = false,
   enableAIAssistance = true
@@ -162,7 +155,10 @@ export default function DisputeModal({
     evidenceDescription: '',
     disputeType: 'evidence'
   });
-  const [calculatedBondAmount, setCalculatedBondAmount] = useState(bondAmount);
+  const [calculatedBondAmount, setCalculatedBondAmount] = useState(100);
+  const [bondValidation, setBondValidation] = useState<DisputeValidationResult | null>(null);
+  const [isValidatingBond, setIsValidatingBond] = useState(false);
+  const [castBalance, setCastBalance] = useState('0');
   
   // AI Agent integration
   const { 
@@ -174,6 +170,42 @@ export default function DisputeModal({
   const [aiAssessment, setAIAssessment] = useState<any>(null);
   const [isAssessing, setIsAssessing] = useState(false);
   const [aiSuggestions, setAISuggestions] = useState<string[]>([]);
+
+  // Validate bond requirements when modal opens or user/market changes
+  useEffect(() => {
+    async function validateBondRequirements() {
+      if (!isOpen || !userAddress || !marketAddress) {
+        return;
+      }
+
+      setIsValidatingBond(true);
+      try {
+        // Get user's CAST balance
+        const balance = await disputeBondService.getUserCastBalance(userAddress);
+        setCastBalance(balance);
+
+        // Validate dispute creation on chain
+        const validation = await disputeBondService.validateDisputeCreationOnChain(userAddress, marketAddress);
+        setBondValidation(validation);
+
+        // Update calculated bond amount
+        if (validation.requiredBond) {
+          setCalculatedBondAmount(parseFloat(validation.requiredBond));
+        }
+
+      } catch (error) {
+        console.error('Error validating bond requirements:', error);
+        setBondValidation({
+          isValid: false,
+          error: 'Failed to validate bond requirements. Please try again.'
+        });
+      } finally {
+        setIsValidatingBond(false);
+      }
+    }
+
+    validateBondRequirements();
+  }, [isOpen, userAddress, marketAddress]);
 
   const disputeTypeOptions = [
     {
@@ -204,8 +236,14 @@ export default function DisputeModal({
       return;
     }
 
-    if (userTokenBalance < calculatedBondAmount) {
-      toast.error(`Insufficient BCDB tokens. You need ${calculatedBondAmount} BCDB but only have ${userTokenBalance} BCDB`);
+    // Check bond validation
+    if (!bondValidation?.isValid) {
+      toast.error(bondValidation?.error || 'Bond validation failed');
+      return;
+    }
+
+    if (!userAddress || !marketAddress) {
+      toast.error('User address and market address are required');
       return;
     }
 
@@ -542,64 +580,94 @@ export default function DisputeModal({
             />
           )}
 
-          {/* User Balance Check */}
-          <Card className={userTokenBalance < calculatedBondAmount ? 'border-red-200' : 'border-green-200'}>
+          {/* Bond Validation Status */}
+          <Card className={
+            isValidatingBond ? 'border-blue-200' :
+            bondValidation?.isValid ? 'border-green-200' : 'border-red-200'
+          }>
             <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">Your BCDB Balance</div>
-                  <div className="text-xs text-muted-foreground">Required: {calculatedBondAmount} BCDB</div>
+              {isValidatingBond ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Validating bond requirements...</span>
                 </div>
-                <div className="text-right">
-                  <div className={`text-lg font-bold ${userTokenBalance >= calculatedBondAmount ? 'text-green-600' : 'text-red-600'}`}>
-                    {userTokenBalance} BCDB
-                  </div>
-                  {userTokenBalance >= calculatedBondAmount ? (
-                    <div className="flex items-center text-xs text-green-600">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Sufficient balance
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">CAST Token Balance</div>
+                      <div className="text-xs text-muted-foreground">
+                        Required: {calculatedBondAmount} CAST
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-xs text-red-600">
-                      Need {calculatedBondAmount - userTokenBalance} more BCDB
+                    <div className="text-right">
+                      <div className={`text-lg font-bold ${
+                        bondValidation?.isValid ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {castBalance} CAST
+                      </div>
+                      {bondValidation?.isValid ? (
+                        <div className="flex items-center text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Sufficient balance
+                        </div>
+                      ) : (
+                        <div className="text-xs text-red-600">
+                          {bondValidation?.error || 'Insufficient balance'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {bondValidation && !bondValidation.isValid && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
+                        <div className="text-xs text-red-700">
+                          {bondValidation.error}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bondValidation?.userActiveBonds && parseFloat(bondValidation.userActiveBonds) > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs text-blue-700">
+                        <strong>Active Bonds:</strong> {bondValidation.userActiveBonds} CAST
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* HTS Token Information */}
-          {htsTokenId && (
-            <div className="bg-muted p-3 rounded-lg">
-              <div className="flex items-center justify-between text-xs">
+          {/* Contract Information */}
+          <div className="bg-muted p-3 rounded-lg">
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div>
                 <span className="text-muted-foreground">Bond Token:</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono">{htsTokenId}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0"
-                    onClick={() => window.open(`https://hashscan.io/testnet/token/${htsTokenId}`, '_blank')}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                  </Button>
-                </div>
+                <span className="font-mono ml-2">CAST</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Dispute Period:</span>
+                <span className="ml-2">{DISPUTE_PERIOD.HOURS} hours</span>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={
-              !formData.reason.trim() || 
-              formData.reason.length < 20 || 
-              userTokenBalance < calculatedBondAmount ||
+              !formData.reason.trim() ||
+              formData.reason.length < 20 ||
+              !bondValidation?.isValid ||
+              isValidatingBond ||
               isSubmitting
             }
             className="bg-orange-600 hover:bg-orange-700"
@@ -609,10 +677,15 @@ export default function DisputeModal({
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Submitting...
               </>
+            ) : isValidatingBond ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Validating...
+              </>
             ) : (
               <>
                 <DollarSign className="h-4 w-4 mr-2" />
-                Submit Dispute ({calculatedBondAmount} BCDB)
+                Submit Dispute ({calculatedBondAmount} CAST)
               </>
             )}
           </Button>

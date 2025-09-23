@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LanguageProvider } from './components/LanguageContext';
 import TopNavigation from './components/TopNavigation';
 import Footer from './components/Footer';
@@ -28,9 +28,10 @@ import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
 import { userDataService } from './utils/userDataService';
 import { UserProvider } from './contexts/UserContext';
+import { DISPUTE_PERIOD } from './config/constants';
 import { BettingMarket } from './components/BettingMarkets';
 import { Toaster } from './components/ui/sonner';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Button } from './components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './components/ui/dialog';
 import { Gift, Sparkles, Wallet, Shield, Target, Zap, Users } from 'lucide-react';
@@ -126,17 +127,174 @@ export default function App() {
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket | null>(null);
 
   // Hedera blockchain integration - runs behind the scenes, no UI changes
-  const { 
-    placeBet: hederaPlaceBet, 
+  const {
+    placeBet: hederaPlaceBet,
+    placeBetWithAddress: hederaPlaceBetWithAddress,
     submitEvidence: hederaSubmitEvidence,
     createMarket: hederaCreateMarket,
-    isConnected: isHederaConnected 
+    isConnected: isHederaConnected
   } = useHedera(walletConnection);
+
+  // Manual function to test market refresh (for debugging)
+  const testMarketRefresh = async () => {
+    console.log('🧪 MANUAL TEST: Refreshing all markets with contracts...');
+    const availableContracts = Object.keys(marketContracts);
+    console.log('📋 Available contracts for testing:', availableContracts);
+
+    if (availableContracts.length > 0) {
+      const testMarketId = availableContracts[0];
+      console.log(`🎯 Testing refresh for market: ${testMarketId}`);
+      await refreshMarketOdds(testMarketId);
+    } else {
+      console.log('❌ No contracts available for testing');
+    }
+  };
+
+  // Direct test of smart contract price fetching
+  const testContractPrices = async (contractAddress: string) => {
+    console.log('🔬 DIRECT CONTRACT TEST: Fetching prices from contract:', contractAddress);
+    try {
+      const { HederaEVMService, getHederaEVMConfig } = await import('./utils/hederaEVMService');
+      const evmConfig = getHederaEVMConfig();
+      const hederaEVMService = new HederaEVMService(evmConfig);
+
+      console.log('📊 HederaEVMService created, fetching prices...');
+      const prices = await hederaEVMService.getMarketPrices(contractAddress);
+      console.log('✅ PRICES FETCHED:', prices);
+
+      return prices;
+    } catch (error) {
+      console.error('❌ DIRECT CONTRACT TEST FAILED:', error);
+      return null;
+    }
+  };
+
+  // Function to refresh market odds using direct contract address (bypasses state timing issues)
+  const refreshMarketOddsWithAddress = async (marketId: string, contractAddress: string) => {
+    // Expose function globally for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).debugRefreshMarketOdds = refreshMarketOddsWithAddress;
+    }
+    try {
+      console.log(`🔄 Refreshing market odds for ${marketId} using direct contract address: ${contractAddress}`);
+
+      // Import hederaEVMService for direct price fetching
+      const { HederaEVMService, getHederaEVMConfig } = await import('./utils/hederaEVMService');
+      const evmConfig = getHederaEVMConfig();
+      const hederaEVMService = new HederaEVMService(evmConfig);
+
+      const prices = await hederaEVMService.getMarketPrices(contractAddress);
+
+      // Update the market in the markets array with new prices
+      setMarkets(prevMarkets => {
+        const targetMarket = prevMarkets.find(m => m.id === marketId);
+        console.log(`🔄 State update for market ${marketId}:`, {
+          found: !!targetMarket,
+          oldYesOdds: targetMarket?.yesOdds,
+          newYesOdds: prices.yesOdds,
+          oldNoOdds: targetMarket?.noOdds,
+          newNoOdds: prices.noOdds
+        });
+
+        const updatedMarkets = prevMarkets.map(market =>
+          market.id === marketId
+            ? {
+                ...market,
+                yesOdds: prices.yesOdds,
+                noOdds: prices.noOdds
+              }
+            : market
+        );
+        return updatedMarkets;
+      });
+
+      console.log(`✅ Market odds updated for ${marketId} using direct address:`, {
+        yesOdds: prices.yesOdds.toFixed(3),
+        noOdds: prices.noOdds.toFixed(3),
+        yesProb: (prices.yesProb * 100).toFixed(1) + '%',
+        noProb: (prices.noProb * 100).toFixed(1) + '%'
+      });
+
+    } catch (error) {
+      console.error(`❌ Failed to refresh market odds for ${marketId} with direct address:`, error);
+    }
+  };
+
+  // Function to refresh market odds from smart contract after bet placement
+  const refreshMarketOdds = async (marketId: string, retryCount = 0) => {
+    try {
+      console.log(`🔍 Looking for contract address for market: ${marketId} (attempt ${retryCount + 1})`);
+      console.log(`📋 Available contracts:`, Object.keys(marketContracts));
+      console.log(`📊 Full marketContracts state:`, marketContracts);
+
+      const contractAddress = marketContracts[marketId];
+      if (!contractAddress) {
+        console.log(`❌ No contract address found for market ${marketId}`);
+
+        // If no contract found and this is not the final attempt, wait and retry
+        if (retryCount < 3) {
+          console.log(`🔄 Retrying in 2 seconds... (attempt ${retryCount + 1}/3)`);
+          setTimeout(() => {
+            refreshMarketOdds(marketId, retryCount + 1);
+          }, 2000);
+          return;
+        }
+
+        console.log(`🔧 Final attempt failed. Available market contracts:`, marketContracts);
+        return;
+      }
+
+      console.log(`🔄 Refreshing market odds for ${marketId} using contract ${contractAddress}...`);
+
+      // Import hederaEVMService for direct price fetching
+      const { HederaEVMService, getHederaEVMConfig } = await import('./utils/hederaEVMService');
+      const evmConfig = getHederaEVMConfig();
+      const hederaEVMService = new HederaEVMService(evmConfig);
+
+      const prices = await hederaEVMService.getMarketPrices(contractAddress);
+
+      // Update the market in the markets array with new prices
+      setMarkets(prevMarkets =>
+        prevMarkets.map(market =>
+          market.id === marketId
+            ? {
+                ...market,
+                yesOdds: prices.yesOdds,
+                noOdds: prices.noOdds
+              }
+            : market
+        )
+      );
+
+      console.log(`✅ Market odds updated for ${marketId}:`, {
+        yesOdds: prices.yesOdds.toFixed(3),
+        noOdds: prices.noOdds.toFixed(3),
+        yesProb: (prices.yesProb * 100).toFixed(1) + '%',
+        noProb: (prices.noProb * 100).toFixed(1) + '%'
+      });
+
+    } catch (error) {
+      console.error(`❌ Failed to refresh market odds for ${marketId}:`, error);
+
+      // If error and this is not the final retry, try again
+      if (retryCount < 2) {
+        console.log(`🔄 Retrying due to error in 3 seconds... (attempt ${retryCount + 1}/3)`);
+        setTimeout(() => {
+          refreshMarketOdds(marketId, retryCount + 1);
+        }, 3000);
+      }
+    }
+  };
 
   // Initialize app on mount
   useEffect(() => {
     console.log('🔥 MAIN useEffect triggered - will call initializeApp');
     initializeApp();
+
+    // Make test function available in browser console for debugging
+    (window as any).testMarketRefresh = testMarketRefresh;
+    (window as any).marketContracts = marketContracts;
+    console.log('🧪 DEBUG: window.testMarketRefresh() and window.marketContracts available in console');
   }, []);
   
   // Debug all state changes
@@ -156,6 +314,104 @@ export default function App() {
   useEffect(() => {
     console.log('🔥 UserProfile changed:', userProfile ? 'exists' : 'null');
   }, [userProfile]);
+
+  // Test function for betting integration
+  const testBettingIntegration = async () => {
+    console.log('🧪 TESTING BETTING INTEGRATION...');
+    try {
+      // Test with a mock market address
+      const testMarketAddress = '0x1234567890123456789012345678901234567890';
+      const testPosition = 'yes';
+      const testAmount = 1;
+      
+      console.log('🎯 Testing placeBetWithAddress...');
+      const result = await hederaPlaceBetWithAddress(testMarketAddress, testPosition, testAmount);
+      console.log('✅ Test result:', result);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Test failed:', error);
+      return null;
+    }
+  };
+
+  // Test function for market creation
+  const testMarketCreation = async () => {
+    console.log('🧪 TESTING MARKET CREATION...');
+    try {
+      const testMarket = {
+        claim: `Test market for debugging - will this work? ${Date.now()}`,
+        description: 'This is a test market to verify contract address extraction',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+        category: 'Test'
+      };
+      
+      console.log('🎯 Testing hederaCreateMarket...');
+      const result = await hederaCreateMarket(testMarket);
+      console.log('✅ Market creation result:', result);
+      console.log('🔍 Contract ID validation:', {
+        isString: typeof result?.contractId === 'string',
+        length: result?.contractId?.length,
+        startsWith0x: result?.contractId?.startsWith('0x'),
+        isMock: result?.contractId?.startsWith('mock-'),
+        isValid: result?.contractId && result.contractId.startsWith('0x') && result.contractId.length === 42
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Market creation test failed:', error);
+      return null;
+    }
+  };
+
+  // Helper function to check transaction status
+  const checkTransactionStatus = async (txHash: string) => {
+    console.log('🔍 CHECKING TRANSACTION STATUS:', txHash);
+    try {
+      const { HederaEVMService, getHederaEVMConfig } = await import('./utils/hederaEVMService');
+      const evmConfig = getHederaEVMConfig();
+      const hederaEVMService = new HederaEVMService(evmConfig);
+      
+      const result = await hederaEVMService.checkTransactionStatus(txHash);
+      
+      if (result) {
+        console.log('📋 Transaction status:', {
+          found: result.found,
+          confirmed: result.confirmed,
+          status: result.status,
+          gasUsed: result.gasUsed,
+          logsCount: result.logsCount
+        });
+        
+        // If we have a receipt, try to extract market address
+        if (result.receipt) {
+          console.log('🔍 Attempting to extract market address from receipt...');
+          const contractAddress = result.receipt.contractAddress;
+          if (contractAddress) {
+            console.log('✅ Found contract address in receipt:', contractAddress);
+          } else {
+            console.log('❌ No contract address found in receipt');
+          }
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to check transaction status:', error);
+      return null;
+    }
+  };
+
+  // Update debug functions when marketContracts changes
+  useEffect(() => {
+    (window as any).testMarketRefresh = testMarketRefresh;
+    (window as any).testContractPrices = testContractPrices;
+    (window as any).testBettingIntegration = testBettingIntegration;
+    (window as any).testMarketCreation = testMarketCreation;
+    (window as any).checkTransactionStatus = checkTransactionStatus;
+    (window as any).marketContracts = marketContracts;
+    console.log('🔄 DEBUG FUNCTIONS UPDATED: marketContracts count:', Object.keys(marketContracts).length);
+  }, []); // Only run once on mount - no dependencies needed for initialization
   const initializeApp = async () => {
     console.log('🚀 Starting app initialization...');
     setIsLoading(true);
@@ -301,6 +557,32 @@ export default function App() {
     }
   };
 
+  // Load real odds for all markets that have contract addresses
+  const loadRealOddsForAllMarkets = async (marketsToCheck: BettingMarket[]) => {
+    console.log('🔄 Loading real odds for all markets with contract addresses...');
+
+    const marketsWithContracts = marketsToCheck.filter(market =>
+      (market as any).contractAddress &&
+      (market as any).contractAddress !== 'null' &&
+      (market as any).contractAddress.startsWith('0x')
+    );
+
+    console.log(`📊 Found ${marketsWithContracts.length} markets with contract addresses out of ${marketsToCheck.length} total`);
+
+    for (const market of marketsWithContracts) {
+      try {
+        console.log(`🔍 Loading odds for market: ${market.claim.substring(0, 40)}... (${(market as any).contractAddress})`);
+        await refreshMarketOddsWithAddress(market.id, (market as any).contractAddress);
+        // Small delay to avoid overwhelming the RPC
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.warn(`⚠️ Failed to load odds for market ${market.id}:`, error);
+      }
+    }
+
+    console.log('✅ Finished loading real odds for all markets');
+  };
+
   // Load approved markets from Supabase and merge with existing markets
   const loadApprovedMarkets = async () => {
     try {
@@ -325,9 +607,15 @@ export default function App() {
         
         if (newApprovedMarkets.length > 0) {
           console.log(`🎉 Adding ${newApprovedMarkets.length} approved markets to homepage (${supabaseMarkets.length} from Supabase, ${localApprovedMarkets.length} from localStorage)`);
+
+          // Load real odds for markets with contract addresses
+          setTimeout(() => {
+            loadRealOddsForAllMarkets([...currentMarkets, ...newApprovedMarkets]);
+          }, 1000); // Small delay to ensure markets are rendered
+
           return [...currentMarkets, ...newApprovedMarkets];
         }
-        
+
         return currentMarkets;
       });
     } catch (error) {
@@ -506,6 +794,12 @@ export default function App() {
     const market = markets.find(m => m.id === marketId);
     if (!market) return;
 
+    console.log('🏪 Market found for betting:', {
+      id: market.id,
+      claim: market.claim.substring(0, 50),
+      contractAddress: (market as any).contractAddress
+    });
+
     const newBet: UserBet = {
       id: `bet_${Date.now()}`,
       marketId,
@@ -539,59 +833,88 @@ export default function App() {
     });
 
     // Submit to Hedera blockchain in the background (no UI blocking)
+    console.log('🔍 Hedera connection status:', { isHederaConnected, walletConnected: walletConnection?.isConnected });
     if (isHederaConnected) {
-      // Get or create contract address for this market
-      const getOrCreateContractAddress = async (): Promise<string | null> => {
-        // Check if we already have a contract address for this market
-        if (marketContracts[marketId]) {
-          return marketContracts[marketId];
+      const getContractAddress = async (): Promise<string | null> => {
+        // First check if market already has a contract address from database
+        const marketContractAddress = (market as any).contractAddress;
+        if (marketContractAddress) {
+          console.log(`✅ Using existing market contract address from database: ${marketContractAddress}`);
+          return marketContractAddress;
         }
 
-        // Create a new contract for this market
-        try {
-          const marketContract = await hederaCreateMarket({
-            claim: market.claim,
-            description: market.description,
-            expiresAt: market.expiresAt,
-            category: market.category
-          });
+        // Fallback to local state (for newly created markets)
+        const localAddress = marketContracts[marketId];
+        if (localAddress) {
+          console.log(`✅ Using existing contract address from local state: ${localAddress}`);
+          return localAddress;
+        }
 
-          if (marketContract?.contractId) {
-            // Store the contract address mapping
-            setMarketContracts(prev => ({
-              ...prev,
-              [marketId]: marketContract.contractId
-            }));
-            console.log(`Created new contract for market ${marketId}: ${marketContract.contractId}`);
-            return marketContract.contractId;
+        // Try to get market address from factory contract
+        console.log(`🔍 No stored contract address found for market ${marketId}. Querying factory...`);
+
+        try {
+          const factoryAddress = await hederaService.getMarketAddressFromFactory(marketId);
+          if (factoryAddress) {
+            console.log(`✅ Found market address from factory: ${factoryAddress}`);
+            // TODO: Consider updating Supabase with this address for future use
+            return factoryAddress;
           }
         } catch (error) {
-          console.error('Failed to create contract for market:', error);
+          console.warn(`⚠️ Failed to query factory for market address:`, error);
         }
-        
+
+        // Last resort fallback - this will likely fail for betting
+        console.warn(`❌ Market ${marketId} not found in factory. This market may not be deployed.`);
         return null;
       };
 
       // Get contract address and place bet
-      getOrCreateContractAddress().then(contractAddress => {
-        if (contractAddress) {
-          return hederaPlaceBet(contractAddress, position, amount);
-        }
-        return null;
-      }).then(transactionId => {
+      let contractAddressForRefresh: string | null = null;
+
+      const contractAddress = await getContractAddress();
+      contractAddressForRefresh = contractAddress; // Store for later use
+
+      if (contractAddress) {
+        console.log(`📝 Contract address ready for market ${marketId}: ${contractAddress}`);
+
+        // Place bet directly on the existing market contract
+        hederaPlaceBetWithAddress(contractAddress, position, amount).then(transactionId => {
         if (transactionId) {
           console.log(`Bet recorded on Hedera blockchain: ${transactionId}`);
-          // Optionally update bet record with blockchain transaction ID
-          setUserBets(prev => prev.map(bet => 
-            bet.id === newBet.id 
+          // Update bet record with blockchain transaction ID
+          setUserBets(prev => prev.map(bet =>
+            bet.id === newBet.id
               ? { ...bet, blockchainTxId: transactionId }
               : bet
           ));
+
+          // 🔄 Refresh market odds after successful bet placement
+          // Use the stored contract address to avoid React state timing issues
+          console.log(`🎯 Refreshing market odds after bet placement for market: ${marketId}`);
+          console.log(`🔍 Stored contract address:`, contractAddressForRefresh);
+          console.log(`🗂️ Current marketContracts state:`, marketContracts);
+
+          if (contractAddressForRefresh) {
+            console.log(`📍 Using stored contract address: ${contractAddressForRefresh}`);
+            console.log(`⏰ Setting 1-second timeout before calling refreshMarketOddsWithAddress...`);
+            setTimeout(() => {
+              console.log(`🚀 EXECUTING refreshMarketOddsWithAddress now!`);
+              refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
+            }, 1000); // 1 second delay to ensure contract state is updated
+          } else {
+            console.log(`❌ No contract address available for refresh`);
+            console.log(`🔍 Debugging: contractAddressForRefresh was:`, contractAddressForRefresh);
+          }
         }
-      }).catch(error => {
-        console.error('Blockchain transaction failed:', error);
-        // UI continues to work normally even if blockchain fails
-      });
+        }).catch(error => {
+          console.error('Blockchain transaction failed:', error);
+          // UI continues to work normally even if blockchain fails
+        });
+      } else {
+        console.warn(`❌ Cannot place bet on market ${marketId}: No contract address found (not in database, local state, or factory)`);
+        toast.error('This market is not deployed on the blockchain yet. Please contact an admin.');
+      }
     }
 
     toast.success(`Position placed: ${position.toUpperCase()} on "${market.claim.substring(0, 40)}..."`);
@@ -639,7 +962,7 @@ export default function App() {
         noOdds: 2.0,
         totalCasters: 0,
         expiresAt: marketData.expiresAt || new Date(),
-        status: marketData.status || 'pending', // Use status from CreateMarket component
+        status: marketData.status || 'active', // Use status from CreateMarket component
         trending: false,
         country: marketData.country,
         region: marketData.region,
@@ -653,7 +976,25 @@ export default function App() {
         hederaCreateMarket(marketData).then(contract => {
           if (contract) {
             console.log(`Market created on Hedera: ${contract.contractId}`);
-            // Optionally show a subtle success notification for blockchain confirmation
+
+            // Store the contract address with the pending market AND update Supabase if already approved
+            try {
+              const pendingMarkets = pendingMarketsService.getPendingMarkets();
+              const updatedMarkets = pendingMarkets.map(pending =>
+                pending.id === newMarket.id
+                  ? { ...pending, contractAddress: contract.contractId }
+                  : pending
+              );
+
+              // Update the pending markets with contract address
+              localStorage.setItem('blockcast_pending_markets', JSON.stringify(updatedMarkets));
+              console.log(`✅ Contract address ${contract.contractId} stored with pending market ${newMarket.id}`);
+
+              // Contract address will be included when market gets approved via storeApprovedMarket()
+              console.log(`✅ Contract ${contract.contractId} stored locally for market ${newMarket.id} - will be saved to Supabase when approved`);
+            } catch (storageError) {
+              console.warn('Failed to store contract address:', storageError);
+            }
           }
         }).catch(error => {
           console.warn('Blockchain market creation failed (running in mock mode):', error);
@@ -664,7 +1005,7 @@ export default function App() {
       // Handle different market types differently
       if (newMarket.status === 'disputable') {
         // Disputable markets (Verify Truth) go directly to approved markets with dispute period
-        const disputePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        const disputePeriodEnd = new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS); // Standardized dispute period
 
         // Create the market with dispute period
         const disputableMarket = {
@@ -693,7 +1034,7 @@ export default function App() {
           newMarket
         );
 
-        toast.success('Past event published for community verification! It will be disputable for 7 days.');
+        toast.success(`Past event published for community verification! It will be disputable for ${DISPUTE_PERIOD.HOURS} hours.`);
         setCurrentTab('verify-truth'); // Return to verify truth section
       } else {
         // Regular markets go through pending approval process
@@ -781,9 +1122,8 @@ export default function App() {
         return (
           <div className="space-y-6 max-w-4xl mx-auto">
             <VerificationInput 
-              onVerify={handleVerifyTruth}
-              isVerifying={isVerifying}
-              loadingMessage={loadingMessage}
+              onSubmit={handleVerifyTruth}
+              isLoading={isVerifying}
             />
             {verificationResult && (
               <VerificationResults 

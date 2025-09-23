@@ -7,6 +7,10 @@ import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
 import { BufferMemory } from 'langchain/memory';
 import { Client, PrivateKey } from '@hashgraph/sdk';
 import { blockcastDisputePlugin } from '../hedera-agent-plugins/blockcast-dispute-plugin';
+import { resolutionService } from '../utils/resolutionService';
+import { adminService } from '../utils/adminService';
+import { hederaResolutionService } from '../utils/hederaResolutionService';
+import { AI_RESOLUTION } from '../config/constants';
 
 // AI Agent Configuration interface
 interface BlockCastAIConfig {
@@ -447,58 +451,240 @@ Please provide comprehensive analysis for admin decision-making.
   /**
    * Execute autonomous market resolution (high-confidence cases)
    */
-  async executeAutonomousResolution(marketId: string, outcome: 'YES' | 'NO' | 'INVALID', confidence: number, disputes: any[] = []): Promise<any> {
+  async executeAutonomousResolution(marketId: string, outcome: 'YES' | 'NO' | 'INVALID', confidence: number, disputes: any[] = [], adminAddress?: string): Promise<any> {
     await this.ensureInitialized();
 
-    if (confidence < 0.9) {
-      throw new Error('Autonomous resolution requires confidence >90%');
+    // Validate confidence threshold
+    if (confidence < AI_RESOLUTION.AUTO_EXECUTE_THRESHOLD) {
+      throw new Error(`Autonomous resolution requires confidence >${AI_RESOLUTION.AUTO_EXECUTE_THRESHOLD * 100}%`);
     }
 
-    const input = `
-Execute autonomous resolution for market ${marketId} with high confidence.
-
-Parameters:
-- Market ID: ${marketId}
-- Final Outcome: ${outcome}
-- AI Confidence: ${confidence} (${(confidence * 100).toFixed(1)}%)
-- Disputes to Process: ${disputes.length}
-- Resolution Authority: Verified AI Agent
-
-Execution Steps:
-1. Validate resolution authority and parameters
-2. Execute smart contract market resolution with outcome: ${outcome}
-3. Process dispute rewards and slashing for ${disputes.length} disputes
-4. Update market status to 'resolved' in Supabase database
-5. Submit comprehensive audit log to HCS Market Events topic
-6. Generate transaction confirmations and gas usage report
-
-IMPORTANT: Only proceed if confidence score validates autonomous execution threshold.
-
-Please execute the complete resolution workflow and provide transaction details.
-`;
+    const executionStartTime = Date.now();
+    console.log(`🤖 Starting autonomous resolution for market ${marketId} with ${(confidence * 100).toFixed(1)}% confidence...`);
 
     try {
-      console.log(`Executing autonomous resolution for market ${marketId} with ${confidence} confidence...`);
-      const response = await this.agentExecutor!.invoke({ input });
-      
-      console.log(`Autonomous resolution executed for ${marketId}`);
+      // Step 1: Validate market status and permissions
+      console.log('📋 Validating market status and AI permissions...');
+      const market = await this.getMarketForResolution(marketId);
+      if (!market) {
+        throw new Error(`Market ${marketId} not found or not eligible for resolution`);
+      }
+
+      // Step 2: Record AI decision to HCS for transparency
+      console.log('📝 Recording AI decision to HCS...');
+      const hcsTransactionId = await this.recordAIDecisionToHCS(marketId, outcome, confidence, disputes);
+
+      // Step 3: Execute smart contract resolution
+      console.log('⚡ Executing smart contract resolution...');
+      let resolutionResult;
+
+      if (adminAddress) {
+        // Use admin-driven resolution with AI recommendation
+        resolutionResult = await resolutionService.finalResolveMarket(
+          marketId,
+          outcome.toLowerCase() as 'yes' | 'no',
+          Math.round(confidence * 100), // Convert to percentage
+          adminAddress
+        );
+      } else {
+        // Direct AI resolution (if contracts support it)
+        resolutionResult = await this.executeContractResolution(marketId, outcome, confidence);
+      }
+
+      // Step 4: Update database status
+      console.log('💾 Updating market status in database...');
+      await this.updateMarketStatus(marketId, 'resolved', {
+        outcome: outcome.toLowerCase(),
+        confidence: confidence,
+        resolvedBy: 'ai_autonomous',
+        aiTransactionId: resolutionResult.transactionId,
+        hcsTransactionId,
+        executionTime: Date.now() - executionStartTime
+      });
+
+      // Step 5: Process disputes if any
+      if (disputes.length > 0) {
+        console.log(`⚖️ Processing ${disputes.length} disputes...`);
+        await this.processDisputeResolutions(disputes, outcome, confidence);
+      }
+
+      // Step 6: Generate comprehensive audit log
+      const auditLog = {
+        marketId,
+        outcome,
+        confidence,
+        disputesProcessed: disputes.length,
+        executionTimeMs: Date.now() - executionStartTime,
+        transactions: {
+          hcs: hcsTransactionId,
+          resolution: resolutionResult.transactionId
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      console.log(`✅ Autonomous resolution completed for market ${marketId} in ${Date.now() - executionStartTime}ms`);
+
       return {
         success: true,
         marketId,
         outcome,
         confidence,
-        executionDetails: response.output || response,
+        disputesProcessed: disputes.length,
+        transactions: auditLog.transactions,
+        executionDetails: auditLog,
         timestamp: new Date().toISOString()
       };
 
     } catch (error) {
-      console.error(`Autonomous resolution failed for ${marketId}:`, error);
+      console.error(`❌ Autonomous resolution failed for ${marketId}:`, error);
+
+      // Record failure to HCS for transparency
+      try {
+        await hederaResolutionService.submitAIError(marketId, {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          attempted: 'autonomous_resolution',
+          confidence,
+          timestamp: new Date().toISOString()
+        });
+      } catch (hcsError) {
+        console.warn('Failed to record error to HCS:', hcsError);
+      }
+
       return {
         success: false,
         marketId,
+        outcome,
+        confidence,
         error: error instanceof Error ? error.message : 'Autonomous resolution failed',
+        executionTimeMs: Date.now() - executionStartTime,
         timestamp: new Date().toISOString()
       };
+    }
+  }
+
+  /**
+   * Execute AI recommendation workflow (for lower confidence decisions)
+   */
+  async executeAIRecommendation(marketId: string, outcome: 'YES' | 'NO' | 'INVALID', confidence: number, reasoning: string, adminAddress: string): Promise<any> {
+    await this.ensureInitialized();
+
+    console.log(`💡 Generating AI recommendation for market ${marketId} with ${(confidence * 100).toFixed(1)}% confidence...`);
+
+    try {
+      // Record AI recommendation to HCS
+      const hcsTransactionId = await hederaResolutionService.submitAIRecommendation(marketId, {
+        recommendedOutcome: outcome,
+        confidence,
+        reasoning,
+        requiresHumanReview: confidence < AI_RESOLUTION.HIGH_CONFIDENCE_THRESHOLD,
+        timestamp: new Date().toISOString()
+      });
+
+      // Store recommendation in database for admin review
+      await adminService.flagForReview(marketId, {
+        aiRecommendation: outcome.toLowerCase(),
+        confidence,
+        reasoning,
+        hcsTransactionId,
+        flaggedAt: new Date().toISOString(),
+        reviewPriority: this.calculateReviewPriority(confidence),
+        adminAddress
+      });
+
+      console.log(`📋 AI recommendation stored for admin review: ${marketId}`);
+
+      return {
+        success: true,
+        marketId,
+        recommendedOutcome: outcome,
+        confidence,
+        reasoning,
+        hcsTransactionId,
+        status: 'pending_admin_review',
+        reviewPriority: this.calculateReviewPriority(confidence),
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error(`AI recommendation failed for ${marketId}:`, error);
+      return {
+        success: false,
+        marketId,
+        error: error instanceof Error ? error.message : 'AI recommendation failed',
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  // ==================
+  // Helper Methods
+  // ==================
+
+  private async getMarketForResolution(marketId: string): Promise<any> {
+    // This would integrate with your market service
+    // For now, return a mock market
+    return {
+      id: marketId,
+      status: 'active',
+      endTime: new Date(Date.now() - 60000), // Ended 1 minute ago
+      canResolve: true
+    };
+  }
+
+  private async recordAIDecisionToHCS(marketId: string, outcome: string, confidence: number, disputes: any[]): Promise<string> {
+    return await hederaResolutionService.submitAIRecommendation(marketId, {
+      aiDecision: outcome,
+      confidence,
+      disputeCount: disputes.length,
+      executionType: 'autonomous',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  private async executeContractResolution(marketId: string, outcome: string, confidence: number): Promise<{ transactionId: string }> {
+    // This would integrate with your contract service
+    // For now, simulate contract execution
+    console.log(`📝 Simulating contract resolution: ${marketId} -> ${outcome} (${confidence})`);
+
+    return {
+      transactionId: `ai-tx-${marketId}-${Date.now()}`
+    };
+  }
+
+  private async updateMarketStatus(marketId: string, status: string, data: any): Promise<void> {
+    // This would update the market in your database
+    console.log(`💾 Updating market ${marketId} status to ${status}:`, data);
+  }
+
+  private async processDisputeResolutions(disputes: any[], outcome: string, confidence: number): Promise<void> {
+    for (const dispute of disputes) {
+      try {
+        // Determine if dispute was valid based on AI outcome
+        const disputeValid = this.evaluateDisputeValidity(dispute, outcome);
+
+        console.log(`⚖️ Processing dispute ${dispute.id}: ${disputeValid ? 'VALID' : 'INVALID'}`);
+
+        // This would integrate with dispute resolution service
+        // await disputeBondService.refundDisputeBond(dispute.bondId, disputeValid ? 'full_refund' : 'slashed');
+
+      } catch (error) {
+        console.warn(`Failed to process dispute ${dispute.id}:`, error);
+      }
+    }
+  }
+
+  private evaluateDisputeValidity(dispute: any, finalOutcome: string): boolean {
+    // Simple logic: if dispute outcome matches final outcome, dispute was valid
+    return dispute.proposedOutcome?.toLowerCase() === finalOutcome.toLowerCase();
+  }
+
+  private calculateReviewPriority(confidence: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+    if (confidence < AI_RESOLUTION.MEDIUM_CONFIDENCE_THRESHOLD) {
+      return 'HIGH';
+    } else if (confidence < AI_RESOLUTION.HIGH_CONFIDENCE_THRESHOLD) {
+      return 'MEDIUM';
+    } else {
+      return 'LOW';
     }
   }
 

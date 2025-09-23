@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -9,9 +9,10 @@ import { Separator } from './ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { TrendingUp, TrendingDown, Users, Clock, Target, Star, MessageCircle, Filter, ChevronDown, Share2, Heart, Bookmark, Zap, Globe, Shield, Search, Plus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useLanguage } from './LanguageContext';
 import ShareModal from './ShareModal';
+import { DISPUTE_PERIOD } from '../config/constants';
 
 export interface BettingMarket {
   id: string;
@@ -103,8 +104,8 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     yesPool: market.yesPool || 0,
     noPool: market.noPool || 0,
     totalCasters: market.totalCasters || 0,
-    yesOdds: market.yesOdds || 2.0,
-    noOdds: market.noOdds || 2.0,
+        yesOdds: market.yesOdds || 2.0,
+        noOdds: market.noOdds || 2.0,
     confidenceLevel: market.confidenceLevel || 'medium',
     expiresAt: market.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000) // Default 24h from now
   }));
@@ -220,7 +221,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     if (market.status === 'resolved') return false;
 
     const now = new Date();
-    const disputePeriodEnd = market.dispute_period_end ? new Date(market.dispute_period_end) : new Date((market.expiresAt?.getTime() || Date.now()) + 7 * 24 * 60 * 60 * 1000); // 7 days instead of 48 hours
+    const disputePeriodEnd = market.dispute_period_end ? new Date(market.dispute_period_end) : new Date((market.expiresAt?.getTime() || Date.now()) + DISPUTE_PERIOD.MILLISECONDS); // Standardized dispute period
 
     return now <= disputePeriodEnd && (market.status === 'pending_resolution' || market.status === 'disputing' || market.status === 'disputable');
   };
@@ -696,7 +697,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
                             {market.resolution_data && (
                               <>
-                                <div>AI Analysis: {market.resolution_data.confidence ? `${(market.resolution_data.confidence * 100).toFixed(0)}% confidence` : 'Available'}</div>
+                                <div>AI Analysis: {market.resolution_data.confidence ? `${(Number(market.resolution_data.confidence) * 100).toFixed(0)}% confidence` : 'Available'}</div>
                                 {market.resolution_data.outcome && (
                                   <div className={`font-medium ${
                                     market.resolution_data.outcome === 'yes' ? 'text-green-400' : 'text-red-400'

@@ -30,6 +30,7 @@ class ApprovedMarketsService {
         approved_by: approvedBy,
         approval_reason: reason,
         submitter_address: submitterAddress,
+        contract_address: (market as any).contractAddress, // Include the contract address from market creation
         image_url: market.imageUrl, // Include the image URL
         status: market.status, // Include market status
         dispute_period_end: (market as any).dispute_period_end // Include dispute period for disputable markets
@@ -217,13 +218,10 @@ class ApprovedMarketsService {
     const status = (approvedMarket.status as BettingMarket['status']) || 'active';
     
     // Debug log to see what status we're getting
-    if (approvedMarket.id === 'market_1756833834386_ojc6efguh') {
-      console.log('🔍 Converting market status:', {
-        id: approvedMarket.id,
-        rawStatus: approvedMarket.status,
-        convertedStatus: status,
-        expiresAt: approvedMarket.expires_at
-      });
+    if (approvedMarket.id === 'market_1758612204970_xgolhnr9c') {
+      console.log('🔍 NEW MARKET CONTRACT DEBUG:', approvedMarket.contract_address);
+      console.log('🔍 NEW MARKET TYPE:', typeof approvedMarket.contract_address);
+      console.log('🔍 NEW MARKET ID:', approvedMarket.id);
     }
     return {
       id: approvedMarket.id,
@@ -240,7 +238,7 @@ class ApprovedMarketsService {
       resolution_data: approvedMarket.resolution_data as any,
       dispute_count: approvedMarket.dispute_count,
       dispute_period_end: approvedMarket.dispute_period_end || undefined,
-      // UI fields without on-chain data yet
+      // UI fields without on-chain data yet - will be updated by real-time price loading
       yesOdds: 2.0,
       noOdds: 2.0,
       totalPool: 0,
@@ -248,9 +246,9 @@ class ApprovedMarketsService {
       noPool: 0,
       totalCasters: 0,
       trending: false,
-      // Optional: surface contract address for debugging in UI (non-breaking)
+      // Surface contract address from database
       // @ts-ignore augment at runtime for display
-      contractAddress: (approvedMarket as any).contract_address
+      contractAddress: approvedMarket.contract_address || null
     } as unknown as BettingMarket;
   }
 }

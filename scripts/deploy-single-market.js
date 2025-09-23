@@ -24,7 +24,7 @@ async function main() {
   const signer = new ethers.Wallet(pk, provider);
 
   const question = `Single Market ${new Date().toISOString()}`;
-  const endTime = Math.floor(Date.now() / 1000) + 120; // 2 minutes from now
+  const endTime = Math.floor(Date.now() / 1000) + 86400; // 24 hours from now
   const id = ethers.solidityPackedKeccak256(['string', 'uint256', 'address'], [question, Date.now(), signer.address]);
 
   const artifactPath = './artifacts/contracts/PredictionMarket.sol/PredictionMarket.json';

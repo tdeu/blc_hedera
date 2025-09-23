@@ -22,9 +22,16 @@ const PREDICTION_MARKET_ABI = [
   "function buyYes(uint256 shares) external",
   "function buyNo(uint256 shares) external",
   "function resolveMarket(uint8 outcome) external",
+  "function preliminaryResolve(uint8 outcome) external",
+  "function finalResolve(uint8 outcome, uint256 confidenceScore) external",
   "function redeem() external",
   "function yesBalance(address) external view returns (uint256)",
-  "function noBalance(address) external view returns (uint256)"
+  "function noBalance(address) external view returns (uint256)",
+  "function isPendingResolution() external view returns (bool)",
+  "function getPreliminaryOutcome() external view returns (uint8)",
+  "function getConfidenceScore() external view returns (uint256)",
+  "function getCurrentPrice() external view returns (uint256 priceYes, uint256 priceNo)",
+  "function getProbabilities() external view returns (uint256 probYes, uint256 probNo)"
 ];
 
 const CAST_TOKEN_ABI = [
@@ -193,7 +200,7 @@ export class ContractService {
     };
   }
 
-  // Resolve market (admin only)
+  // Resolve market (admin only) - DEPRECATED, use two-stage resolution
   async resolveMarket(marketAddress: string, outcome: number, signer: ethers.Signer): Promise<string> {
     const marketContract = new ethers.Contract(
       marketAddress,
@@ -203,6 +210,95 @@ export class ContractService {
 
     const tx = await marketContract.resolveMarket(outcome);
     return tx.hash;
+  }
+
+  // Two-stage resolution: Preliminary resolve (admin only)
+  async preliminaryResolve(marketAddress: string, outcome: number, signer: ethers.Signer): Promise<string> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      signer
+    );
+
+    const tx = await marketContract.preliminaryResolve(outcome);
+    return tx.hash;
+  }
+
+  // Two-stage resolution: Final resolve with confidence score (admin only)
+  async finalResolve(marketAddress: string, outcome: number, confidence: number, signer: ethers.Signer): Promise<string> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      signer
+    );
+
+    const tx = await marketContract.finalResolve(outcome, confidence);
+    return tx.hash;
+  }
+
+  // Check if market is in pending resolution state
+  async isPendingResolution(marketAddress: string): Promise<boolean> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      this.provider
+    );
+
+    return await marketContract.isPendingResolution();
+  }
+
+  // Get preliminary outcome
+  async getPreliminaryOutcome(marketAddress: string): Promise<number> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      this.provider
+    );
+
+    return await marketContract.getPreliminaryOutcome();
+  }
+
+  // Get confidence score
+  async getConfidenceScore(marketAddress: string): Promise<number> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      this.provider
+    );
+
+    return await marketContract.getConfidenceScore();
+  }
+
+  // Get current market prices
+  async getCurrentPrice(marketAddress: string): Promise<{ yesPrice: string; noPrice: string }> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      this.provider
+    );
+
+    const [yesPrice, noPrice] = await marketContract.getCurrentPrice();
+
+    return {
+      yesPrice: ethers.formatEther(yesPrice),
+      noPrice: ethers.formatEther(noPrice)
+    };
+  }
+
+  // Get market probabilities as percentages
+  async getProbabilities(marketAddress: string): Promise<{ yesProb: number; noProb: number }> {
+    const marketContract = new ethers.Contract(
+      marketAddress,
+      PREDICTION_MARKET_ABI,
+      this.provider
+    );
+
+    const [yesProb, noProb] = await marketContract.getProbabilities();
+
+    return {
+      yesProb: Number(yesProb),
+      noProb: Number(noProb)
+    };
   }
 
   // Redeem winnings
