@@ -18,8 +18,8 @@ export default function Footer({ onNavigate }: FooterProps) {
     <footer className="bg-card border-t border-border mt-12">
       <div className="container mx-auto px-4 py-12 max-w-7xl lg:px-8">
         {/* Main Footer Content */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Brand Section - Tagline Removed */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {/* Brand Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
@@ -45,15 +45,14 @@ export default function Footer({ onNavigate }: FooterProps) {
             </div>
           </div>
 
-          {/* Truth Platform Links */}
+          {/* Truth Platform - Combined Section */}
           <div className="space-y-4">
             <h4 className="font-semibold text-foreground">Truth Platform</h4>
             <div className="space-y-2">
               {[
                 { label: 'Truth Markets', icon: Globe, page: 'markets' },
                 { label: 'Fact Verification', icon: Shield, page: 'verify' },
-                { label: 'Community Truth', icon: Users, page: 'community' },
-                { label: 'Credibility Engine', icon: Zap, page: 'about' }
+                { label: 'Community Truth', icon: Users, page: 'community' }
               ].map((item) => (
                 <Button
                   key={item.label}
@@ -68,30 +67,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             </div>
           </div>
 
-          {/* African Truth Coverage */}
-          <div className="space-y-4">
-            <h4 className="font-semibold text-foreground">Truth Coverage</h4>
-            <div className="space-y-2">
-              {[
-                { label: 'Nigeria Truth Markets', page: 'markets' },
-                { label: 'Kenya Fact-Checking', page: 'markets' },
-                { label: 'South Africa Verification', page: 'markets' },
-                { label: 'Ghana Truth Hub', page: 'markets' },
-                { label: 'Continental Credibility', page: 'about' }
-              ].map((item) => (
-                <Button
-                  key={item.label}
-                  variant="ghost"
-                  onClick={() => handleLinkClick(item.page)}
-                  className="w-full justify-start h-auto p-2 text-muted-foreground hover:text-foreground"
-                >
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Truth Support */}
+          {/* Support & Legal */}
           <div className="space-y-4">
             <h4 className="font-semibold text-foreground">Support & Legal</h4>
             <div className="space-y-2">

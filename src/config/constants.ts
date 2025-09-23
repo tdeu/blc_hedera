@@ -14,8 +14,8 @@ export const MARKET_CREATION = {
 
 // Dispute System Settings
 export const DISPUTE_PERIOD = {
-  HOURS: 72, // Standardized to 72 hours (3 days)
-  MILLISECONDS: 72 * 60 * 60 * 1000,
+  HOURS: 168, // 7 days dispute period (168 hours)
+  MILLISECONDS: 168 * 60 * 60 * 1000,
   BOND_AMOUNT_HBAR: '1', // 1 HBAR dispute bond
   BOND_AMOUNT_CAST: '100' // 100 CAST dispute bond
 } as const;

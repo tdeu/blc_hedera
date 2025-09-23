@@ -481,12 +481,45 @@ export default function App() {
 
   const connectWallet = async () => {
     try {
-      const connection = await walletService.connectMetaMask();
+      // Show loading toast for circuit breaker situations
+      let loadingToast: string | number | undefined;
+
+      const connectionPromise = walletService.connectMetaMask();
+
+      // Show loading toast after 1 second if still connecting (circuit breaker delay)
+      const loadingTimeout = setTimeout(() => {
+        loadingToast = toast.loading('Connecting to MetaMask... Please wait, this may take a moment.');
+      }, 1000);
+
+      const connection = await connectionPromise;
+
+      // Clear loading timeout and toast
+      clearTimeout(loadingTimeout);
+      if (loadingToast) {
+        toast.dismiss(loadingToast);
+      }
+
       setWalletConnection(connection);
       updateUserBalanceFromWallet(connection);
-      toast.success('Wallet connected successfully! 🦊');
+
+      // Check if on correct network
+      if (!walletService.isOnHederaTestnet()) {
+        toast.warning(`⚠️ Wrong network detected: ${walletService.getCurrentNetwork()}\nPlease switch to Hedera Testnet for full functionality.`);
+      } else {
+        toast.success(`Wallet connected successfully! 🦊\nNetwork: ${walletService.getCurrentNetwork()}\nBalance: ${connection.balance} HBAR`);
+      }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to connect wallet');
+      // Handle specific circuit breaker errors with helpful suggestions
+      let errorMessage = error.message || 'Failed to connect wallet';
+
+      if (error.message?.includes('temporarily unavailable') ||
+          error.message?.includes('circuit breaker')) {
+        errorMessage += '\n\n💡 Try these steps:\n1. Wait 30 seconds and try again\n2. Refresh the page\n3. Restart MetaMask';
+      } else if (error.message?.includes('internal error')) {
+        errorMessage += '\n\n💡 Try refreshing the page or restarting MetaMask';
+      }
+
+      toast.error(errorMessage);
     }
   };
 
@@ -822,7 +855,9 @@ export default function App() {
       position,
       amount,
       '0', // shares - would be calculated from blockchain
-      'pending' // transactionHash - will be updated after blockchain confirmation
+      'pending', // transactionHash - will be updated after blockchain confirmation
+      newBet.odds, // Pass the actual odds from the market
+      newBet.potentialWinning // Pass the calculated potential winning
     );
     
     // Update user profile immediately
@@ -1152,13 +1187,14 @@ export default function App() {
           userBalance={userProfile?.balance || 0}
         />;
       case 'settings':
-        return <Settings 
-          isDarkMode={isDarkMode} 
+        return <Settings
+          isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
           userBalance={userProfile?.balance || 0}
           userBets={userBets}
           verificationHistory={verificationHistory}
           onSelectVerification={handleSelectVerification}
+          onCreateMarket={handleCreateMarket}
         />;
       case 'about':
         return <About />;

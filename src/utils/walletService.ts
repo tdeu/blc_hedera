@@ -34,7 +34,7 @@ export class WalletService {
 
     try {
       console.log('🔄 Connecting to MetaMask...');
-      
+
       // Request account access
       const accounts = await window.ethereum.request({
         method: 'eth_requestAccounts'
@@ -46,19 +46,17 @@ export class WalletService {
 
       console.log('✅ Account access granted:', accounts[0]);
 
-      // Create provider and signer
+      // Check and configure Hedera testnet
+      console.log('🔄 Configuring Hedera Testnet...');
+      await this.ensureHederaTestnet();
+      console.log('✅ Network configured successfully');
+
+      // Create provider and signer AFTER network configuration
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
-      console.log('🔄 Switching to Hedera testnet...');
-      
-      // Switch to Hedera testnet if not already there
-      await this.ensureHederaTestnet();
-
-      console.log('✅ Network switched successfully');
-
-      // Get balance after network switch
-      const balance = await provider.getBalance(accounts[0]);
+      // Get balance with retry logic for circuit breaker
+      const balance = await this.getBalanceWithRetry(provider, accounts[0]);
       const chainId = await provider.getNetwork();
 
       this.connection = {
@@ -76,65 +74,151 @@ export class WalletService {
       console.log('✅ Wallet connected successfully:', {
         address: this.connection.address,
         balance: this.connection.balance,
-        chainId: this.connection.chainId
+        chainId: this.connection.chainId,
+        network: chainId.name
       });
+
+      // Verify we're on the correct network
+      if (this.connection.chainId !== 296) {
+        console.warn('⚠️ Not on Hedera Testnet (296), current:', this.connection.chainId);
+        throw new Error('Please manually switch to Hedera Testnet in MetaMask and try again.');
+      }
 
       return this.connection;
     } catch (error: any) {
       console.error('❌ Failed to connect wallet:', error);
-      
+
+      // Handle circuit breaker errors specifically
+      if (this.isCircuitBreakerError(error)) {
+        throw new Error('MetaMask is temporarily unavailable due to network issues. Please wait a moment and try again.');
+      }
+
+      // Handle network-specific errors
+      if (error.message?.includes('switch to Hedera Testnet') ||
+          error.message?.includes('Network switch verification failed')) {
+        throw new Error('Please manually add and switch to Hedera Testnet in MetaMask:\n\n📋 Network Details:\n• Network Name: Hedera Testnet\n• RPC URL: https://testnet.hashio.io/api\n• Chain ID: 296\n• Currency Symbol: HBAR');
+      }
+
       // Provide more specific error messages
       if (error.code === 4001) {
         throw new Error('Connection rejected by user');
       } else if (error.code === -32002) {
         throw new Error('Connection request already pending');
-      } else if (error.message?.includes('network')) {
-        throw new Error('Failed to connect to Hedera Testnet. Please check your internet connection.');
+      } else if (error.code === -32603) {
+        throw new Error('MetaMask internal error. Please refresh the page and try again.');
       } else {
         throw new Error(`Failed to connect wallet: ${error.message || 'Unknown error'}`);
       }
     }
   }
 
+  private isCircuitBreakerError(error: any): boolean {
+    return error?.data?.cause?.isBrokenCircuitError === true ||
+           error?.message?.includes('circuit breaker is open') ||
+           error?.data?.cause?.message?.includes('circuit breaker is open');
+  }
+
+  private async getBalanceWithRetry(provider: ethers.BrowserProvider, address: string, maxRetries = 3, delay = 2000): Promise<bigint> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempting to get balance (attempt ${attempt}/${maxRetries})...`);
+        const balance = await provider.getBalance(address);
+        console.log('✅ Balance retrieved successfully');
+        return balance;
+      } catch (error: any) {
+        console.warn(`⚠️ Balance attempt ${attempt} failed:`, error.message);
+
+        if (this.isCircuitBreakerError(error) && attempt < maxRetries) {
+          console.log(`⏳ Circuit breaker detected, waiting ${delay}ms before retry...`);
+          await this.sleep(delay);
+          delay *= 1.5; // Exponential backoff
+          continue;
+        }
+
+        if (attempt === maxRetries) {
+          // On final attempt, return 0 balance instead of failing
+          console.warn('⚠️ Using fallback balance of 0 due to repeated failures');
+          return BigInt(0);
+        }
+      }
+    }
+    return BigInt(0);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   async ensureHederaTestnet(): Promise<void> {
     if (!window.ethereum) return;
 
-    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-    const hederaTestnetChainId = '0x128'; // 296 in hex
+    try {
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const hederaTestnetChainId = '0x128'; // 296 in hex
 
-    if (chainId !== hederaTestnetChainId) {
-      try {
-        // Try to switch to Hedera Testnet
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: hederaTestnetChainId }],
-        });
-      } catch (switchError: any) {
-        // If the chain is not added, add it
-        if (switchError.code === 4902 || switchError.code === -32602) {
-          console.log('Adding Hedera Testnet to MetaMask...');
+      console.log(`Current chain ID: ${chainId}, Target: ${hederaTestnetChainId}`);
+
+      if (chainId !== hederaTestnetChainId) {
+        console.log('🔄 Switching to Hedera Testnet...');
+
+        try {
+          // Try to switch to Hedera Testnet first
           await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: hederaTestnetChainId,
-              chainName: 'Hedera Testnet',
-              nativeCurrency: {
-                name: 'HBAR',
-                symbol: 'HBAR',
-                decimals: 18
-              },
-              rpcUrls: ['https://testnet.hashio.io/api'],
-              blockExplorerUrls: ['https://hashscan.io/testnet/'],
-              iconUrls: ['https://s2.coinmarketcap.com/static/img/coins/64x64/4642.png']
-            }]
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: hederaTestnetChainId }],
           });
-          
-          console.log('Hedera Testnet added successfully');
-        } else {
-          console.error('Failed to switch to Hedera Testnet:', switchError);
-          throw switchError;
+          console.log('✅ Switched to Hedera Testnet successfully');
+        } catch (switchError: any) {
+          // If the chain is not added, add it
+          if (switchError.code === 4902 || switchError.code === -32602) {
+            console.log('🔄 Adding Hedera Testnet to MetaMask...');
+
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: hederaTestnetChainId,
+                chainName: 'Hedera Testnet',
+                nativeCurrency: {
+                  name: 'HBAR',
+                  symbol: 'HBAR',
+                  decimals: 18
+                },
+                rpcUrls: [
+                  'https://testnet.hashio.io/api',
+                  'https://testnet.mirrornode.hedera.com/api/v1/contracts/call'
+                ],
+                blockExplorerUrls: ['https://hashscan.io/testnet/'],
+                iconUrls: ['https://s2.coinmarketcap.com/static/img/coins/64x64/4642.png']
+              }]
+            });
+
+            console.log('✅ Hedera Testnet added successfully');
+
+            // Try to switch again after adding
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: hederaTestnetChainId }],
+            });
+
+            console.log('✅ Switched to newly added Hedera Testnet');
+          } else {
+            console.error('❌ Failed to switch to Hedera Testnet:', switchError);
+            throw new Error(`Failed to switch to Hedera Testnet: ${switchError.message}`);
+          }
         }
+      } else {
+        console.log('✅ Already on Hedera Testnet');
       }
+
+      // Verify the switch was successful
+      const finalChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (finalChainId !== hederaTestnetChainId) {
+        throw new Error('Network switch verification failed. Please manually switch to Hedera Testnet in MetaMask.');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Network setup error:', error);
+      throw new Error(`Failed to configure Hedera Testnet: ${error.message}`);
     }
   }
 
@@ -159,11 +243,11 @@ export class WalletService {
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.listAccounts();
-        
+
         if (accounts.length > 0) {
-          const balance = await provider.getBalance(accounts[0]);
+          const balance = await this.getBalanceWithRetry(provider, accounts[0].address, 2, 1000); // Shorter retry for refresh
           const chainId = await provider.getNetwork();
-          
+
           this.connection = {
             ...this.connection,
             address: accounts[0].address,
@@ -173,8 +257,13 @@ export class WalletService {
             signer: await provider.getSigner()
           };
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to refresh connection:', error);
+
+        if (this.isCircuitBreakerError(error)) {
+          console.warn('⚠️ Circuit breaker error during refresh, keeping existing connection');
+          // Don't disconnect, just log the error and keep the existing connection
+        }
       }
     }
   }
@@ -192,16 +281,39 @@ export class WalletService {
     return this.connection !== null && this.connection.isConnected;
   }
 
+  isOnHederaTestnet(): boolean {
+    return this.connection?.chainId === 296;
+  }
+
+  getCurrentNetwork(): string {
+    if (!this.connection) return 'Not connected';
+
+    switch (this.connection.chainId) {
+      case 296: return 'Hedera Testnet';
+      case 295: return 'Hedera Mainnet';
+      case 1: return 'Ethereum Mainnet';
+      case 5: return 'Goerli Testnet';
+      case 11155111: return 'Sepolia Testnet';
+      default: return `Unknown Network (${this.connection.chainId})`;
+    }
+  }
+
   async getBalance(): Promise<string> {
     if (!this.connection || !this.connection.provider) {
       return '0';
     }
 
     try {
-      const balance = await this.connection.provider.getBalance(this.connection.address);
+      const balance = await this.getBalanceWithRetry(this.connection.provider, this.connection.address);
       return ethers.formatEther(balance);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to get balance:', error);
+
+      if (this.isCircuitBreakerError(error)) {
+        console.warn('⚠️ Circuit breaker error when getting balance, returning cached value');
+        return this.connection.balance || '0';
+      }
+
       return '0';
     }
   }

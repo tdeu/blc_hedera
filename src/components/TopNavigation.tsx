@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useLanguage } from './LanguageContext';
 import { useUser } from '../contexts/UserContext';
+import { walletService } from '../utils/walletService';
 // Logo placeholder - replace with actual image when available
 
 interface TopNavigationProps {
@@ -131,10 +132,25 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
 
             {/* Wallet Connect/Disconnect Button */}
             {walletConnected ? (
-              <Button variant="outline" size="sm" onClick={onDisconnectWallet} className="hidden lg:flex items-center gap-1 text-xs px-2 py-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connected'}
-              </Button>
+              <div className="hidden lg:flex items-center gap-2">
+                {/* Network Status Indicator */}
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs ${
+                  walletService.isOnHederaTestnet()
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${
+                    walletService.isOnHederaTestnet() ? 'bg-green-500' : 'bg-yellow-500'
+                  }`}></div>
+                  <span className="font-medium">{walletService.getCurrentNetwork()}</span>
+                </div>
+
+                {/* Wallet Address */}
+                <Button variant="outline" size="sm" onClick={onDisconnectWallet} className="flex items-center gap-1 text-xs px-2 py-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connected'}
+                </Button>
+              </div>
             ) : (
               <Button variant="default" size="sm" onClick={onConnectWallet} className="hidden lg:flex items-center gap-1 text-xs px-2 py-1">
                 <Wallet className="h-3 w-3" />

@@ -30,6 +30,7 @@ import { walletService } from '../utils/walletService';
 import { AIAgentSimple } from './AIAgentSimple';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
 import { userDataService } from '../utils/userDataService';
+import { DISPUTE_PERIOD } from '../config/constants';
 
 interface MarketPageProps {
   market: BettingMarket;
@@ -243,17 +244,20 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     }
   };
 
-  // Evidence submission handlers
+  // Evidence submission handlers - matches BettingMarkets logic
   const isMarketDisputable = (): boolean => {
     if (market.status === 'resolved') return false;
+
     const now = new Date();
     const disputePeriodEnd = market.dispute_period_end
       ? new Date(market.dispute_period_end)
-      : new Date((market.expiresAt?.getTime() || Date.now()) + 7 * 24 * 60 * 60 * 1000); // 7 days instead of 48 hours
+      : new Date((market.expiresAt?.getTime() || Date.now()) + DISPUTE_PERIOD.MILLISECONDS);
+
     return now <= disputePeriodEnd && (
       market.status === 'pending_resolution' ||
       market.status === 'disputing' ||
-      market.status === 'disputable' // Add support for explicit 'disputable' status
+      market.status === 'disputable' ||
+      (market.expiresAt && market.expiresAt <= now && market.status !== 'resolved')
     );
   };
 

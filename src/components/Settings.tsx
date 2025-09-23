@@ -26,9 +26,10 @@ interface SettingsProps {
   userBets?: UserBet[];
   verificationHistory?: VerificationResult[];
   onSelectVerification?: (result: VerificationResult) => void;
+  onCreateMarket?: () => void;
 }
 
-export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, userBets = [], verificationHistory = [], onSelectVerification }: SettingsProps) {
+export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, userBets = [], verificationHistory = [], onSelectVerification, onCreateMarket }: SettingsProps) {
   const { language, setLanguage, t } = useLanguage();
   const { profile, updateUserProfile, loading } = useUser();
   
@@ -174,13 +175,9 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
 
         <TabsContent value="markets" className="space-y-6">
           {profile?.walletAddress && (
-            <UserCreatedMarkets 
+            <UserCreatedMarkets
               walletAddress={profile.walletAddress}
-              onCreateNewMarket={() => {
-                // Navigate to create market page
-                window.location.hash = '#verify-claims';
-                setActiveTab('profile');
-              }}
+              onCreateNewMarket={onCreateMarket}
               onViewMarket={(marketId) => {
                 // Navigate to market details
                 console.log('View market:', marketId);

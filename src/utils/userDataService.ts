@@ -146,7 +146,9 @@ class UserDataService {
     position: 'yes' | 'no',
     amount: number,
     shares: string,
-    transactionHash: string
+    transactionHash: string,
+    odds?: number,
+    potentialReturn?: number
   ): void {
     try {
       const bet: UserBettingHistory = {
@@ -159,7 +161,9 @@ class UserDataService {
         transactionHash,
         placedAt: new Date(),
         status: 'active',
-        marketStatus: 'active'
+        marketStatus: 'active',
+        potentialReturn: potentialReturn || amount * 2.0, // Default to 2x if not provided
+        currentValue: potentialReturn || amount * 2.0 // Set current value to potential return for active bets
       };
 
       const storageKey = `user_bets_${walletAddress.toLowerCase()}`;
@@ -268,8 +272,8 @@ class UserDataService {
       position: bet.position,
       amount: bet.amount,
       odds: bet.potentialReturn ? bet.potentialReturn / bet.amount : 2.0,
-      potentialWinning: bet.potentialReturn,
-      potentialReturn: bet.potentialReturn,
+      potentialWinning: bet.potentialReturn || bet.amount * 2.0, // Use stored value or fallback
+      potentialReturn: bet.potentialReturn || bet.amount * 2.0,  // Use stored value or fallback
       placedAt: bet.placedAt,
       status: bet.status,
       resolvedAt: bet.status !== 'active' ? bet.placedAt : undefined, // Simplified
