@@ -22,7 +22,6 @@ export interface AdminStats {
   totalUsers: number;
   totalVolume: string;
   flaggedContent: number;
-  activeDisputes: number;
 }
 
 export interface PendingMarket {
@@ -112,8 +111,7 @@ class AdminService {
         pendingMarkets: pendingStats.pending,
         totalUsers: 2847, // TODO: Replace with real user count
         totalVolume: '145.67', // TODO: Replace with real volume data
-        flaggedContent: 3, // TODO: Replace with real flagged content count
-        activeDisputes: 1 // TODO: Replace with real dispute count
+        flaggedContent: 3 // TODO: Replace with real flagged content count
       };
     } catch (error) {
       console.error('Error fetching admin stats:', error);

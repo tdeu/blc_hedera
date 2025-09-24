@@ -135,10 +135,24 @@ export class DisputeBondService {
   }
 
   /**
+   * Get user's CAST token balance
+   */
+  async getUserCastBalance(userAddress: string): Promise<string> {
+    try {
+      const castToken = await this.getCastTokenContract();
+      const balance = await castToken.balanceOf(userAddress);
+      return ethers.formatEther(balance);
+    } catch (error) {
+      console.error('Error getting CAST balance:', error);
+      return '0';
+    }
+  }
+
+  /**
    * Get required dispute bond amount in display token
    */
   static getRequiredBondAmount(): string {
-    return DISPUTE_PERIOD.BOND_AMOUNT_HBAR; // Default to HBAR amount
+    return DISPUTE_PERIOD.BOND_AMOUNT_CAST; // Use CAST token amount
   }
 
   /**

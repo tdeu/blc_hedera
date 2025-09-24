@@ -17,13 +17,14 @@ interface TopNavigationProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   userBalance: number;
+  castBalance?: number;
   walletConnected?: boolean;
   walletAddress?: string;
   onConnectWallet?: () => void;
   onDisconnectWallet?: () => void;
 }
 
-export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance, walletConnected, walletAddress, onConnectWallet, onDisconnectWallet }: TopNavigationProps) {
+export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance, castBalance = 0, walletConnected, walletAddress, onConnectWallet, onDisconnectWallet }: TopNavigationProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { language, setLanguage } = useLanguage();
   const { profile } = useUser();
@@ -125,9 +126,15 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
             </DropdownMenu>
 
             {/* Balance (Desktop) - Compact */}
-            <div className="hidden lg:flex items-center gap-1 bg-muted/50 px-2 py-1 rounded-md">
-              <Wallet className="h-3 w-3 text-primary" />
-              <span className="text-xs font-semibold text-foreground">{userBalance.toFixed(3)} HBAR</span>
+            <div className="hidden lg:flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-muted/50 px-2 py-1 rounded-md">
+                <Wallet className="h-3 w-3 text-primary" />
+                <span className="text-xs font-semibold text-foreground">{userBalance.toFixed(3)} HBAR</span>
+              </div>
+              <div className="flex items-center gap-1 bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">
+                <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center text-white text-[8px] font-bold">C</div>
+                <span className="text-xs font-semibold text-blue-600">{castBalance.toFixed(0)} CAST</span>
+              </div>
             </div>
 
             {/* Wallet Connect/Disconnect Button */}
@@ -264,12 +271,21 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                   </div>
 
                   {/* Balance */}
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg mb-4">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-5 w-5 text-primary" />
-                      <span className="font-medium">Balance</span>
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-primary" />
+                        <span className="font-medium text-sm">HBAR Balance</span>
+                      </div>
+                      <span className="font-bold text-primary">{userBalance.toFixed(3)} HBAR</span>
                     </div>
-                    <span className="font-bold text-primary">{userBalance.toFixed(3)} HBAR</span>
+                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/10 to-blue-600/10 rounded-lg border border-blue-500/20">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">C</div>
+                        <span className="font-medium text-sm">CAST Balance</span>
+                      </div>
+                      <span className="font-bold text-blue-600">{castBalance.toFixed(0)} CAST</span>
+                    </div>
                   </div>
 
                   {/* Wallet Connect/Disconnect Button (Mobile) */}

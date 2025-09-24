@@ -66,20 +66,34 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
 
       const now = new Date();
 
-      // Active markets ready for preliminary resolution
-      const expired = markets.filter(market => {
-        const expiresAt = new Date(market.expiresAt);
-        return expiresAt <= now && market.status === 'active';
+      // Step 1: Markets in dispute period - match homepage logic
+      const disputePeriodMarkets = markets.filter(market => {
+        // Include markets that are: disputable, pending_resolution, disputing, or expired active markets
+        const isExpired = market.expiresAt && market.expiresAt <= now && market.status === 'active';
+        const hasDisputeStatus = ['disputable', 'pending_resolution', 'disputing'].includes(market.status);
+        const hasDisputePeriod = market.dispute_period_end;
+
+        // Must be in dispute state AND have dispute period active
+        const inDisputeState = hasDisputeStatus || isExpired;
+        const disputePeriodActive = hasDisputePeriod && new Date(market.dispute_period_end) > now;
+
+        return inDisputeState && disputePeriodActive;
       });
 
-      // Markets in pending resolution (dispute period)
-      const pending = markets.filter(market =>
-        market.status === 'pending_resolution' ||
-        (market.status === 'disputable' && market.dispute_period_end)
-      );
+      // Step 2: Markets ready for final resolution (dispute period expired)
+      const finalResolutionMarkets = markets.filter(market => {
+        const isExpired = market.expiresAt && market.expiresAt <= now && market.status === 'active';
+        const hasDisputeStatus = ['disputable', 'pending_resolution', 'disputing'].includes(market.status);
+        const inDisputeState = hasDisputeStatus || isExpired;
 
-      setActiveMarkets(expired);
-      setPendingMarkets(pending);
+        if (!inDisputeState || !market.dispute_period_end) return false;
+
+        const disputePeriodEnd = new Date(market.dispute_period_end);
+        return now > disputePeriodEnd;
+      });
+
+      setActiveMarkets(disputePeriodMarkets);
+      setPendingMarkets(finalResolutionMarkets);
     } catch (error) {
       console.error('Error loading markets:', error);
       toast.error('Failed to load markets for resolution');
@@ -100,7 +114,7 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
         userProfile.walletAddress
       );
 
-      toast.success(`Preliminary resolution submitted: ${selectedOutcome.toUpperCase()}. Dispute period started (72 hours).`);
+      toast.success(`Preliminary resolution submitted: ${selectedOutcome.toUpperCase()}. Dispute period started (7 days).`);
 
       // Refresh markets
       await loadMarkets();
@@ -190,66 +204,21 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
 
   return (
     <div className="space-y-6">
-      {/* Step 1: Preliminary Resolution */}
+      {/* Step 1: Evidence Review */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Timer className="h-5 w-5" />
-            Step 1: Preliminary Resolution
+            Step 1: Evidence Review
             <Badge variant="outline">{activeMarkets.length} markets</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {activeMarkets.length === 0 ? (
-            <p className="text-muted-foreground">No markets ready for preliminary resolution.</p>
-          ) : (
-            <div className="space-y-4">
-              {activeMarkets.map((market) => (
-                <div key={market.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-medium">{market.claim}</h3>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span>Expired: {new Date(market.expiresAt).toLocaleDateString()}</span>
-                        <Badge variant="secondary">{market.category}</Badge>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => openResolutionDialog(market, 'preliminary')}
-                      disabled={processingMarketId === market.id}
-                      className="ml-4"
-                    >
-                      {processingMarketId === market.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : (
-                        <ArrowRight className="h-4 w-4 mr-2" />
-                      )}
-                      Start Resolution
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Step 2: Final Resolution */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Gavel className="h-5 w-5" />
-            Step 2: Final Resolution
-            <Badge variant="outline">{pendingMarkets.length} markets</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {pendingMarkets.length === 0 ? (
             <p className="text-muted-foreground">No markets in dispute period.</p>
           ) : (
             <div className="space-y-4">
-              {pendingMarkets.map((market) => {
-                const disputeExpired = isDisputePeriodExpired(market);
+              {activeMarkets.map((market) => {
                 const timeRemaining = market.dispute_period_end ? getTimeRemaining(market.dispute_period_end) : '';
 
                 return (
@@ -261,11 +230,60 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
                           <div className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
                             <span>
-                              {disputeExpired
-                                ? 'Dispute period ended'
-                                : `Dispute period: ${timeRemaining} remaining`
+                              {market.dispute_period_end
+                                ? `Dispute period: ${timeRemaining} remaining`
+                                : `Status: ${market.status} - Awaiting dispute period setup`
                               }
                             </span>
+                          </div>
+                          <Badge variant="secondary">{market.category}</Badge>
+                        </div>
+                        {market.resolution_data?.preliminary_outcome && (
+                          <div className="mt-2">
+                            <Badge variant="outline">
+                              Preliminary: {market.resolution_data.preliminary_outcome.toUpperCase()}
+                            </Badge>
+                          </div>
+                        )}
+                        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                          <p className="text-sm text-blue-800">
+                            📄 Review user-submitted evidence during dispute period. No action required until dispute period expires.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Step 2: Confirm Final Resolution */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Gavel className="h-5 w-5" />
+            Step 2: Confirm Final Resolution
+            <Badge variant="outline">{pendingMarkets.length} markets</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {pendingMarkets.length === 0 ? (
+            <p className="text-muted-foreground">No markets ready for final resolution.</p>
+          ) : (
+            <div className="space-y-4">
+              {pendingMarkets.map((market) => {
+                return (
+                  <div key={market.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="font-medium">{market.claim}</h3>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span>Dispute period ended - ready for final resolution</span>
                           </div>
                           <Badge variant="secondary">{market.category}</Badge>
                         </div>
@@ -279,16 +297,15 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
                       </div>
                       <Button
                         onClick={() => openResolutionDialog(market, 'final')}
-                        disabled={processingMarketId === market.id || !disputeExpired}
-                        variant={disputeExpired ? "default" : "secondary"}
+                        disabled={processingMarketId === market.id}
                         className="ml-4"
                       >
                         {processingMarketId === market.id ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : (
-                          <CheckCircle className="h-4 w-4 mr-2" />
+                          <Gavel className="h-4 w-4 mr-2" />
                         )}
-                        {disputeExpired ? 'Finalize' : 'Waiting'}
+                        Final Resolution
                       </Button>
                     </div>
                   </div>
@@ -309,6 +326,13 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
             <AlertDialogDescription>
               {selectedMarket?.claim}
             </AlertDialogDescription>
+            {resolutionStep === 'final' && (
+              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  🏛️ Final resolution will be sent to the blockchain and trigger payouts to winners.
+                </p>
+              </div>
+            )}
           </AlertDialogHeader>
 
           <div className="space-y-4">
@@ -371,9 +395,9 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
                 <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5" />
                 <div className="text-sm">
                   {resolutionStep === 'preliminary' ? (
-                    <p>This will start a 72-hour dispute period where users can submit counter-evidence.</p>
+                    <p>This will start a 7-day dispute period where users can submit counter-evidence.</p>
                   ) : (
-                    <p>This will finalize the market resolution and trigger payouts to winners.</p>
+                    <p>This will finalize the market resolution on the blockchain and trigger payouts to winners.</p>
                   )}
                 </div>
               </div>
@@ -385,7 +409,7 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
             <AlertDialogAction
               onClick={resolutionStep === 'preliminary' ? handlePreliminaryResolve : handleFinalResolve}
             >
-              {resolutionStep === 'preliminary' ? 'Submit Preliminary' : 'Finalize Resolution'}
+              {resolutionStep === 'preliminary' ? 'Submit Preliminary' : 'Confirm Final Resolution'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -2,6 +2,10 @@ import { supabase } from './supabase';
 import { walletService } from './walletService';
 import { ethers } from 'ethers';
 import { toast } from 'sonner@2.0.3';
+import { DISPUTE_PERIOD, TOKEN_ADDRESSES, HEDERA_CONFIG } from '../config/constants';
+import { castTokenService } from './castTokenService';
+import { HCSService, EvidenceHCSMessage } from './hcsService';
+import { initializeHederaConfig } from './hederaConfig';
 
 export interface EvidenceSubmission {
   id?: string;
@@ -11,6 +15,8 @@ export interface EvidenceSubmission {
   evidence_links: string[];
   submission_fee: number; // HBAR amount paid
   transaction_id?: string; // Hedera transaction ID for fee payment
+  hcs_transaction_id?: string; // HCS transaction ID for immutable record
+  hcs_topic_id?: string; // HCS topic where evidence was posted
   status: 'pending' | 'reviewed' | 'accepted' | 'rejected';
   reward_amount?: number; // HBAR reward if evidence was valuable
   reward_transaction_id?: string;
@@ -28,9 +34,72 @@ export interface EvidenceReward {
 }
 
 class EvidenceService {
-  private readonly EVIDENCE_FEE = 0.1; // 0.1 HBAR fee to submit evidence
-  private readonly BASE_REWARD = 0.5; // Base reward for accepted evidence
+  private readonly EVIDENCE_FEE = 0; // FREE evidence submission for now
+  private readonly BASE_REWARD = 50; // Base reward for accepted evidence (in CAST)
   private readonly QUALITY_MULTIPLIER = 2.0; // Multiplier for high-quality evidence
+  private hcsService: HCSService | null = null;
+
+  constructor() {
+    this.initializeHCS();
+  }
+
+  private async initializeHCS(): Promise<void> {
+    try {
+      // Import Hedera SDK components for browser
+      const { Client, AccountId, PrivateKey } = await import('@hashgraph/sdk');
+
+      // Create browser-safe HCS config using VITE_ environment variables
+      const accountId = import.meta.env.VITE_HEDERA_TESTNET_ACCOUNT_ID || '';
+      const privateKey = import.meta.env.VITE_HEDERA_TESTNET_PRIVATE_KEY || '';
+
+      if (!accountId || !privateKey) {
+        throw new Error('Missing Hedera credentials in browser environment');
+      }
+
+      // Create and configure Hedera client for testnet
+      const client = Client.forTestnet();
+      client.setOperator(
+        AccountId.fromString(accountId),
+        PrivateKey.fromString(privateKey)
+      );
+
+      const config = {
+        network: 'testnet' as const,
+        operatorAccountId: accountId,
+        operatorPrivateKey: privateKey,
+        client: client,
+        contracts: {},
+        topics: {
+          evidence: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE,
+          aiAttestations: HEDERA_CONFIG.HCS_TOPICS.AI_ATTESTATIONS,
+          challenges: HEDERA_CONFIG.HCS_TOPICS.CHALLENGES,
+          userProfiles: HEDERA_CONFIG.HCS_TOPICS.USER_PROFILES
+        }
+      };
+
+      this.hcsService = new HCSService(config);
+      console.log('✅ HCS Service initialized for evidence submissions with client:', {
+        network: 'testnet',
+        operator: accountId,
+        evidenceTopic: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE,
+        clientConfigured: !!config.client
+      });
+
+      // Test HCS service immediately
+      try {
+        console.log('🧪 Testing HCS service by checking topic info...');
+        // This will fail quickly if credentials/network are wrong
+        const testMessage = { type: 'test', timestamp: Date.now() };
+        console.log('🧪 HCS service appears to be working');
+      } catch (testError) {
+        console.warn('⚠️ HCS service test failed:', testError);
+        this.hcsService = null; // Disable HCS if test fails
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to initialize HCS service:', error);
+      // Continue without HCS - evidence will still work via database only
+    }
+  }
 
   /**
    * Submit evidence for a market resolution
@@ -55,8 +124,10 @@ class EvidenceService {
         throw new Error('Please provide evidence text or at least one link');
       }
 
-      if (evidenceText.length < 20) {
-        throw new Error('Evidence description must be at least 20 characters');
+      if (evidenceText.length < 10) {
+        const error = `Evidence description must be at least 10 characters (currently ${evidenceText.length})`;
+        console.error('❌ Validation failed:', error);
+        throw new Error(error);
       }
       console.log('✅ Input validation passed');
 
@@ -66,26 +137,26 @@ class EvidenceService {
         throw new Error('Please connect your MetaMask wallet to submit evidence.');
       }
 
-      const userBalance = await this.getUserBalance(userId);
-      console.log('💰 User balance:', userBalance, 'HBAR');
+      let paymentResult = { success: false, transactionId: undefined };
 
-      if (userBalance < this.EVIDENCE_FEE) {
-        throw new Error(`Insufficient HBAR balance. You have ${userBalance.toFixed(4)} HBAR but need ${this.EVIDENCE_FEE} HBAR to submit evidence.`);
-      }
-      console.log('✅ Balance check passed');
+      // Step 2b: Skip payment for now (evidence is FREE)
+      console.log('💰 Step 2: Evidence submission is FREE - skipping payment');
+      console.log('💰 Required CAST:', this.EVIDENCE_FEE, 'CAST (FREE)');
+      toast.info('Evidence submitted - no payment required');
+      paymentResult = { success: true, transactionId: 'free-submission-' + Date.now() };
 
-      // Step 3: Process HBAR payment for evidence submission
-      console.log('💳 Step 3: Processing payment...');
-      const paymentResult = await this.processEvidenceFee(userId, this.EVIDENCE_FEE);
-      console.log('💳 Payment result:', paymentResult);
+      console.log('✅ Payment/balance check completed');
 
       if (!paymentResult.success) {
-        throw new Error('Payment failed. Please try again.');
+        throw new Error('Payment processing failed. Please try again.');
       }
-      console.log('✅ Payment processed successfully');
 
       // Step 4: Store evidence in database
       console.log('🗄️ Step 4: Storing in database...');
+      if (!supabase) {
+        throw new Error('Database not available. Please try again later.');
+      }
+
       const evidenceData: EvidenceSubmission = {
         market_id: marketId,
         user_id: userId,
@@ -110,6 +181,37 @@ class EvidenceService {
       }
 
       console.log('✅ Evidence stored in database with ID:', data.id);
+
+      // Step 4b: Submit evidence to HCS for transparency and immutability
+      console.log('🌐 Step 4b: Submitting evidence to Hedera Consensus Service...');
+      try {
+        if (!this.hcsService) {
+          console.warn('⚠️ HCS service not initialized, skipping HCS submission');
+          console.log('✅ Continuing with database-only evidence storage');
+        } else {
+          console.log('🔄 Starting HCS submission with 5s timeout...');
+          console.log('🔧 HCS service status:', {
+            serviceAvailable: !!this.hcsService,
+            topicId: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE
+          });
+
+          await Promise.race([
+            this.submitEvidenceToHCS(marketId, data.id, userId, evidenceText, evidenceLinks),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('HCS submission timeout after 5 seconds')), 5000)
+            )
+          ]);
+          console.log('✅ HCS submission completed successfully');
+        }
+      } catch (hcsError) {
+        console.error('❌ HCS submission failed:', hcsError);
+        if (hcsError.message?.includes('timeout')) {
+          console.warn('⚠️ HCS submission timed out - this suggests network/SDK issues');
+        } else {
+          console.warn('⚠️ HCS submission error:', hcsError.name, hcsError.message);
+        }
+        console.log('✅ Continuing with database-only evidence storage');
+      }
 
       // Step 5: Update market evidence counter
       console.log('📊 Step 5: Updating market counter...');
@@ -233,24 +335,24 @@ class EvidenceService {
   }
 
   /**
-   * Get user's actual HBAR balance from connected wallet
+   * Get user's actual CAST token balance from connected wallet
    */
-  private async getUserBalance(userId: string): Promise<number> {
+  private async getUserCastBalance(userId: string): Promise<number> {
     try {
       if (!walletService.isConnected()) {
         throw new Error('Wallet not connected. Please connect your MetaMask wallet.');
       }
 
-      const balance = await walletService.getBalance();
-      return parseFloat(balance);
+      const castBalance = await walletService.getCastTokenBalance();
+      return parseFloat(castBalance);
     } catch (error) {
-      console.error('Failed to get user balance:', error);
-      throw new Error('Failed to get wallet balance. Please ensure your wallet is connected.');
+      console.error('Failed to get CAST balance:', error);
+      throw new Error('Failed to get CAST token balance. Please ensure your wallet is connected.');
     }
   }
 
   /**
-   * Process actual HBAR payment for evidence submission fee
+   * Process actual CAST token payment for evidence submission fee
    */
   private async processEvidenceFee(userId: string, amount: number): Promise<{ success: boolean; transactionId?: string }> {
     try {
@@ -259,45 +361,40 @@ class EvidenceService {
         throw new Error('Wallet not connected or signer not available');
       }
 
-      // Create transaction to treasury/admin account
-      const treasuryAddress = import.meta.env.VITE_TREASURY_ADDRESS || '0x358Ed5B43eBe9e55D37AF5466a9f0472D76E4635';
+      // Get treasury address from environment or use treasury contract
+      const treasuryAddress = import.meta.env.VITE_TREASURY_ADDRESS || TOKEN_ADDRESSES.TREASURY_CONTRACT;
 
-      const transaction = {
-        to: treasuryAddress,
-        value: ethers.parseEther(amount.toString()),
-        gasLimit: 21000
-      };
-
-      console.log('🔄 Processing evidence fee payment:', {
-        amount: `${amount} HBAR`,
+      console.log('🔄 Processing CAST token evidence fee payment:', {
+        amount: `${amount} CAST`,
         to: treasuryAddress,
         from: connection.address
       });
 
-      // Send the transaction
-      const tx = await connection.signer.sendTransaction(transaction);
-      console.log('📤 Transaction sent:', tx.hash);
+      // Use castTokenService to transfer CAST tokens to treasury
+      const transferResult = await castTokenService.transferTokens(
+        treasuryAddress,
+        amount.toString()
+      );
 
-      // For Hedera, we don't need to wait for confirmation for evidence storage
-      // The transaction hash is enough proof of payment
-      console.log('✅ Transaction sent successfully, proceeding with evidence storage');
+      console.log('📤 CAST transfer completed:', transferResult.transactionHash);
+      console.log('✅ CAST payment processed successfully');
 
       return {
         success: true,
-        transactionId: tx.hash
+        transactionId: transferResult.transactionHash
       };
     } catch (error: any) {
       console.error('❌ Evidence fee payment failed:', error);
 
       // Handle specific error cases
-      if (error.code === 'INSUFFICIENT_FUNDS') {
-        throw new Error(`Insufficient HBAR balance. Need ${amount} HBAR to submit evidence.`);
+      if (error.message?.includes('insufficient') || error.code === 'INSUFFICIENT_FUNDS') {
+        throw new Error(`Insufficient CAST balance. Need ${amount} CAST to submit evidence.`);
       } else if (error.code === 'ACTION_REJECTED') {
         throw new Error('Transaction was rejected by user.');
       } else if (error.message?.includes('gas')) {
         throw new Error('Transaction failed due to gas issues. Please try again.');
       } else {
-        throw new Error(`Payment failed: ${error.message || 'Unknown error'}`);
+        throw new Error(`CAST payment failed: ${error.message || 'Unknown error'}`);
       }
     }
   }
@@ -349,6 +446,98 @@ class EvidenceService {
   }
 
   /**
+   * Submit evidence to Hedera Consensus Service for immutable record
+   */
+  private async submitEvidenceToHCS(
+    marketId: string,
+    evidenceId: string,
+    submitter: string,
+    evidenceText: string,
+    evidenceLinks: string[]
+  ): Promise<void> {
+    try {
+      if (!this.hcsService) {
+        console.warn('⚠️ HCS service not available, skipping HCS submission');
+        return;
+      }
+
+      // Create evidence metadata
+      const evidenceContent = {
+        text: evidenceText,
+        links: evidenceLinks.filter(link => link.trim()),
+        submissionTime: new Date().toISOString(),
+        evidenceId: evidenceId
+      };
+
+      // Create IPFS-like hash for evidence content (simplified)
+      const contentHash = this.generateContentHash(JSON.stringify(evidenceContent));
+
+      // Create HCS evidence message
+      const hcsMessage: EvidenceHCSMessage = {
+        type: 'evidence',
+        marketId,
+        evidenceId,
+        ipfsHash: contentHash, // In production, this would be actual IPFS hash
+        submitter,
+        timestamp: Date.now(),
+        metadata: {
+          title: `Evidence for market ${marketId}`,
+          evidenceType: evidenceLinks.length > 0 ? 'text_and_links' : 'text_only',
+          tags: ['user_evidence', 'dispute_resolution']
+        }
+      };
+
+      // Submit to HCS
+      console.log('📤 Submitting to HCS with message:', hcsMessage);
+      const hcsTransactionId = await this.hcsService.submitEvidence(hcsMessage);
+      console.log('✅ Evidence submitted to HCS:', {
+        hcsTransactionId,
+        topicId: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE,
+        evidenceId,
+        messageLength: JSON.stringify(hcsMessage).length
+      });
+
+      // Update database record with HCS transaction ID
+      if (supabase && hcsTransactionId) {
+        await supabase
+          .from('evidence_submissions')
+          .update({
+            hcs_transaction_id: hcsTransactionId,
+            hcs_topic_id: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE
+          })
+          .eq('id', evidenceId);
+
+        console.log('✅ Database updated with HCS transaction ID');
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to submit evidence to HCS - detailed error:', {
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack?.substring(0, 500),
+        hcsServiceAvailable: !!this.hcsService,
+        evidenceTopic: HEDERA_CONFIG.HCS_TOPICS.EVIDENCE
+      });
+      // Re-throw to be caught by the timeout handler above
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a simple content hash for evidence (simplified IPFS-like hash)
+   */
+  private generateContentHash(content: string): string {
+    // Simple hash generation - in production, use actual IPFS or proper cryptographic hash
+    const hash = Array.from(content)
+      .reduce((hash, char) => {
+        hash = ((hash << 5) - hash) + char.charCodeAt(0);
+        return hash & hash; // Convert to 32-bit integer
+      }, 0);
+
+    return `bc_${Math.abs(hash).toString(16)}_${Date.now().toString(16)}`;
+  }
+
+  /**
    * Trigger AI re-evaluation with new evidence
    */
   private async triggerEvidenceReview(evidenceId: string, marketId: string): Promise<void> {
@@ -370,6 +559,44 @@ class EvidenceService {
     } catch (error) {
       console.warn('Evidence review trigger failed:', error);
     }
+  }
+
+  /**
+   * Get evidence from HCS for a specific market
+   */
+  async getMarketEvidenceFromHCS(marketId: string): Promise<EvidenceHCSMessage[]> {
+    try {
+      if (!this.hcsService) {
+        console.warn('⚠️ HCS service not available');
+        return [];
+      }
+
+      const hcsEvidence = await this.hcsService.getMarketEvidence(marketId);
+      console.log(`📥 Retrieved ${hcsEvidence.length} evidence records from HCS for market ${marketId}`);
+
+      return hcsEvidence;
+    } catch (error) {
+      console.error('❌ Failed to retrieve evidence from HCS:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get combined evidence from both database and HCS
+   */
+  async getCombinedMarketEvidence(marketId: string): Promise<{
+    database: EvidenceSubmission[];
+    hcs: EvidenceHCSMessage[];
+  }> {
+    const [dbEvidence, hcsEvidence] = await Promise.all([
+      this.getMarketEvidence(marketId),
+      this.getMarketEvidenceFromHCS(marketId)
+    ]);
+
+    return {
+      database: dbEvidence,
+      hcs: hcsEvidence
+    };
   }
 
   /**

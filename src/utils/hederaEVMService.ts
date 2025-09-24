@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { toast } from 'sonner';
+import { TOKEN_ADDRESSES } from '../config/constants';
 
 export interface MarketContract {
   contractId: string;
@@ -545,7 +546,7 @@ export class HederaEVMService {
    */
   async getCastTokenBalance(): Promise<string> {
     try {
-      const castTokenAddress = '0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c';
+      const castTokenAddress = TOKEN_ADDRESSES.CAST_TOKEN;
       const erc20ABI = [
         "function balanceOf(address account) external view returns (uint256)",
         "function decimals() external view returns (uint8)"
@@ -566,7 +567,7 @@ export class HederaEVMService {
    */
   async mintCastTokensForTesting(amount: number): Promise<string> {
     try {
-      const castTokenAddress = '0xF6CbeE28F6B652b09c18b6aF5ACEC57B4840b54c';
+      const castTokenAddress = TOKEN_ADDRESSES.CAST_TOKEN;
       const castTokenABI = [
         "function mint(address to, uint256 amount) external"
       ];

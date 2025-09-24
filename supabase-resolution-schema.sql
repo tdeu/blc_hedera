@@ -238,11 +238,11 @@ ON CONFLICT (topic_id) DO NOTHING;
 
 -- Insert default resolution settings
 INSERT INTO resolution_settings (setting_key, setting_value, description) VALUES
-  ('dispute_period_hours', '48', 'Default dispute period in hours'),
+  ('dispute_period_hours', '168', 'Default dispute period in hours (7 days)'),
   ('min_bond_amount', '{"evidence": 100, "interpretation": 250, "api_error": 500}', 'Minimum bond amounts by dispute type'),
   ('confidence_thresholds', '{"high": 0.9, "medium": 0.7, "low": 0.5}', 'API confidence thresholds for auto-resolution'),
   ('bond_slashing_percentage', '50', 'Percentage of bond slashed for invalid disputes'),
-  ('auto_resolve_after_hours', '72', 'Hours after which unresolved markets auto-resolve')
+  ('auto_resolve_after_hours', '168', 'Hours after which unresolved markets auto-resolve (7 days)')
 ON CONFLICT (setting_key) DO NOTHING;
 
 -- Comments for documentation

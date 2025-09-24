@@ -206,16 +206,67 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
   const handleDisputeSubmit = async (disputeData: DisputeFormData) => {
     setIsSubmittingDispute(true);
     try {
-      await disputeService.submitDispute(
+      // Get wallet connection using existing wallet service
+      const connection = walletService.getConnection();
+      if (!connection || !connection.isConnected) {
+        toast.error('Please connect your wallet to create a dispute');
+        return;
+      }
+
+      // Use new DisputeManager contract integration
+      const { disputeManagerService } = await import('../utils/disputeManagerService');
+
+      // Initialize the service
+      await disputeManagerService.initialize(connection);
+
+      // Get bond requirement (should be 100 CAST)
+      const bondAmount = await disputeManagerService.getBondRequirement();
+      console.log('💰 Dispute bond requirement:', bondAmount, 'CAST');
+
+      // Check if user has sufficient CAST tokens
+      const { castTokenService } = await import('../utils/castTokenService');
+      await castTokenService.initialize(connection);
+      const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
+
+      if (userBalance < bondAmount) {
+        toast.error(`Insufficient CAST tokens. Required: ${bondAmount} CAST, Available: ${userBalance.toFixed(2)} CAST`);
+        return;
+      }
+
+      // Get market contract address
+      const marketAddress = (market as any).contractAddress;
+      if (!marketAddress) {
+        toast.error('Market contract address not found. Cannot create dispute.');
+        return;
+      }
+
+      // Approve CAST tokens for dispute bond
+      toast.info('Step 1/2: Approving CAST tokens for dispute bond...');
+      const { TOKEN_ADDRESSES } = await import('../config/constants');
+      await castTokenService.approve(TOKEN_ADDRESSES.DISPUTE_MANAGER_CONTRACT, bondAmount.toString());
+      console.log('✅ CAST tokens approved for dispute bond');
+
+      // Create the dispute on blockchain
+      toast.info('Step 2/2: Creating dispute on blockchain...');
+      const result = await disputeManagerService.createDispute(
         market.id,
-        'current-user-id', // This would come from wallet context
-        disputeData
+        marketAddress,
+        disputeData.evidenceDescription || disputeData.reason,
+        disputeData.reason
       );
-      toast.success('Dispute submitted successfully');
+
+      console.log('✅ Dispute created successfully:', result);
+      toast.success(
+        `🏛️ Dispute created successfully!\n` +
+        `ID: ${result.disputeId}\n` +
+        `Bond: ${result.bondAmount} CAST tokens locked`
+      );
+
       setShowDisputeModal(false);
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Failed to submit dispute:', error);
-      toast.error('Failed to submit dispute. Please try again.');
+      toast.error(`Failed to create dispute: ${error.message || 'Unknown error occurred'}`);
     } finally {
       setIsSubmittingDispute(false);
     }
@@ -354,12 +405,55 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       // Show progress steps
       setTimeout(() => setSubmissionStep('payment'), 500);
 
-      const result = await evidenceService.submitEvidence(
+      // Use new DisputeManager contract integration instead of old evidenceService
+      const { disputeManagerService } = await import('../utils/disputeManagerService');
+
+      // Initialize the service
+      await disputeManagerService.initialize(connection);
+
+      // Get bond requirement (should be 100 CAST)
+      const bondAmount = await disputeManagerService.getBondRequirement();
+      console.log('💰 Dispute bond requirement:', bondAmount, 'CAST');
+
+      // Check if user has sufficient CAST tokens
+      const { castTokenService } = await import('../utils/castTokenService');
+      await castTokenService.initialize(connection);
+      const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
+
+      if (userBalance < bondAmount) {
+        throw new Error(`Insufficient CAST tokens. Required: ${bondAmount} CAST, Available: ${userBalance.toFixed(2)} CAST`);
+      }
+
+      // Get market contract address
+      const marketAddress = (market as any).contractAddress;
+      if (!marketAddress) {
+        throw new Error('Market contract address not found. Cannot create dispute.');
+      }
+
+      // Approve CAST tokens for dispute bond
+      toast.info('Approving CAST tokens for dispute bond...');
+      const { TOKEN_ADDRESSES } = await import('../config/constants');
+      await castTokenService.approve(TOKEN_ADDRESSES.DISPUTE_MANAGER_CONTRACT, bondAmount.toString());
+      console.log('✅ CAST tokens approved for dispute bond');
+
+      // Create the dispute on blockchain
+      toast.info('Creating dispute on blockchain...');
+      const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
+
+      const disputeResult = await disputeManagerService.createDispute(
         market.id,
-        connection.address, // Use actual wallet address as user ID
-        evidenceText,
-        evidenceLinks.filter(link => link.trim())
+        marketAddress,
+        evidenceWithLinks,
+        'Evidence submitted via dispute form'
       );
+
+      // Convert to expected result format
+      const result = {
+        success: true,
+        transactionId: disputeResult.transactionHash,
+        disputeId: disputeResult.disputeId,
+        bondAmount: disputeResult.bondAmount
+      };
 
       setSubmissionStep('storing');
 
@@ -367,7 +461,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
         setSubmissionStep('complete');
 
         toast.success(
-          `Evidence submitted successfully! 🎉\nFee: 0.1 HBAR paid\nTX: ${result.transactionId?.slice(-8)}`,
+          `🏛️ Dispute created successfully! 🎉\nBond: ${result.bondAmount} CAST locked\nID: ${result.disputeId}\nTX: ${result.transactionId?.slice(-8)}`,
           { duration: 6000 }
         );
 
@@ -502,6 +596,120 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
         </div>
       </div>
 
+      {/* Market Header Card - Show first for disputable markets, grayed out */}
+      <Card className={`overflow-hidden ${isMarketDisputable() ? 'opacity-60 bg-gray-50 dark:bg-gray-900/50' : ''}`}>
+        {market.imageUrl && (
+          <div className="relative h-48 overflow-hidden">
+            <img
+              src={market.imageUrl}
+              alt={getTranslatedText(market.claim, market.claimTranslations)}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
+
+            {market.trending && (
+              <div className="absolute top-4 left-4">
+                <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  {t('trending')}
+                </Badge>
+              </div>
+            )}
+
+            <div className="absolute bottom-4 left-4 right-4">
+              <Badge variant="outline" className="text-xs mb-2 bg-background/80">
+                {market.category}
+              </Badge>
+              <h1 className="text-xl font-bold text-white mb-2">
+                {getTranslatedText(market.claim, market.claimTranslations)}
+              </h1>
+            </div>
+          </div>
+        )}
+
+        <CardContent className={`p-6 ${isMarketDisputable() ? 'text-gray-500 dark:text-gray-400' : ''}`}>
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Market Info */}
+            <div className="lg:col-span-2 space-y-4">
+              <p className={`${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-muted-foreground'}`}>
+                {getTranslatedText(market.description, market.descriptionTranslations)}
+              </p>
+
+              {/* Location & Source */}
+              <div className={`flex items-center gap-6 text-sm ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-muted-foreground'}`}>
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  <span>{market.country || market.region}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  <span>{market.source}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  <span>{t('expiresIn')} {getTimeRemaining(market.expiresAt)}</span>
+                </div>
+              </div>
+
+              {/* Pool Distribution */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className={`text-sm font-medium ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : ''}`}>{t('truthVerificationPool')}</span>
+                  <span className={`text-sm font-bold ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : ''}`}>{formatCurrency(market.totalPool)}</span>
+                </div>
+                <Progress
+                  value={(market.yesPool / market.totalPool) * 100}
+                  className={`h-3 ${isMarketDisputable() ? 'opacity-50' : ''}`}
+                />
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className={`${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-primary'}`}>{t('truthYes')}</span>
+                    <span className={`font-medium ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : ''}`}>{formatCurrency(market.yesPool)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={`${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-secondary'}`}>{t('truthNo')}</span>
+                    <span className={`font-medium ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : ''}`}>{formatCurrency(market.noPool)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Odds & Stats */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`text-center p-4 rounded-lg border ${isMarketDisputable() ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'bg-primary/10 border-primary/20'}`}>
+                  <div className={`text-sm mb-1 ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-muted-foreground'}`}>{t('truthYes')}</div>
+                  <div className={`text-2xl font-bold ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-primary'}`}>{market.yesOdds.toFixed(2)}x</div>
+                </div>
+                <div className={`text-center p-4 rounded-lg border ${isMarketDisputable() ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'bg-secondary/10 border-secondary/20'}`}>
+                  <div className={`text-sm mb-1 ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-muted-foreground'}`}>{t('truthNo')}</div>
+                  <div className={`text-2xl font-bold ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-secondary'}`}>{market.noOdds.toFixed(2)}x</div>
+                </div>
+              </div>
+
+              <div className={`grid grid-cols-2 gap-4 text-sm ${isMarketDisputable() ? 'text-gray-400 dark:text-gray-500' : 'text-muted-foreground'}`}>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>{formatNumber(market.totalCasters)} {t('verifiers')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  <span>{formatNumber(Math.floor(Math.random() * 10000) + 5000)} {t('views')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  <span>{comments.length} {t('comments')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4" />
+                  <span>{formatNumber(Math.floor(Math.random() * 500) + 100)} {t('likes')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* AI Resolution Status - Only show for disputable markets */}
       {isMarketDisputable() && market.resolution_data && (
         <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
@@ -531,7 +739,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
           </CardContent>
         </Card>
       )}
-
 
       {/* Evidence Submission Interface - Only for disputable markets */}
       {isMarketDisputable() && (
@@ -669,120 +876,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
         </Card>
       )}
 
-      {/* Market Header Card */}
-      <Card className="overflow-hidden">
-        {market.imageUrl && (
-          <div className="relative h-48 overflow-hidden">
-            <img
-              src={market.imageUrl}
-              alt={getTranslatedText(market.claim, market.claimTranslations)}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
-
-            {market.trending && (
-              <div className="absolute top-4 left-4">
-                <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  {t('trending')}
-                </Badge>
-              </div>
-            )}
-
-            <div className="absolute bottom-4 left-4 right-4">
-              <Badge variant="outline" className="text-xs mb-2 bg-background/80">
-                {market.category}
-              </Badge>
-              <h1 className="text-xl font-bold text-white mb-2">
-                {getTranslatedText(market.claim, market.claimTranslations)}
-              </h1>
-            </div>
-          </div>
-        )}
-
-        <CardContent className="p-6">
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Market Info */}
-            <div className="lg:col-span-2 space-y-4">
-              <p className="text-muted-foreground">
-                {getTranslatedText(market.description, market.descriptionTranslations)}
-              </p>
-
-              {/* Location & Source */}
-              <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4" />
-                  <span>{market.country || market.region}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  <span>{market.source}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span>{t('expiresIn')} {getTimeRemaining(market.expiresAt)}</span>
-                </div>
-              </div>
-
-              {/* Pool Distribution */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">{t('truthVerificationPool')}</span>
-                  <span className="text-sm font-bold">{formatCurrency(market.totalPool)}</span>
-                </div>
-                <Progress
-                  value={(market.yesPool / market.totalPool) * 100}
-                  className="h-3"
-                />
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-primary">{t('truthYes')}</span>
-                    <span className="font-medium">{formatCurrency(market.yesPool)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-secondary">{t('truthNo')}</span>
-                    <span className="font-medium">{formatCurrency(market.noPool)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Odds & Stats */}
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center p-4 bg-primary/10 rounded-lg border border-primary/20">
-                  <div className="text-sm text-muted-foreground mb-1">{t('truthYes')}</div>
-                  <div className="text-2xl font-bold text-primary">{market.yesOdds.toFixed(2)}x</div>
-                </div>
-                <div className="text-center p-4 bg-secondary/10 rounded-lg border border-secondary/20">
-                  <div className="text-sm text-muted-foreground mb-1">{t('truthNo')}</div>
-                  <div className="text-2xl font-bold text-secondary">{market.noOdds.toFixed(2)}x</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  <span>{formatNumber(market.totalCasters)} {t('verifiers')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  <span>{formatNumber(Math.floor(Math.random() * 10000) + 5000)} {t('views')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4" />
-                  <span>{comments.length} {t('comments')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4" />
-                  <span>{formatNumber(Math.floor(Math.random() * 500) + 100)} {t('likes')}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Tab Navigation */}
       <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg">
         {[
@@ -812,9 +905,9 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
         })}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className={`grid gap-6 ${isMarketDisputable() ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
         {/* Main Content */}
-        <div className="lg:col-span-2">
+        <div className={isMarketDisputable() ? '' : 'lg:col-span-2'}>
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <Card>
@@ -1138,180 +1231,158 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
           )}
         </div>
 
-        {/* Sidebar - Casting Interface */}
-        <div className="space-y-6">
-          {market.status === 'active' ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  {t('castYourPosition')}
-                </CardTitle>
-                <CardDescription>
-                  {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Quick Cast Buttons */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">{t('quickCastTruth')}</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {quickCastAmounts.slice(0, 4).map((amount) => (
-                      <Button
-                        key={`yes-${amount}`}
-                        variant="outline"
-                        size="sm"
-                        className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleQuickCast('yes', amount);
-                        }}
-                        disabled={walletConnected && amount > userBalance}
-                      >
-                        <span className="text-primary font-semibold">TRUE</span>
-                        <span className="ml-2">{amount} HBAR</span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">{t('quickCastFalse')}</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {quickCastAmounts.slice(0, 4).map((amount) => (
-                      <Button
-                        key={`no-${amount}`}
-                        variant="outline"
-                        size="sm"
-                        className="bg-secondary/5 border-secondary/20 hover:bg-secondary/10 transition-colors"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleQuickCast('no', amount);
-                        }}
-                        disabled={walletConnected && amount > userBalance}
-                      >
-                        <span className="text-secondary font-semibold">FALSE</span>
-                        <span className="ml-2">{amount} HBAR</span>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Custom Cast */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">{t('customAmount')}</Label>
+        {/* Sidebar - Casting Interface - Only show for non-disputable markets */}
+        {!isMarketDisputable() && (
+          <div className="space-y-6">
+            {market.status === 'active' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5" />
+                    {t('castYourPosition')}
+                  </CardTitle>
+                  <CardDescription>
+                    {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Quick Cast Buttons */}
                   <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <Select value={castPosition} onValueChange={(value: any) => handlePositionChange(value)}>
-                        <SelectTrigger className="w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="yes">{t('truth')}</SelectItem>
-                          <SelectItem value="no">{t('false')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                        value={castAmount}
-                        onChange={(e) => handleAmountChange(e.target.value)}
-                        className="flex-1"
-                      />
+                    <Label className="text-sm font-medium">{t('quickCastTruth')}</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {quickCastAmounts.slice(0, 4).map((amount) => (
+                        <Button
+                          key={`yes-${amount}`}
+                          variant="outline"
+                          size="sm"
+                          className="bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleQuickCast('yes', amount);
+                          }}
+                          disabled={walletConnected && amount > userBalance}
+                        >
+                          <span className="text-primary font-semibold">TRUE</span>
+                          <span className="ml-2">{amount} HBAR</span>
+                        </Button>
+                      ))}
                     </div>
-                    
-                    {/* Real-time Profit Calculator */}
-                    {profitCalculation && (
-                      <div className="p-3 bg-muted/30 rounded-lg border border-border">
-                        <h4 className="text-sm font-medium mb-2 text-primary">Profit Calculator</h4>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Your Stake:</span>
-                            <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Odds:</span>
-                            <span className="font-medium">{(castPosition === 'yes' ? market.yesOdds : market.noOdds).toFixed(2)}x</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Potential Return:</span>
-                            <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
-                          </div>
-                          <div className="flex justify-between border-t border-border pt-1 mt-2">
-                            <span className="text-muted-foreground">Profit if Correct:</span>
-                            <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Loss if Wrong:</span>
-                            <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">{t('quickCastFalse')}</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {quickCastAmounts.slice(0, 4).map((amount) => (
+                        <Button
+                          key={`no-${amount}`}
+                          variant="outline"
+                          size="sm"
+                          className="bg-secondary/5 border-secondary/20 hover:bg-secondary/10 transition-colors"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleQuickCast('no', amount);
+                          }}
+                          disabled={walletConnected && amount > userBalance}
+                        >
+                          <span className="text-secondary font-semibold">FALSE</span>
+                          <span className="ml-2">{amount} HBAR</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Custom Cast */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">{t('customAmount')}</Label>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Select value={castPosition} onValueChange={(value: any) => handlePositionChange(value)}>
+                          <SelectTrigger className="w-24">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="yes">{t('truth')}</SelectItem>
+                            <SelectItem value="no">{t('false')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                          value={castAmount}
+                          onChange={(e) => handleAmountChange(e.target.value)}
+                          className="flex-1"
+                        />
+                      </div>
+
+                      {/* Real-time Profit Calculator */}
+                      {profitCalculation && (
+                        <div className="p-3 bg-muted/30 rounded-lg border border-border">
+                          <h4 className="text-sm font-medium mb-2 text-primary">Profit Calculator</h4>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Your Stake:</span>
+                              <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Odds:</span>
+                              <span className="font-medium">{(castPosition === 'yes' ? market.yesOdds : market.noOdds).toFixed(2)}x</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Potential Return:</span>
+                              <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1 mt-2">
+                              <span className="text-muted-foreground">Profit if Correct:</span>
+                              <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Loss if Wrong:</span>
+                              <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    onClick={handleCustomCast}
-                    className="w-full gap-2"
-                    disabled={walletConnected && (!castAmount || parseFloat(castAmount) > userBalance)}
-                  >
-                    <Target className="h-4 w-4" />
-                    {t('castPosition')}
-                  </Button>
-                </div>
-
-                {/* Potential Return */}
-                {castAmount && !isNaN(parseFloat(castAmount)) && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
-                    <div className="font-semibold text-green-400">
-                      {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
+                      )}
                     </div>
+                    <Button
+                      onClick={handleCustomCast}
+                      className="w-full gap-2"
+                      disabled={walletConnected && (!castAmount || parseFloat(castAmount) > userBalance)}
+                    >
+                      <Target className="h-4 w-4" />
+                      {t('castPosition')}
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Market Not Active</CardTitle>
-                <CardDescription>
-                  This market is {market.status}. Placing new positions is disabled.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
 
-          {/* Market Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t('marketStatistics')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{t('totalVolume')}</span>
-                <span className="font-medium">{formatCurrency(market.totalPool)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{t('totalVerifiers')}</span>
-                <span className="font-medium">{formatNumber(market.totalCasters)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{t('market_age')}</span>
-                <span className="font-medium">5 days</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{t('liquidity')}</span>
-                <span className="font-medium text-green-500">High</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  {/* Potential Return */}
+                  {castAmount && !isNaN(parseFloat(castAmount)) && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
+                      <div className="font-semibold text-green-400">
+                        {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Market Not Active</CardTitle>
+                  <CardDescription>
+                    This market is {market.status}. Placing new positions is disabled.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* Market Activity Feed */}

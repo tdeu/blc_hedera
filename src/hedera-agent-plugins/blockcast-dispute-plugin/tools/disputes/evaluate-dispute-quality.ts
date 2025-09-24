@@ -129,7 +129,7 @@ const evaluateTimestamp = (evidenceTimestamp: string, marketCloseTime: string) =
   } else {
     // Evidence after market close gets reduced score based on delay
     const delayHours = (evidenceTime - closeTime) / (1000 * 60 * 60);
-    return Math.max(0, 1 - (delayHours / 48)); // Linear decay over 48 hours
+    return Math.max(0, 1 - (delayHours / 168)); // Linear decay over 168 hours (7 days)
   }
 };
 

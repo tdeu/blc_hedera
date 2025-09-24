@@ -24,6 +24,7 @@ import Admin from './components/admin/Admin';
 import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
 import PredictionAnalysisPanel from './components/admin/PredictionAnalysisPanel';
 import { adminService } from './utils/adminService';
+import { marketStatusService } from './utils/marketStatusService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
 import { userDataService } from './utils/userDataService';
@@ -39,6 +40,7 @@ import { Gift, Sparkles, Wallet, Shield, Target, Zap, Users } from 'lucide-react
 import { mockVerificationHistory } from './utils/mockData';
 import { useHedera } from './utils/useHedera';
 import { walletService, WalletConnection } from './utils/walletService';
+import { castTokenService } from './utils/castTokenService';
 
 interface UserProfile {
   id: string;
@@ -110,6 +112,7 @@ export default function App() {
   
   // Wallet state
   const [walletConnection, setWalletConnection] = useState<WalletConnection | null>(null);
+  const [castBalance, setCastBalance] = useState<number>(0);
   
   // Blockchain state - maps market IDs to their deployed contract addresses
   const [marketContracts, setMarketContracts] = useState<Record<string, string>>({});
@@ -291,10 +294,23 @@ export default function App() {
     console.log('🔥 MAIN useEffect triggered - will call initializeApp');
     initializeApp();
 
+    // Start market status monitoring
+    console.log('🚀 Starting market status service...');
+    marketStatusService.start();
+
     // Make test function available in browser console for debugging
     (window as any).testMarketRefresh = testMarketRefresh;
     (window as any).marketContracts = marketContracts;
-    console.log('🧪 DEBUG: window.testMarketRefresh() and window.marketContracts available in console');
+    (window as any).castTokenService = castTokenService;
+    (window as any).walletService = walletService;
+    (window as any).marketStatusService = marketStatusService;
+    console.log('🧪 DEBUG: window.testMarketRefresh(), window.marketContracts, window.castTokenService, window.walletService, and window.marketStatusService available in console');
+
+    // Cleanup on unmount
+    return () => {
+      console.log('🛑 Cleaning up market status service...');
+      marketStatusService.stop();
+    };
   }, []);
   
   // Debug all state changes
@@ -472,7 +488,7 @@ export default function App() {
       const connection = await walletService.autoConnect();
       if (connection) {
         setWalletConnection(connection);
-        updateUserBalanceFromWallet(connection);
+        await updateUserBalanceFromWallet(connection);
       }
     } catch (error) {
       console.log('Auto-connect failed, user needs to connect manually');
@@ -500,7 +516,7 @@ export default function App() {
       }
 
       setWalletConnection(connection);
-      updateUserBalanceFromWallet(connection);
+      await updateUserBalanceFromWallet(connection);
 
       // Check if on correct network
       if (!walletService.isOnHederaTestnet()) {
@@ -523,16 +539,28 @@ export default function App() {
     }
   };
 
-  const updateUserBalanceFromWallet = (connection: WalletConnection) => {
+  const updateUserBalanceFromWallet = async (connection: WalletConnection) => {
     setUserProfile(prev => prev ? {
       ...prev,
       balance: parseFloat(connection.balance)
     } : null);
+
+    // Also update CAST token balance
+    try {
+      const castBalanceStr = await walletService.getCastTokenBalance();
+      const castBalanceNumber = parseFloat(castBalanceStr);
+      setCastBalance(castBalanceNumber);
+      console.log('💰 CAST Balance updated:', castBalanceNumber);
+    } catch (error) {
+      console.error('Failed to fetch CAST balance:', error);
+      setCastBalance(0);
+    }
   };
 
   const disconnectWallet = () => {
     walletService.disconnect();
     setWalletConnection(null);
+    setCastBalance(0);
     // Reset balance to 0 when wallet is disconnected
     setUserProfile(prev => prev ? {
       ...prev,
@@ -899,8 +927,9 @@ export default function App() {
           console.warn(`⚠️ Failed to query factory for market address:`, error);
         }
 
-        // Last resort fallback - this will likely fail for betting
-        console.warn(`❌ Market ${marketId} not found in factory. This market may not be deployed.`);
+        // Last resort fallback - allow local betting without blockchain
+        console.warn(`❌ Market ${marketId} not found in factory. Enabling local betting mode.`);
+        toast.info('Betting in local mode - bets will be stored locally until market is deployed to blockchain');
         return null;
       };
 
@@ -910,8 +939,11 @@ export default function App() {
       const contractAddress = await getContractAddress();
       contractAddressForRefresh = contractAddress; // Store for later use
 
+      // Always record bet locally first
+      console.log(`📝 Proceeding with bet placement for market ${marketId}. Contract: ${contractAddress || 'local mode'}`);
+
       if (contractAddress) {
-        console.log(`📝 Contract address ready for market ${marketId}: ${contractAddress}`);
+        console.log(`🚀 Placing bet on blockchain contract: ${contractAddress}`);
 
         // Place bet directly on the existing market contract
         hederaPlaceBetWithAddress(contractAddress, position, amount).then(transactionId => {
@@ -947,8 +979,9 @@ export default function App() {
           // UI continues to work normally even if blockchain fails
         });
       } else {
-        console.warn(`❌ Cannot place bet on market ${marketId}: No contract address found (not in database, local state, or factory)`);
-        toast.error('This market is not deployed on the blockchain yet. Please contact an admin.');
+        console.log(`📱 No contract found - bet will be stored locally for market ${marketId}`);
+        // Bet was already recorded locally above, so this is fine
+        // User will get success message below
       }
     }
 
@@ -1006,35 +1039,54 @@ export default function App() {
         imageUrl: marketData.imageUrl // Add the imageUrl field
       };
 
-      // Submit to Hedera blockchain in background (don't let errors affect UI)
+      // Submit to pending markets first (for admin approval)
+      pendingMarketsService.submitMarket(
+        newMarket,
+        walletConnection.address
+      );
+
+      // Submit to Hedera blockchain and wait for deployment
+      console.log('🔗 Attempting to create market on Hedera...', {
+        isHederaConnected,
+        hasHederaCreateMarket: !!hederaCreateMarket,
+        marketId: newMarket.id
+      });
+
       if (isHederaConnected && hederaCreateMarket) {
-        hederaCreateMarket(marketData).then(contract => {
-          if (contract) {
-            console.log(`Market created on Hedera: ${contract.contractId}`);
+        console.log('⏳ Starting blockchain deployment for market:', newMarket.id);
 
-            // Store the contract address with the pending market AND update Supabase if already approved
-            try {
-              const pendingMarkets = pendingMarketsService.getPendingMarkets();
-              const updatedMarkets = pendingMarkets.map(pending =>
-                pending.id === newMarket.id
-                  ? { ...pending, contractAddress: contract.contractId }
-                  : pending
-              );
+        try {
+          // Wait for contract deployment to complete
+          const contract = await hederaCreateMarket(marketData);
 
-              // Update the pending markets with contract address
-              localStorage.setItem('blockcast_pending_markets', JSON.stringify(updatedMarkets));
-              console.log(`✅ Contract address ${contract.contractId} stored with pending market ${newMarket.id}`);
+          if (contract && contract.contractId) {
+            console.log(`✅ Market created on Hedera: ${contract.contractId}`);
 
-              // Contract address will be included when market gets approved via storeApprovedMarket()
-              console.log(`✅ Contract ${contract.contractId} stored locally for market ${newMarket.id} - will be saved to Supabase when approved`);
-            } catch (storageError) {
-              console.warn('Failed to store contract address:', storageError);
-            }
+            // Update the pending market with contract address immediately
+            const pendingMarkets = pendingMarketsService.getPendingMarkets();
+            const updatedMarkets = pendingMarkets.map(pending =>
+              pending.id === newMarket.id
+                ? { ...pending, contractAddress: contract.contractId }
+                : pending
+            );
+
+            // Update the pending markets with contract address
+            localStorage.setItem('blockcast_pending_markets', JSON.stringify(updatedMarkets));
+            console.log(`✅ Contract address ${contract.contractId} stored with pending market ${newMarket.id}`);
+
+            toast.success('Market created and deployed to blockchain! Awaiting admin approval.');
+          } else {
+            console.warn('⚠️ Contract deployment returned invalid result');
+            toast.success('Market created! Running in local mode until blockchain deployment completes.');
           }
-        }).catch(error => {
-          console.warn('Blockchain market creation failed (running in mock mode):', error);
-          // Don't show error to user as the market creation itself was successful
-        });
+        } catch (error) {
+          console.error('❌ Blockchain market creation failed:', error);
+          console.log('🔧 Market will run without blockchain contract (bets will be stored locally)');
+          toast.success('Market created! Running in local mode due to blockchain deployment issue.');
+        }
+      } else {
+        console.log('🔧 Hedera not connected - market will run in local mode');
+        toast.success('Market created! Running in local mode.');
       }
 
       // Handle different market types differently
@@ -1072,8 +1124,7 @@ export default function App() {
         toast.success(`Past event published for community verification! It will be disputable for ${DISPUTE_PERIOD.HOURS} hours.`);
         setCurrentTab('verify-truth'); // Return to verify truth section
       } else {
-        // Regular markets go through pending approval process
-        pendingMarketsService.submitMarket(newMarket, walletConnection.address);
+        // Regular markets were already submitted to pending approval above
 
         // Record market creation in userDataService
         console.log('🔥 About to call recordMarketCreation with newMarket:', newMarket);
@@ -1086,7 +1137,7 @@ export default function App() {
           newMarket
         );
 
-        toast.success('Market submitted for admin approval! You\'ll be notified once it\'s reviewed.');
+        // Don't show success message here - it was already shown above based on blockchain deployment status
         setCurrentTab('markets');
       }
     } catch (error) {
@@ -1191,6 +1242,8 @@ export default function App() {
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
           userBalance={userProfile?.balance || 0}
+          castBalance={castBalance}
+          walletConnected={walletConnection?.isConnected || false}
           userBets={userBets}
           verificationHistory={verificationHistory}
           onSelectVerification={handleSelectVerification}
@@ -1278,12 +1331,13 @@ export default function App() {
       <UserProvider walletConnection={walletConnection}>
         <div className="min-h-screen bg-background flex flex-col">
         {/* Navigation */}
-        <TopNavigation 
+        <TopNavigation
           currentTab={currentTab}
           onTabChange={handleTabChange}
           isDarkMode={isDarkMode}
           onToggleDarkMode={handleToggleDarkMode}
           userBalance={userProfile?.balance || 0}
+          castBalance={castBalance}
           walletConnected={walletConnection?.isConnected || false}
           walletAddress={walletConnection?.address}
           onConnectWallet={connectWallet}

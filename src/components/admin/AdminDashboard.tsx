@@ -17,7 +17,10 @@ import {
   Timer,
   EyeOff,
   Eye,
-  Gavel
+  Gavel,
+  ChevronDown,
+  ChevronUp,
+  Scale
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
@@ -44,6 +47,7 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const [marketsLoading, setMarketsLoading] = useState(true);
   const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [isOfflineMarketsExpanded, setIsOfflineMarketsExpanded] = useState(false);
 
   useEffect(() => {
     loadAdminStats();
@@ -145,34 +149,55 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
     }
   };
 
-  // Helper functions to categorize markets
+  // Helper functions to categorize markets - mutually exclusive categories
+  // NOTE: expiresAt = when dispute period starts, NOT final expiration
   const categorizeMarkets = (markets: BettingMarket[]) => {
     const now = new Date();
 
-    // Filter out offline markets for public display but include them in admin counts
-    const activeMarkets = markets.filter(market => market.status !== 'offline');
+    // Mutually exclusive categorization
+    const futureMarkets: BettingMarket[] = [];
+    const disputableMarkets: BettingMarket[] = [];
+    const expiredMarkets: BettingMarket[] = [];
+    const offlineMarkets: BettingMarket[] = [];
 
-    const futureMarkets = activeMarkets.filter(market =>
-      market.marketType === 'future' &&
-      market.status === 'active' &&
-      market.expiresAt && market.expiresAt > now
-    );
+    markets.forEach(market => {
+      // First, categorize offline markets
+      if (market.status === 'offline') {
+        offlineMarkets.push(market);
+        return;
+      }
 
-    const pastMarkets = activeMarkets.filter(market =>
-      market.marketType === 'present' ||
-      (market.marketType === 'future' && market.status !== 'active')
-    );
+      // Future Markets: Active markets where dispute period hasn't started yet
+      if (market.status === 'active' && market.marketType === 'future') {
+        // If expiresAt is in the future, it's still a future market
+        const disputePeriodStarted = market.expiresAt && market.expiresAt <= now;
 
-    const expiredMarkets = activeMarkets.filter(market =>
-      market.marketType === 'future' &&
-      market.expiresAt && market.expiresAt <= now
-    );
+        if (!disputePeriodStarted) {
+          futureMarkets.push(market);
+          return;
+        }
+      }
 
-    const offlineMarkets = markets.filter(market => market.status === 'offline');
+      // Disputable Markets: Markets where dispute period has started but not resolved
+      if (
+        // Markets in active dispute states
+        market.status === 'pending_resolution' ||
+        market.status === 'disputing' ||
+        market.status === 'disputable' ||
+        // OR active markets where dispute period has started (expiresAt passed)
+        (market.status === 'active' && market.expiresAt && market.expiresAt <= now)
+      ) {
+        disputableMarkets.push(market);
+        return;
+      }
+
+      // Expired Markets: Everything else (resolved, present-type markets, etc.)
+      expiredMarkets.push(market);
+    });
 
     return {
       future: futureMarkets,
-      past: pastMarkets,
+      disputable: disputableMarkets,
       expired: expiredMarkets,
       offline: offlineMarkets,
       total: markets.length
@@ -330,19 +355,19 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
             />
 
             <StatCard
-              title="Past Events"
-              value={marketData.past.length}
-              icon={History}
-              trend={`${marketData.past.length} verification markets`}
-              color="green"
+              title="Disputable Markets"
+              value={marketData.disputable.length}
+              icon={Scale}
+              trend={`${marketData.disputable.length} markets in dispute period or resolution`}
+              color="yellow"
             />
 
             <StatCard
               title="Expired Markets"
               value={marketData.expired.length}
               icon={Timer}
-              trend={`${marketData.expired.length} awaiting resolution`}
-              color="yellow"
+              trend={`${marketData.expired.length} total expired markets`}
+              color="red"
             />
 
             <StatCard
@@ -431,23 +456,23 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
                 </CardContent>
               </Card>
 
-              {/* Past Events */}
+              {/* Disputable Markets */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <History className="h-5 w-5" />
-                    Past Events ({marketData.past.length})
+                    <Scale className="h-5 w-5" />
+                    Disputable Markets ({marketData.disputable.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-                  {marketData.past.length > 0 ? (
-                    marketData.past.slice(0, 10).map(market => (
+                  {marketData.disputable.length > 0 ? (
+                    marketData.disputable.slice(0, 10).map(market => (
                       <MarketCard key={market.id} market={market} />
                     ))
                   ) : (
                     <div className="text-center py-4 text-muted-foreground">
-                      <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>No past events</p>
+                      <Scale className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No disputable markets</p>
                     </div>
                   )}
                 </CardContent>
@@ -476,20 +501,34 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
               </Card>
             </div>
 
-            {/* Offline Markets Section */}
+            {/* Offline Markets Section - Collapsible */}
             {marketData.offline.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <EyeOff className="h-5 w-5" />
-                    Offline Markets ({marketData.offline.length})
+                  <CardTitle
+                    className="flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-2 -m-2 rounded"
+                    onClick={() => setIsOfflineMarketsExpanded(!isOfflineMarketsExpanded)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <EyeOff className="h-5 w-5" />
+                      Offline Markets ({marketData.offline.length})
+                    </div>
+                    <Button variant="ghost" size="sm">
+                      {isOfflineMarketsExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 max-h-60 overflow-y-auto">
-                  {marketData.offline.map(market => (
-                    <MarketCard key={market.id} market={market} />
-                  ))}
-                </CardContent>
+                {isOfflineMarketsExpanded && (
+                  <CardContent className="space-y-3 max-h-60 overflow-y-auto">
+                    {marketData.offline.map(market => (
+                      <MarketCard key={market.id} market={market} />
+                    ))}
+                  </CardContent>
+                )}
               </Card>
             )}
           </div>
@@ -513,19 +552,6 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
         </Card>
       </div>
 
-      {/* Dispute Management Section */}
-      {stats && stats.activeDisputes > 0 && (
-        <div className="mt-6">
-          <AdminDisputePanel
-            disputes={disputes}
-            onReviewDispute={handleReviewDispute}
-            showHCSHistory={true}
-            showBondTransactions={true}
-            enableContractArbitration={false}
-            isLoading={disputesLoading}
-          />
-        </div>
-      )}
 
       {/* System Status */}
       <Card>

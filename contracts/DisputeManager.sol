@@ -20,7 +20,7 @@ contract DisputeManager is ReentrancyGuard {
     IERC20 public bondToken; // CAST token for bonds
 
     uint256 public constant DISPUTE_BOND_AMOUNT = 100e18; // 100 CAST tokens
-    uint256 public constant DISPUTE_PERIOD_HOURS = 72; // 72 hours dispute period
+    uint256 public constant DISPUTE_PERIOD_HOURS = 168; // 168 hours dispute period (7 days)
 
     uint256 private disputeCounter; // Simple counter instead of Counters library
 

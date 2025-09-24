@@ -40,9 +40,13 @@ export const TOKEN_CONFIG = {
 
 // Token Addresses (Hedera Testnet)
 export const TOKEN_ADDRESSES = {
-  CAST_TOKEN: '0x5e383bD628a0cda81913bbd5EfB4DD1989fCc6e2',
+  CAST_TOKEN: '0x0F15071DaBb3c22203dA7071A031a404ce2B1a2d', // Updated from deployments-testnet.json
   USDC_TOKEN: '0x0000000000000000000000000000000000000000', // Placeholder
-  FACTORY_CONTRACT: '0x31049333C880702e1f5Eae7d26A125c667cee91B'
+  FACTORY_CONTRACT: '0x97bF56127fD8BD6A8211d5a993c7B215CCe3671A', // Updated from deployments-testnet.json
+  TREASURY_CONTRACT: '0xabbc9868cbfab2Db4336D0e192DF24754A8C8Da8', // Updated from deployments-testnet.json
+  ADMIN_MANAGER_CONTRACT: '0x82B5FdaA1Fb566D1215277d40a04E369052c03E0', // Updated from deployments-testnet.json
+  BET_NFT_CONTRACT: '0x3b1E8b887162e7a58b992ad0A9b2c760D57f68C1', // Added from deployments-testnet.json
+  DISPUTE_MANAGER_CONTRACT: '0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b' // Deployed successfully
 } as const;
 
 // Market Status Types

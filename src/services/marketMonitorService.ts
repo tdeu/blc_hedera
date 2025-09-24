@@ -140,11 +140,11 @@ export class MarketMonitorService {
     console.log(`⏰ Processing expired market: ${market.id} - "${market.question}"`);
 
     try {
-      // Update market status to pending_resolution and set evidence period
-      const evidencePeriodHours = 48; // 48 hours for evidence submission
+      // Update market status to disputable and set evidence period
+      const evidencePeriodHours = 168; // 168 hours (7 days) for evidence submission
       const evidencePeriodEnd = new Date(Date.now() + evidencePeriodHours * 60 * 60 * 1000);
 
-      await this.supabaseService.updateMarketStatus(market.id, 'pending_resolution', {
+      await this.supabaseService.updateMarketStatus(market.id, 'disputable', {
         dispute_period_end: evidencePeriodEnd.toISOString()
       });
 

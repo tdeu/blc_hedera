@@ -1,13 +1,14 @@
 {
   "network": "testnet",
   "deployer": "0xfd76D4c18D5A10F558d057743bFB0218130157f4",
-  "timestamp": "2025-09-15T09:48:59.099Z",
+  "timestamp": "2025-09-24T13:04:31.696Z",
   "contracts": {
     "AdminManager": "0x82B5FdaA1Fb566D1215277d40a04E369052c03E0",
     "CastToken": "0x0F15071DaBb3c22203dA7071A031a404ce2B1a2d",
     "Treasury": "0xabbc9868cbfab2Db4336D0e192DF24754A8C8Da8",
     "BetNFT": "0x3b1E8b887162e7a58b992ad0A9b2c760D57f68C1",
-    "PredictionMarketFactory": "0x97bF56127fD8BD6A8211d5a993c7B215CCe3671A"
+    "PredictionMarketFactory": "0x97bF56127fD8BD6A8211d5a993c7B215CCe3671A",
+    "DisputeManager": "0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b"
   },
   "transactionHashes": {}
 }

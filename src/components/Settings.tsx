@@ -8,13 +8,14 @@ import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Settings as SettingsIcon, User, Globe, Palette, Database, Languages, Moon, Sun, Wallet, History, BarChart3, Bell, Shield, Lock, Smartphone } from 'lucide-react';
+import { Settings as SettingsIcon, User, Globe, Palette, Database, Languages, Moon, Sun, Wallet, History, BarChart3, Bell, Shield, Lock, Smartphone, Trophy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useLanguage } from './LanguageContext';
 import { toast } from 'sonner@2.0.3';
 import BettingPortfolio, { UserBet } from './BettingPortfolio';
 import VerificationHistory, { VerificationResult } from './VerificationHistory';
 import UserCreatedMarkets from './UserCreatedMarkets';
+import CreatorRewards from './CreatorRewards';
 import { useUser } from '../contexts/UserContext';
 import { userDataService } from '../utils/userDataService';
 import { Textarea } from './ui/textarea';
@@ -23,13 +24,15 @@ interface SettingsProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   userBalance?: number;
+  castBalance?: number;
+  walletConnected?: boolean;
   userBets?: UserBet[];
   verificationHistory?: VerificationResult[];
   onSelectVerification?: (result: VerificationResult) => void;
   onCreateMarket?: () => void;
 }
 
-export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, userBets = [], verificationHistory = [], onSelectVerification, onCreateMarket }: SettingsProps) {
+export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0, castBalance = 0, walletConnected = false, userBets = [], verificationHistory = [], onSelectVerification, onCreateMarket }: SettingsProps) {
   const { language, setLanguage, t } = useLanguage();
   const { profile, updateUserProfile, loading } = useUser();
   
@@ -38,7 +41,7 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     
-    if (tabParam && ['portfolio', 'markets', 'history', 'preferences', 'data'].includes(tabParam)) {
+    if (tabParam && ['portfolio', 'markets', 'history', 'rewards', 'preferences', 'notifications', 'privacy', 'data'].includes(tabParam)) {
       return tabParam;
     }
     return 'portfolio';
@@ -134,7 +137,13 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
       </div>
 
       {/* Settings Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setActiveTab(value);
+        // Update URL to reflect the current tab
+        const url = new URL(window.location);
+        url.searchParams.set('tab', value);
+        window.history.replaceState({}, '', url);
+      }} className="w-full">
         <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="portfolio" className="gap-2">
             <Wallet className="h-4 w-4" />
@@ -160,9 +169,9 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
             <Shield className="h-4 w-4" />
             Privacy
           </TabsTrigger>
-          <TabsTrigger value="data" className="gap-2">
-            <Database className="h-4 w-4" />
-            Data
+          <TabsTrigger value="rewards" className="gap-2">
+            <Trophy className="h-4 w-4" />
+            Rewards
           </TabsTrigger>
         </TabsList>
 
@@ -464,6 +473,76 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
                     <p className="text-sm text-muted-foreground">Don't display your full wallet address publicly</p>
                   </div>
                   <Switch defaultChecked />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="rewards" className="space-y-6">
+          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                Creator Rewards
+              </CardTitle>
+              <CardDescription>
+                Earn CAST tokens by creating successful prediction markets
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Current Balance */}
+                <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-primary">Your CAST Balance</h3>
+                      <p className="text-sm text-muted-foreground">Available rewards tokens</p>
+                    </div>
+                    <div className="text-2xl font-bold text-primary">
+                      {castBalance || 0} CAST
+                    </div>
+                  </div>
+                </div>
+
+                {/* How it works */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold">How Creator Rewards Work</h4>
+                  <div className="grid gap-4">
+                    <div className="flex items-start gap-3 p-3 border rounded-lg">
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</div>
+                      <div>
+                        <h5 className="font-medium">Create a Market</h5>
+                        <p className="text-sm text-muted-foreground">Submit a prediction market for approval</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 border rounded-lg">
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">2</div>
+                      <div>
+                        <h5 className="font-medium">Get Approved</h5>
+                        <p className="text-sm text-muted-foreground">Market gets reviewed and approved by admins</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 border rounded-lg">
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">3</div>
+                      <div>
+                        <h5 className="font-medium">Earn 100 CAST</h5>
+                        <p className="text-sm text-muted-foreground">Receive 100 CAST tokens when market resolves</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 border rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-600">0</div>
+                    <p className="text-sm text-muted-foreground">Markets Created</p>
+                  </div>
+                  <div className="p-4 border rounded-lg text-center">
+                    <div className="text-2xl font-bold text-blue-600">0</div>
+                    <p className="text-sm text-muted-foreground">Total Earned</p>
+                  </div>
                 </div>
               </div>
             </CardContent>

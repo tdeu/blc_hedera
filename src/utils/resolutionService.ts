@@ -364,12 +364,12 @@ export class ResolutionService {
       // TODO: Call contract preliminary resolve
       // const txHash = await contractService.preliminaryResolve(marketContract, contractOutcome, adminSigner);
 
-      // Update database to pending resolution status
+      // Update database to disputable status
       if (supabase) {
         await supabase
           .from('approved_markets')
           .update({
-            status: 'pending_resolution',
+            status: 'disputable',
             dispute_period_end: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString()
           })
           .eq('id', marketId);
