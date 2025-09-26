@@ -113,9 +113,9 @@ contract PredictionMarket {
         require(_protocolFeeRate <= 1000, "Fee rate too high"); // Max 10%
         protocolFeeRate = _protocolFeeRate;
 
-        // Initialize with equal virtual liquidity for balanced pricing
-        yesShares = 100e18; // 100 YES shares
-        noShares = 100e18; // 100 NO shares
+        // Initialize with minimal virtual liquidity for balanced pricing
+        yesShares = 1e18; // 1 YES share
+        noShares = 1e18; // 1 NO share
         reserve = 0; // Start with 0 real reserve
     }
 

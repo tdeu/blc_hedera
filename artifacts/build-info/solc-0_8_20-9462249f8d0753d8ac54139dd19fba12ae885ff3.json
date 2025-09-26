@@ -1,0 +1,39 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_20-9462249f8d0753d8ac54139dd19fba12ae885ff3",
+  "solcVersion": "0.8.20",
+  "solcLongVersion": "0.8.20+commit.a1b79de6",
+  "userSourceNameMap": {
+    "contracts/TestPayable.sol": "project/contracts/TestPayable.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "shanghai",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/TestPayable.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.20;\r\n\r\ncontract TestPayable {\r\n    event ValueReceived(uint256 value, address sender);\r\n    event MinimumCheck(uint256 value, uint256 minimum, bool result);\r\n\r\n    uint256 public constant MINIMUM = 0.01 ether;\r\n    uint256 public lastValue;\r\n    address public lastSender;\r\n\r\n    function testPayable() external payable {\r\n        lastValue = msg.value;\r\n        lastSender = msg.sender;\r\n\r\n        emit ValueReceived(msg.value, msg.sender);\r\n        emit MinimumCheck(msg.value, MINIMUM, msg.value >= MINIMUM);\r\n\r\n        // Remove require to see what msg.value actually is\r\n        // require(msg.value >= MINIMUM, \"Value too low\");\r\n\r\n        // If we get here, everything worked\r\n    }\r\n\r\n    function getLastValue() external view returns (uint256, address) {\r\n        return (lastValue, lastSender);\r\n    }\r\n\r\n    receive() external payable {\r\n        lastValue = msg.value;\r\n        lastSender = msg.sender;\r\n        emit ValueReceived(msg.value, msg.sender);\r\n    }\r\n}"
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useLanguage } from './LanguageContext';
 import { useUser } from '../contexts/UserContext';
 import { walletService } from '../utils/walletService';
+import BuyCastButton from './BuyCastButton';
 // Logo placeholder - replace with actual image when available
 
 interface TopNavigationProps {
@@ -22,9 +23,11 @@ interface TopNavigationProps {
   walletAddress?: string;
   onConnectWallet?: () => void;
   onDisconnectWallet?: () => void;
+  hederaEVMService?: any; // HederaEVMService instance
+  onRefreshBalance?: () => void;
 }
 
-export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance, castBalance = 0, walletConnected, walletAddress, onConnectWallet, onDisconnectWallet }: TopNavigationProps) {
+export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onToggleDarkMode, userBalance, castBalance = 0, walletConnected, walletAddress, onConnectWallet, onDisconnectWallet, hederaEVMService, onRefreshBalance }: TopNavigationProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { language, setLanguage } = useLanguage();
   const { profile } = useUser();
@@ -134,7 +137,21 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
               <div className="flex items-center gap-1 bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">
                 <div className="w-3 h-3 rounded-full bg-blue-500 flex items-center justify-center text-white text-[8px] font-bold">C</div>
                 <span className="text-xs font-semibold text-blue-600">{castBalance.toFixed(0)} CAST</span>
+                {castBalance === 0 && (
+                  <span className="text-[8px] text-amber-600 ml-1">Need tokens</span>
+                )}
               </div>
+
+              {/* Buy CAST Button */}
+              {hederaEVMService && (
+                <BuyCastButton
+                  hederaService={hederaEVMService}
+                  isConnected={walletConnected || false}
+                  onBalanceUpdate={onRefreshBalance}
+                  walletAddress={walletAddress}
+                  className="ml-1"
+                />
+              )}
             </div>
 
             {/* Wallet Connect/Disconnect Button */}

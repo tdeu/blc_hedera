@@ -50,7 +50,9 @@
       "Bash(npm run typecheck:*)",
       "Bash(npm run:*)",
       "Read(//c/Users/thoma/**)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(move test-factory.js test-factory.cjs)",
+      "Bash(mv:*)"
     ],
     "deny": [],
     "ask": []

@@ -34,6 +34,7 @@ export interface BettingMarket {
   totalPool: number;
   yesPool: number;
   noPool: number;
+  volume?: number;  // Total CAST volume traded
   yesOdds: number;
   noOdds: number;
   totalCasters: number;
@@ -100,11 +101,12 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
   const safeMarkets = markets.map(market => ({
     ...market,
     claim: market.claim || 'Untitled Market',
-    category: market.category || 'General', 
+    category: market.category || 'General',
     source: market.source || 'Unknown',
     totalPool: market.totalPool || 0,
     yesPool: market.yesPool || 0,
     noPool: market.noPool || 0,
+    volume: market.volume || 0,  // Total CAST volume traded
     totalCasters: market.totalCasters || 0,
         yesOdds: market.yesOdds || 2.0,
         noOdds: market.noOdds || 2.0,
@@ -501,7 +503,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Total Pool</span>
-                    <span className="font-semibold">{formatCurrency(market.totalPool)} HBAR</span>
+                    <span className="font-semibold">{formatCurrency(market.volume)} CAST</span>
                   </div>
                   
                   <div className="flex items-center justify-between text-xs">
@@ -715,7 +717,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="betAmount">Amount (HBAR)</Label>
+                  <Label htmlFor="betAmount">Amount (CAST)</Label>
                   <Input
                     id="betAmount"
                     type="number"
@@ -727,10 +729,10 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                     placeholder="Enter amount..."
                   />
                   <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Balance: {userBalance.toFixed(3)} HBAR</span>
+                    <span>Balance: {userBalance.toFixed(3)} CAST</span>
                     {betAmount && selectedMarket && (
                       <span>
-                        Potential win: {(parseFloat(betAmount) * (betPosition === 'yes' ? selectedMarket.yesOdds : selectedMarket.noOdds)).toFixed(3)} HBAR
+                        Potential win: {(parseFloat(betAmount) * (betPosition === 'yes' ? selectedMarket.yesOdds : selectedMarket.noOdds)).toFixed(3)} CAST
                       </span>
                     )}
                   </div>

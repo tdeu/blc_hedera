@@ -134,7 +134,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     onPlaceBet(market.id, position, amount);
 
     // Success feedback
-    toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} HBAR`);
+    toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} CAST`);
   };
 
   const calculateProfit = (amount: number, position: 'yes' | 'no') => {
@@ -183,7 +183,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     setCastAmount('');
     setProfitCalculation(null);
 
-    toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} HBAR`);
+    toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} CAST`);
   };
 
   const handleCommentSubmit = () => {
@@ -1242,7 +1242,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                     {t('castYourPosition')}
                   </CardTitle>
                   <CardDescription>
-                    {t('currentBalance')}: {userBalance.toFixed(3)} HBAR
+                    {t('currentBalance')}: {userBalance.toFixed(3)} CAST
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1264,7 +1264,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                           disabled={walletConnected && amount > userBalance}
                         >
                           <span className="text-primary font-semibold">TRUE</span>
-                          <span className="ml-2">{amount} HBAR</span>
+                          <span className="ml-2">{amount} CAST</span>
                         </Button>
                       ))}
                     </div>
@@ -1287,7 +1287,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                           disabled={walletConnected && amount > userBalance}
                         >
                           <span className="text-secondary font-semibold">FALSE</span>
-                          <span className="ml-2">{amount} HBAR</span>
+                          <span className="ml-2">{amount} CAST</span>
                         </Button>
                       ))}
                     </div>
@@ -1327,7 +1327,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Your Stake:</span>
-                              <span className="font-medium">{profitCalculation.amount.toFixed(3)} HBAR</span>
+                              <span className="font-medium">{profitCalculation.amount.toFixed(3)} CAST</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Odds:</span>
@@ -1335,15 +1335,15 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Potential Return:</span>
-                              <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} HBAR</span>
+                              <span className="font-medium text-green-400">{profitCalculation.potential.toFixed(3)} CAST</span>
                             </div>
                             <div className="flex justify-between border-t border-border pt-1 mt-2">
                               <span className="text-muted-foreground">Profit if Correct:</span>
-                              <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} HBAR</span>
+                              <span className="font-bold text-green-400">+{profitCalculation.profit.toFixed(3)} CAST</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Loss if Wrong:</span>
-                              <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} HBAR</span>
+                              <span className="font-bold text-red-400">-{profitCalculation.amount.toFixed(3)} CAST</span>
                             </div>
                           </div>
                         </div>

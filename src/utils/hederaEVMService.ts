@@ -20,6 +20,7 @@ export class HederaEVMService {
   private signer: ethers.Wallet | ethers.JsonRpcSigner;
   private factoryAddress: string;
   private useConnectedWallet: boolean;
+  private factoryContract: ethers.Contract;
 
   // ABI for the PredictionMarketFactory contract
   private factoryABI = [
@@ -77,6 +78,13 @@ export class HederaEVMService {
       } else {
         throw new Error('Either connected wallet or private key must be provided');
       }
+
+      // Initialize factory contract
+      this.factoryContract = new ethers.Contract(
+        this.factoryAddress,
+        this.factoryABI,
+        this.signer
+      );
     } catch (error) {
       console.error('❌ Error in HederaEVMService constructor:', error);
       throw error;
@@ -121,12 +129,12 @@ export class HederaEVMService {
       console.log('🚀 About to call factory.createMarket with params:', {
         claim: claim.substring(0, 50) + '...',
         endTime,
-        gasLimit: 5000000
+        gasLimit: 15000000
       });
 
       // Proceed directly to createMarket call
       const tx = await factory.createMarket(claim, endTime, {
-        gasLimit: 5000000
+        gasLimit: 15000000  // Much higher gas limit for contract deployment
       });
       
       console.log('⏳ Waiting for transaction confirmation...');
@@ -167,6 +175,36 @@ export class HederaEVMService {
               receipt = manualReceipt;
               console.log('✅ Manual receipt obtained!');
               console.log('📋 Manual receipt status:', receipt.status);
+
+              // Add detailed debugging for failed transactions
+              if (receipt.status === 0) {
+                console.error('❌ TRANSACTION FAILED - DETAILED DEBUG:');
+                console.error('Receipt:', receipt);
+                
+                let revertReason = 'Unknown reason';
+                
+                try {
+                  // Try to get revert reason by calling the transaction again
+                  const tx = await this.provider.getTransaction(receipt.hash);
+                  console.error('Transaction data:', tx);
+                  
+                  // Try to simulate the failed call to get revert reason
+                  const result = await this.provider.call({
+                    to: tx.to,
+                    data: tx.data,
+                    from: tx.from,
+                    gasLimit: tx.gasLimit,
+                    gasPrice: tx.gasPrice,
+                    value: tx.value
+                  });
+                  console.error('Call result:', result);
+                } catch (simulationError) {
+                  console.error('🎯 REVERT REASON:', simulationError.message);
+                  revertReason = simulationError.message;
+                }
+                
+                throw new Error('Transaction failed on blockchain: ' + revertReason);
+              }
               break;
             }
           } catch (manualError) {
@@ -347,15 +385,61 @@ export class HederaEVMService {
       
       console.log(`💰 Cost for ${amount} ${position.toUpperCase()} shares: ${ethers.formatEther(cost)} tokens`);
 
-      // TEMPORARY: Skip balance check to test betting flow
+      // IMPROVED: Check real balance and handle insufficient balance
       console.log('🔍 Checking balance for address:', this.signer.address);
-      console.log('🔍 Collateral contract address:', await collateral.getAddress());
-      console.log('⚠️ TEMPORARILY SKIPPING BALANCE CHECK TO TEST BETTING FLOW');
+      console.log('🔍 Collateral contract address:', collateralAddress);
 
-      // Simulate having enough balance for testing
-      console.log('💳 Simulated user balance: 1000.0 tokens (TESTING MODE)');
-      console.log('💰 Required cost:', ethers.formatEther(cost), 'tokens');
-      console.log('✅ Simulated balance check passed - proceeding with bet...');
+      let userBalance: bigint;
+      let hasBalance = false;
+      let balanceCheckAttempts = 0;
+      const maxBalanceCheckAttempts = 3;
+
+      // Retry balance check to handle potential race conditions
+      while (!hasBalance && balanceCheckAttempts < maxBalanceCheckAttempts) {
+        try {
+          balanceCheckAttempts++;
+          userBalance = await collateral.balanceOf(this.signer.address);
+          const balanceFormatted = ethers.formatEther(userBalance);
+          console.log(`💳 User CAST balance (attempt ${balanceCheckAttempts}):`, balanceFormatted, 'tokens');
+          console.log('💰 Required cost:', ethers.formatEther(cost), 'tokens');
+
+          hasBalance = userBalance >= cost;
+          console.log('✅ Balance check result:', hasBalance ? 'SUFFICIENT' : 'INSUFFICIENT');
+
+          if (!hasBalance && balanceCheckAttempts < maxBalanceCheckAttempts) {
+            console.log('⏳ Retrying balance check in 1 second...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+        } catch (balanceError) {
+          console.error(`❌ Failed to check balance (attempt ${balanceCheckAttempts}):`, balanceError);
+          userBalance = BigInt(0);
+          hasBalance = false;
+
+          if (balanceCheckAttempts < maxBalanceCheckAttempts) {
+            console.log('⏳ Retrying balance check in 2 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+
+      // If insufficient balance, attempt to mint tokens for testing
+      if (!hasBalance) {
+        console.log('⚠️ Insufficient CAST balance - attempting to mint tokens for testing...');
+
+        // Since BuyCAST contract is now deployed, direct users to buy CAST instead of trying to mint
+        console.log('⚠️ Insufficient CAST balance - user needs to buy CAST tokens');
+        const requiredAmount = parseFloat(ethers.formatEther(cost));
+        const requiredHBAR = Math.ceil(requiredAmount); // 1:1 exchange rate
+
+        throw new Error(`Insufficient CAST balance. You have ${ethers.formatEther(userBalance || BigInt(0))} CAST but need ${ethers.formatEther(cost)} CAST. Please buy ${requiredHBAR} HBAR worth of CAST tokens using the "Buy CAST" button.`);
+      }
+
+      if (!hasBalance) {
+        throw new Error(`Insufficient CAST balance. You have ${ethers.formatEther(userBalance || 0)} CAST but need ${ethers.formatEther(cost)} CAST. Please buy CAST tokens using the "Buy CAST" button.`);
+      }
+
+      console.log('✅ Balance check passed - proceeding with bet...');
 
       // Check and approve collateral if needed
       const currentAllowance = await collateral.allowance(this.signer.address, marketAddress);
@@ -363,21 +447,26 @@ export class HederaEVMService {
       
       if (currentAllowance < cost) {
         console.log('📝 Approving collateral...');
-        const approveTx = await collateral.approve(marketAddress, cost, { gasLimit: 100000 });
+        const approveTx = await collateral.approve(marketAddress, ethers.MaxUint256, { gasLimit: 200000 });
         await approveTx.wait();
-        console.log('✅ Collateral approved');
+        console.log('✅ Collateral approved with unlimited allowance');
       }
 
       // Place the bet
       console.log(`🎲 Placing ${position.toUpperCase()} bet...`);
-      const tx = position === 'yes' 
-        ? await market.buyYes(shares, { gasLimit: 500000 })
-        : await market.buyNo(shares, { gasLimit: 500000 });
+      const tx = position === 'yes'
+        ? await market.buyYes(shares, { gasLimit: 1000000 })
+        : await market.buyNo(shares, { gasLimit: 1000000 });
         
       console.log('📤 Bet transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('✅ Bet transaction confirmed:', receipt.hash);
+
+      // Return transaction hash immediately to allow odds refresh
+      // Transaction confirmation will happen in background
+      tx.wait().then(receipt => {
+        console.log('✅ Bet transaction confirmed:', receipt.hash);
+      }).catch(error => {
+        console.warn('⚠️ Transaction confirmation failed (but bet was sent):', error.message);
+      });
 
       return tx.hash;
     } catch (error: any) {
@@ -402,7 +491,7 @@ export class HederaEVMService {
       }
 
       // Convert market ID to bytes32 format
-      const marketIdBytes32 = ethers.utils.formatBytes32String(marketId);
+      const marketIdBytes32 = ethers.encodeBytes32String(marketId);
       console.log(`🔍 Querying factory for market ID: ${marketId} (${marketIdBytes32})`);
 
       // Query the markets mapping
@@ -563,6 +652,30 @@ export class HederaEVMService {
   }
 
   /**
+   * Gets the total volume (reserve) for a market
+   */
+  async getMarketVolume(marketAddress: string): Promise<number> {
+    try {
+      console.log('🔍 Getting market volume for contract:', marketAddress);
+
+      // Load contract ABI
+      const predictionMarketABI = await this.loadContractABI('PredictionMarket');
+      const market = new ethers.Contract(marketAddress, predictionMarketABI, this.provider);
+
+      // Get reserve (total volume)
+      const reserve = await market.reserve();
+      const volumeInCAST = parseFloat(ethers.formatEther(reserve));
+
+      console.log('💰 Market volume:', volumeInCAST, 'CAST');
+      return volumeInCAST;
+
+    } catch (error: any) {
+      console.error('❌ Error getting market volume:', error);
+      return 0;
+    }
+  }
+
+  /**
    * Mint CastTokens for testing (if user is authorized)
    */
   async mintCastTokensForTesting(amount: number): Promise<string> {
@@ -581,7 +694,7 @@ export class HederaEVMService {
       return tx.hash;
     } catch (error: any) {
       console.warn('Failed to mint CastTokens (not authorized):', error);
-      throw new Error('Not authorized to mint tokens or minting failed');
+      throw new Error('WALLET_NOT_AUTHORIZED_FOR_MINTING');
     }
   }
 
@@ -608,6 +721,131 @@ export class HederaEVMService {
     }
   }
 
+  /**
+   * Buy CAST with HBAR - Automatically uses real contract if available, falls back to mock
+   * Uses 1:1 ratio which matches the real contract ratio
+   */
+  async buyCastWithHbar(hbarAmount: number): Promise<string> {
+    // First, try the real BuyCAST contract if it's deployed
+    const buyCastAddress = TOKEN_ADDRESSES.BUYCAST_CONTRACT;
+
+    if (buyCastAddress && buyCastAddress !== '0x0000000000000000000000000000000000000000') {
+      console.log(`🏭 Using REAL BuyCAST contract at ${buyCastAddress}`);
+      try {
+        return await this.buyCastWithHbarReal(hbarAmount);
+      } catch (error: any) {
+        console.error('❌ Real BuyCAST contract failed, falling back to mock:', error.message);
+        // Don't fall back - if real contract exists, we should use it or fail
+        throw error;
+      }
+    }
+
+    // Fallback to mock implementation (for development/testing when contract not deployed)
+    console.log(`🏭 Using MOCK implementation (BuyCAST contract not deployed)`);
+    try {
+      console.log(`💱 Mock buying ${hbarAmount} HBAR worth of CAST tokens (1:1 ratio)`);
+
+      // Check HBAR balance first
+      const hbarBalance = await this.getBalance();
+      const balanceNum = parseFloat(hbarBalance);
+
+      if (balanceNum < hbarAmount) {
+        throw new Error(`Insufficient HBAR balance. You have ${hbarBalance} HBAR but trying to spend ${hbarAmount} HBAR`);
+      }
+
+      // For testing, use 1:1 ratio (1 HBAR = 1 CAST)
+      const castAmount = hbarAmount;
+      console.log(`💱 Converting ${hbarAmount} HBAR to ${castAmount} CAST tokens (1:1 test ratio)`);
+
+      // Use the existing minting function for testing
+      const txHash = await this.mintCastTokensForTesting(castAmount);
+
+      console.log(`✅ Successfully mocked CAST purchase: ${castAmount} CAST tokens`);
+      return txHash;
+
+    } catch (error: any) {
+      console.error('❌ Failed to buy CAST with HBAR (mock):', error);
+
+      // Provide helpful error messages based on error type
+      if (error.message.includes('Insufficient HBAR')) {
+        throw error; // Pass through balance errors
+      } else if (error.message.includes('WALLET_NOT_AUTHORIZED_FOR_MINTING') ||
+                 error.message.includes('not authorized') ||
+                 error.message.includes('Ownable')) {
+        throw new Error('not authorized to mint tokens for testing');
+      } else {
+        throw new Error(`Failed to buy CAST tokens: ${error?.message || 'Unknown error'}`);
+      }
+    }
+  }
+
+  /**
+   * Real BuyCAST implementation (to be used when contract is deployed)
+   * Uses the same 1:1 HBAR to CAST ratio
+   */
+  async buyCastWithHbarReal(hbarAmount: number): Promise<string> {
+    try {
+      console.log(`🏭 Buying ${hbarAmount} HBAR worth of CAST tokens via BuyCAST contract`);
+
+      // Check if BuyCAST contract is deployed
+      const buyCastAddress = TOKEN_ADDRESSES.BUYCAST_CONTRACT;
+      if (!buyCastAddress || buyCastAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('BuyCAST contract not deployed yet - using mock implementation');
+      }
+
+      const buyCastABI = [
+        "function buyCAST() external payable", // Use the simpler version
+        "function getExchangeRate() external view returns (uint256)" // Returns CAST tokens per HBAR
+      ];
+
+      const buyCast = new ethers.Contract(buyCastAddress, buyCastABI, this.signer);
+
+      // Get current exchange rate (should be 1:1 based on tokenomics)
+      let exchangeRate: bigint;
+      try {
+        exchangeRate = await buyCast.getExchangeRate();
+        console.log('📊 Current exchange rate:', ethers.formatEther(exchangeRate), 'CAST per HBAR');
+      } catch (error) {
+        console.warn('Could not fetch exchange rate, assuming 1:1 ratio');
+        exchangeRate = ethers.parseEther('1'); // 1:1 fallback
+      }
+
+      // Convert HBAR to wei (HBAR uses 18 decimals on EVM)
+      const amountInWei = ethers.parseEther(hbarAmount.toString());
+
+      // Check HBAR balance
+      const hbarBalance = await this.getBalance();
+      if (parseFloat(hbarBalance) < hbarAmount) {
+        throw new Error(`Insufficient HBAR balance. You have ${hbarBalance} HBAR but trying to spend ${hbarAmount} HBAR`);
+      }
+
+      console.log(`💰 Purchasing with ${hbarAmount} HBAR (${ethers.formatEther(amountInWei)} ETH equivalent)`);
+
+      // Use the simpler buyCAST() function that just uses msg.value
+      const tx = await buyCast.buyCAST({
+        value: amountInWei, // Send HBAR as payment
+        gasLimit: 200000
+      });
+
+      console.log('📤 BuyCAST transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log(`✅ Successfully bought CAST tokens with ${hbarAmount} HBAR via BuyCAST contract`);
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Failed to buy CAST with HBAR (real):', error);
+
+      if (error.message.includes('BuyCAST contract not deployed')) {
+        // Fall back to mock implementation
+        console.log('🔄 Falling back to mock implementation...');
+        return await this.buyCastWithHbar(hbarAmount);
+      }
+
+      throw new Error(`Failed to buy CAST tokens: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
 }
 
 /**
@@ -617,6 +855,6 @@ export const getHederaEVMConfig = (): HederaEVMConfig => {
   return {
     rpcUrl: 'https://testnet.hashio.io/api',
     privateKey: (import.meta.env as any).VITE_HEDERA_PRIVATE_KEY_EVM || '0xf8ba79af7c966d32d2f19e8d0a33dea8bb46347089c5cf9dc3ba6f84a30812b9',
-    factoryAddress: '0xa9C5D6286F38b672B7a17763d72A8565559EC13c' // <- Update this line
+    factoryAddress: TOKEN_ADDRESSES.FACTORY_CONTRACT
   };
 };

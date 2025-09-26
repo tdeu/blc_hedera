@@ -86,6 +86,7 @@
             "monitor": "npx tsx src/api/market-monitor-server.ts",
             "evidence-server": "npx tsx src/api/evidence-review-server.ts",
             "deploy:hedera": "hardhat run scripts/deploy.js --network hederaTestnet",
+            "deploy:buycast": "node scripts/deploy-buycast.js",
             "setup:hcs": "node scripts/create-hcs-topics.js",
             "setup:resolution": "node scripts/setup-resolution-system.js",
             "setup:existing": "node scripts/setup-existing-topics.js",

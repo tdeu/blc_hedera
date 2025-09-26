@@ -131,6 +131,7 @@ export default function App() {
 
   // Hedera blockchain integration - runs behind the scenes, no UI changes
   const {
+    hederaEVMService,
     placeBet: hederaPlaceBet,
     placeBetWithAddress: hederaPlaceBetWithAddress,
     submitEvidence: hederaSubmitEvidence,
@@ -187,6 +188,16 @@ export default function App() {
       const hederaEVMService = new HederaEVMService(evmConfig);
 
       const prices = await hederaEVMService.getMarketPrices(contractAddress);
+      const volume = await hederaEVMService.getMarketVolume(contractAddress);
+      console.log(`📊 Fetched prices from blockchain:`, {
+        yesOdds: prices.yesOdds,
+        noOdds: prices.noOdds,
+        yesProb: (prices.yesProb * 100).toFixed(1) + '%',
+        noProb: (prices.noProb * 100).toFixed(1) + '%',
+        yesPrice: prices.yesPrice,
+        noPrice: prices.noPrice,
+        volume: volume
+      });
 
       // Update the market in the markets array with new prices
       setMarkets(prevMarkets => {
@@ -196,7 +207,11 @@ export default function App() {
           oldYesOdds: targetMarket?.yesOdds,
           newYesOdds: prices.yesOdds,
           oldNoOdds: targetMarket?.noOdds,
-          newNoOdds: prices.noOdds
+          newNoOdds: prices.noOdds,
+          pricesChanged: targetMarket ? (
+            Math.abs(targetMarket.yesOdds - prices.yesOdds) > 0.001 ||
+            Math.abs(targetMarket.noOdds - prices.noOdds) > 0.001
+          ) : false
         });
 
         const updatedMarkets = prevMarkets.map(market =>
@@ -204,7 +219,11 @@ export default function App() {
             ? {
                 ...market,
                 yesOdds: prices.yesOdds,
-                noOdds: prices.noOdds
+                noOdds: prices.noOdds,
+                volume: volume, // Total CAST volume traded
+                // Update pools based on probabilities to reflect betting activity
+                yesPool: market.totalPool * prices.yesProb,
+                noPool: market.totalPool * prices.noProb
               }
             : market
         );
@@ -286,6 +305,21 @@ export default function App() {
           refreshMarketOdds(marketId, retryCount + 1);
         }, 3000);
       }
+    }
+  };
+
+  // Function to refresh CAST balance
+  const refreshCastBalance = async () => {
+    try {
+      if (hederaEVMService && walletConnection?.isConnected) {
+        console.log('🔄 Refreshing CAST balance...');
+        const balance = await hederaEVMService.getCastTokenBalance();
+        const balanceNum = parseFloat(balance);
+        setCastBalance(balanceNum);
+        console.log('✅ CAST balance updated:', balanceNum);
+      }
+    } catch (error) {
+      console.error('❌ Failed to refresh CAST balance:', error);
     }
   };
 
@@ -900,36 +934,20 @@ export default function App() {
     if (isHederaConnected) {
       const getContractAddress = async (): Promise<string | null> => {
         // First check if market already has a contract address from database
-        const marketContractAddress = (market as any).contractAddress;
-        if (marketContractAddress) {
-          console.log(`✅ Using existing market contract address from database: ${marketContractAddress}`);
+        const marketContractAddress = (market as any).contract_address || (market as any).contractAddress;
+        if (marketContractAddress && marketContractAddress.startsWith('0x')) {
+          console.log(`✅ Using existing market contract address: ${marketContractAddress}`);
           return marketContractAddress;
         }
 
         // Fallback to local state (for newly created markets)
         const localAddress = marketContracts[marketId];
-        if (localAddress) {
-          console.log(`✅ Using existing contract address from local state: ${localAddress}`);
+        if (localAddress && localAddress.startsWith('0x')) {
+          console.log(`✅ Using local contract address: ${localAddress}`);
           return localAddress;
         }
 
-        // Try to get market address from factory contract
-        console.log(`🔍 No stored contract address found for market ${marketId}. Querying factory...`);
-
-        try {
-          const factoryAddress = await hederaService.getMarketAddressFromFactory(marketId);
-          if (factoryAddress) {
-            console.log(`✅ Found market address from factory: ${factoryAddress}`);
-            // TODO: Consider updating Supabase with this address for future use
-            return factoryAddress;
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to query factory for market address:`, error);
-        }
-
-        // Last resort fallback - allow local betting without blockchain
-        console.warn(`❌ Market ${marketId} not found in factory. Enabling local betting mode.`);
-        toast.info('Betting in local mode - bets will be stored locally until market is deployed to blockchain');
+        console.warn(`❌ No contract address found for market ${marketId}`);
         return null;
       };
 
@@ -964,11 +982,18 @@ export default function App() {
 
           if (contractAddressForRefresh) {
             console.log(`📍 Using stored contract address: ${contractAddressForRefresh}`);
-            console.log(`⏰ Setting 1-second timeout before calling refreshMarketOddsWithAddress...`);
+            console.log(`⏰ Setting 3-second timeout before calling refreshMarketOddsWithAddress...`);
+
+            // Multiple refresh attempts with increasing delays
             setTimeout(() => {
-              console.log(`🚀 EXECUTING refreshMarketOddsWithAddress now!`);
+              console.log(`🚀 EXECUTING refreshMarketOddsWithAddress (attempt 1)...`);
               refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
-            }, 1000); // 1 second delay to ensure contract state is updated
+            }, 3000); // 3 seconds for blockchain state propagation
+
+            setTimeout(() => {
+              console.log(`🔄 EXECUTING refreshMarketOddsWithAddress (attempt 2)...`);
+              refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
+            }, 6000); // 6 seconds - second attempt
           } else {
             console.log(`❌ No contract address available for refresh`);
             console.log(`🔍 Debugging: contractAddressForRefresh was:`, contractAddressForRefresh);
@@ -1058,10 +1083,9 @@ export default function App() {
         try {
           // Wait for contract deployment to complete
           const contract = await hederaCreateMarket(marketData);
-
+          
           if (contract && contract.contractId) {
             console.log(`✅ Market created on Hedera: ${contract.contractId}`);
-
             // Update the pending market with contract address immediately
             const pendingMarkets = pendingMarketsService.getPendingMarkets();
             const updatedMarkets = pendingMarkets.map(pending =>
@@ -1069,20 +1093,17 @@ export default function App() {
                 ? { ...pending, contractAddress: contract.contractId }
                 : pending
             );
-
-            // Update the pending markets with contract address
             localStorage.setItem('blockcast_pending_markets', JSON.stringify(updatedMarkets));
             console.log(`✅ Contract address ${contract.contractId} stored with pending market ${newMarket.id}`);
-
             toast.success('Market created and deployed to blockchain! Awaiting admin approval.');
           } else {
             console.warn('⚠️ Contract deployment returned invalid result');
-            toast.success('Market created! Running in local mode until blockchain deployment completes.');
+            throw new Error('Contract deployment failed - no valid contract address returned');
           }
         } catch (error) {
           console.error('❌ Blockchain market creation failed:', error);
-          console.log('🔧 Market will run without blockchain contract (bets will be stored locally)');
-          toast.success('Market created! Running in local mode due to blockchain deployment issue.');
+          toast.error(`Market creation failed: ${error.message}`);
+          return; // Don't create the market if blockchain deployment fails
         }
       } else {
         console.log('🔧 Hedera not connected - market will run in local mode');
@@ -1342,6 +1363,8 @@ export default function App() {
           walletAddress={walletConnection?.address}
           onConnectWallet={connectWallet}
           onDisconnectWallet={disconnectWallet}
+          hederaEVMService={hederaEVMService}
+          onRefreshBalance={refreshCastBalance}
         />
 
         {/* Admin Mode Switcher - Only show for admin users */}

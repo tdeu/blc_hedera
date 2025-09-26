@@ -7,7 +7,7 @@ async function authorizeMarket() {
   const provider = new ethers.JsonRpcProvider('https://testnet.hashio.io/api');
   const signer = new ethers.Wallet(process.env.HEDERA_PRIVATE_KEY, provider);
 
-  const betNFTAddress = '0xb639EC048b2C70E4E0BeC475DCC7f1adcc2D10a5';
+  const betNFTAddress = '0x3b1E8b887162e7a58b992ad0A9b2c760D57f68C1';
   const marketAddress = '0xdbe5D793Be98990B3A328e38c7D85256994e81aC';
 
   console.log('🎫 Authorizing market in BetNFT...');

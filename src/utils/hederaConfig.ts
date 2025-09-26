@@ -20,6 +20,7 @@ export interface HederaConfig {
     treasury?: string;
     betNFT?: string;
     predictionMarketFactory?: string;
+    disputeManager?: string;
   };
   
   // HCS Topic IDs for evidence and attestations
@@ -98,6 +99,7 @@ export function initializeHederaConfig(): HederaConfig {
       treasury: process.env.CONTRACT_TREASURY,
       betNFT: process.env.CONTRACT_BET_NFT,
       predictionMarketFactory: process.env.CONTRACT_PREDICTION_MARKET_FACTORY,
+      disputeManager: process.env.CONTRACT_DISPUTE_MANAGER,
     },
     topics: {
       evidence: process.env.HCS_EVIDENCE_TOPIC,

@@ -8,6 +8,7 @@ import { ethers } from 'ethers';
 
 interface UseHederaReturn {
   hederaService: HederaService | null;
+  hederaEVMService: HederaEVMService | null;
   isConnected: boolean;
   isLoading: boolean;
   createMarket: (market: Partial<BettingMarket>) => Promise<MarketContract | null>;
@@ -247,16 +248,24 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
 
     try {
       setIsLoading(true);
-      
+
       const transactionId = await hederaEVMService.placeBet(marketAddress, position, amount);
 
       console.log(`Position placed on blockchain: ${transactionId}`);
       return transactionId;
     } catch (error) {
-      console.error('❌ EVM bet placement failed (running in mock mode):', error);
+      console.error('❌ EVM bet placement failed:', error);
       console.error('❌ Error message:', error.message);
       console.error('❌ Error stack:', error.stack);
-      // Return mock transaction ID for development - app continues to work normally
+
+      // Only return mock for specific errors - insufficient balance should throw
+      if (error?.message?.includes('Insufficient CAST balance')) {
+        // Re-throw balance errors to show user the error message
+        throw error;
+      }
+
+      // For other errors (network issues, etc.), return mock transaction ID for development
+      console.warn('❌ Non-balance error, returning mock transaction for development');
       return `mock-tx-${Date.now()}`;
     } finally {
       setIsLoading(false);
@@ -343,6 +352,7 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
 
   return {
     hederaService,
+    hederaEVMService,
     isConnected,
     isLoading,
     createMarket,

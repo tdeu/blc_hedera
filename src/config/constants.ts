@@ -38,15 +38,18 @@ export const TOKEN_CONFIG = {
   }
 } as const;
 
-// Token Addresses (Hedera Testnet)
+// Token Addresses (Hedera Testnet) - LATEST DEPLOYMENT
 export const TOKEN_ADDRESSES = {
-  CAST_TOKEN: '0x0F15071DaBb3c22203dA7071A031a404ce2B1a2d', // Updated from deployments-testnet.json
+  CAST_TOKEN: '0xC78Ac73844077917E20530E36ac935c4B56236c2', // From deployments-testnet.json (latest)
   USDC_TOKEN: '0x0000000000000000000000000000000000000000', // Placeholder
-  FACTORY_CONTRACT: '0x97bF56127fD8BD6A8211d5a993c7B215CCe3671A', // Updated from deployments-testnet.json
-  TREASURY_CONTRACT: '0xabbc9868cbfab2Db4336D0e192DF24754A8C8Da8', // Updated from deployments-testnet.json
-  ADMIN_MANAGER_CONTRACT: '0x82B5FdaA1Fb566D1215277d40a04E369052c03E0', // Updated from deployments-testnet.json
-  BET_NFT_CONTRACT: '0x3b1E8b887162e7a58b992ad0A9b2c760D57f68C1', // Added from deployments-testnet.json
-  DISPUTE_MANAGER_CONTRACT: '0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b' // Deployed successfully
+  FACTORY_CONTRACT: '0x6A108622e5B0F2Db7f6118E71259F34937225809', // FIXED deployment - working without betNFT authorization
+  TREASURY_CONTRACT: '0x69649cc208138B3A2c529cB301D7Bb591C53a2e2', // From deployments-testnet.json (latest)
+  ADMIN_MANAGER_CONTRACT: '0x94FAF61DE192D1A441215bF3f7C318c236974959', // From deployments-testnet.json (latest)
+  BET_NFT_CONTRACT: '0x8e718596977C0BE525c5b1afeA73d9eFdF9bB7ca', // From deployments-testnet.json (latest)
+  DISPUTE_MANAGER_CONTRACT: '0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b', // Deployed successfully (keeping this one)
+
+  // BuyCAST contract - enables HBAR → CAST conversion
+  BUYCAST_CONTRACT: '0x103eD6472e50D7746b90860aAd528E9c0F1cD5B4', // Fixed with correct Hedera decimal handling
 } as const;
 
 // Market Status Types

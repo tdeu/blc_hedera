@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_CONTRACT_TREASURY: string
   readonly VITE_CONTRACT_BET_NFT: string
   readonly VITE_CONTRACT_PREDICTION_MARKET_FACTORY: string
+  readonly VITE_CONTRACT_DISPUTE_MANAGER: string
   readonly VITE_TREASURY_ADDRESS: string
   readonly VITE_EVIDENCE_FEE_HBAR: string
   readonly VITE_BASE_REWARD_HBAR: string
