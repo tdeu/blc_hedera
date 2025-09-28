@@ -102,11 +102,9 @@ export class HederaService {
       const transaction = new ContractExecuteTransaction()
         .setContractId(contractId)
         .setGas(300000)
-        .setFunction("placeBet", [
-          position === 'yes' ? 1 : 0,  // 1 for yes, 0 for no
-          Math.floor(amount * 1000000000) // Convert to tinybars
-        ])
-        .setPayableAmount(Hbar.fromTinybars(Math.floor(amount * 100000000)));
+        .setFunction(position === 'yes' ? "buyYes" : "buyNo", [
+          Math.floor(amount * 1000000000) // Convert to tinybars (shares)
+        ]);
 
       const response = await transaction.execute(this.client);
       const receipt = await response.getReceipt(this.client);

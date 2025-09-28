@@ -249,14 +249,20 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
     try {
       setIsLoading(true);
 
+      console.log('🎯 About to call hederaEVMService.placeBet...');
       const transactionId = await hederaEVMService.placeBet(marketAddress, position, amount);
+      console.log('✅ hederaEVMService.placeBet completed successfully');
 
       console.log(`Position placed on blockchain: ${transactionId}`);
       return transactionId;
     } catch (error) {
       console.error('❌ EVM bet placement failed:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Error message:', error?.message);
+      console.error('❌ Error details:', {
+        name: error?.name,
+        code: error?.code,
+        reason: error?.reason
+      });
 
       // Only return mock for specific errors - insufficient balance should throw
       if (error?.message?.includes('Insufficient CAST balance')) {

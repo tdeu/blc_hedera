@@ -113,6 +113,7 @@ export default function App() {
   // Wallet state
   const [walletConnection, setWalletConnection] = useState<WalletConnection | null>(null);
   const [castBalance, setCastBalance] = useState<number>(0);
+
   
   // Blockchain state - maps market IDs to their deployed contract addresses
   const [marketContracts, setMarketContracts] = useState<Record<string, string>>({});
@@ -556,7 +557,7 @@ export default function App() {
       if (!walletService.isOnHederaTestnet()) {
         toast.warning(`⚠️ Wrong network detected: ${walletService.getCurrentNetwork()}\nPlease switch to Hedera Testnet for full functionality.`);
       } else {
-        toast.success(`Wallet connected successfully! 🦊\nNetwork: ${walletService.getCurrentNetwork()}\nBalance: ${connection.balance} HBAR`);
+        toast.success(`Wallet connected successfully! 🦊\nNetwork: ${walletService.getCurrentNetwork()}\nHBAR: ${connection.balance} (for network fees)\nCAST: ${castBalance} (for trading)`);
       }
     } catch (error: any) {
       // Handle specific circuit breaker errors with helpful suggestions
@@ -870,18 +871,18 @@ export default function App() {
       return;
     }
 
-    // Check if wallet is connected
+    // Check if wallet is connected (including mock wallet for testing)
     if (!walletConnection || !walletConnection.isConnected) {
       toast.error('Please connect your wallet to place bets');
       return;
     }
 
-    // Refresh wallet balance before checking
-    const currentBalance = await walletService.getBalance();
-    const numericBalance = parseFloat(currentBalance);
-    
-    if (amount > numericBalance) {
-      toast.error(`Insufficient balance. You have ${numericBalance.toFixed(3)} HBAR available`);
+    // Check CAST token balance (not HBAR) for betting
+    const currentCastBalance = await walletService.getCastTokenBalance();
+    const numericCastBalance = parseFloat(currentCastBalance);
+
+    if (amount > numericCastBalance) {
+      toast.error(`Insufficient CAST balance. You have ${numericCastBalance.toFixed(3)} CAST but need ${amount} CAST to place this bet. Please buy more CAST tokens.`);
       return;
     }
 
@@ -974,6 +975,42 @@ export default function App() {
               : bet
           ));
 
+          // 💰 Refresh wallet balances after successful bet to show updated CAST and HBAR balances
+          console.log('🔄 Refreshing wallet balances after successful bet...');
+          setTimeout(async () => {
+            try {
+              // Refresh both HBAR and CAST balances
+              if (walletConnection?.address) {
+                const newHbarBalance = await walletService.getBalance();
+                const newCastBalance = await walletService.getCastTokenBalance();
+
+                console.log('💰 Balance update after bet:', {
+                  hbar: newHbarBalance,
+                  cast: newCastBalance,
+                  change: `HBAR: ${(parseFloat(newHbarBalance) - (walletConnection?.balance ? parseFloat(walletConnection.balance) : 0)).toFixed(4)} (gas fees)`,
+                  stakePaid: `${amount} CAST (from CAST balance)`
+                });
+
+                // Update wallet connection with new HBAR balance
+                setWalletConnection(prev => prev ? { ...prev, balance: newHbarBalance } : null);
+
+                // Update CAST balance in state
+                setCastBalance(parseFloat(newCastBalance));
+
+                // Show informative toast about the balance changes
+                toast.info(
+                  `Balance updated: ${amount} CAST used for bet + gas fees paid in HBAR`,
+                  {
+                    duration: 4000,
+                    description: 'Your CAST balance decreased by your stake amount, HBAR balance decreased by gas fees'
+                  }
+                );
+              }
+            } catch (error) {
+              console.error('❌ Failed to refresh balances after bet:', error);
+            }
+          }, 2000); // 2 second delay to allow transaction confirmation
+
           // 🔄 Refresh market odds after successful bet placement
           // Use the stored contract address to avoid React state timing issues
           console.log(`🎯 Refreshing market odds after bet placement for market: ${marketId}`);
@@ -982,18 +1019,28 @@ export default function App() {
 
           if (contractAddressForRefresh) {
             console.log(`📍 Using stored contract address: ${contractAddressForRefresh}`);
-            console.log(`⏰ Setting 3-second timeout before calling refreshMarketOddsWithAddress...`);
+            console.log(`⏰ Setting refresh timeouts after transaction sent...`);
 
-            // Multiple refresh attempts with increasing delays
+            // Multiple refresh attempts - transaction was sent but may still be confirming
             setTimeout(() => {
               console.log(`🚀 EXECUTING refreshMarketOddsWithAddress (attempt 1)...`);
               refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
-            }, 3000); // 3 seconds for blockchain state propagation
+            }, 3000); // 3 seconds - allow time for confirmation
 
             setTimeout(() => {
               console.log(`🔄 EXECUTING refreshMarketOddsWithAddress (attempt 2)...`);
               refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
-            }, 6000); // 6 seconds - second attempt
+            }, 8000); // 8 seconds - second attempt
+
+            setTimeout(() => {
+              console.log(`🔄 EXECUTING refreshMarketOddsWithAddress (attempt 3)...`);
+              refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
+            }, 15000); // 15 seconds - third attempt
+
+            setTimeout(() => {
+              console.log(`🔄 EXECUTING refreshMarketOddsWithAddress (attempt 4)...`);
+              refreshMarketOddsWithAddress(marketId, contractAddressForRefresh!);
+            }, 30000); // 30 seconds - final attempt
           } else {
             console.log(`❌ No contract address available for refresh`);
             console.log(`🔍 Debugging: contractAddressForRefresh was:`, contractAddressForRefresh);
@@ -1010,7 +1057,13 @@ export default function App() {
       }
     }
 
-    toast.success(`Position placed: ${position.toUpperCase()} on "${market.claim.substring(0, 40)}..."`);
+    toast.success(
+      `${position.toUpperCase()} position placed: ${amount} CAST`,
+      {
+        duration: 4000,
+        description: `Bet placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
+      }
+    );
   };
 
   // Handle category selection
@@ -1202,7 +1255,7 @@ export default function App() {
           return (
             <BettingMarkets
               onPlaceBet={handlePlaceBet}
-              userBalance={userProfile?.balance || 0}
+              userBalance={castBalance}
               onMarketSelect={handleMarketSelect}
               markets={markets}
               onCreateMarket={handleCreateMarket}
@@ -1297,7 +1350,7 @@ export default function App() {
           return (
             <BettingMarkets
               onPlaceBet={handlePlaceBet}
-              userBalance={userProfile?.balance || 0}
+              userBalance={castBalance}
               onMarketSelect={handleMarketSelect}
               markets={markets}
               onCreateMarket={() => handleCreateMarketWithContext('truth-markets')}
@@ -1414,9 +1467,9 @@ export default function App() {
                 <div className="text-center">
                   <div className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-2">
                     <Wallet className="h-8 w-8" />
-                    {formatCurrency(userProfile?.balance || 0.0)} HBAR
+                    {formatCurrency(castBalance || 0.0)} CAST
                   </div>
-                  <span className="text-sm text-muted-foreground">Starting Balance</span>
+                  <span className="text-sm text-muted-foreground">Trading Balance</span>
                 </div>
               </div>
 

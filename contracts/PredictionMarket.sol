@@ -100,7 +100,7 @@ contract PredictionMarket {
             question: _question,
             creator: _creator,
             endTime: _endTime,
-            status: MarketStatus.Open
+            status: MarketStatus.Submited
         });
 
         collateral = IERC20(_collateral);
@@ -324,6 +324,22 @@ contract PredictionMarket {
 
     function setBetNFT(address _newBetNFT) external onlyAdmin {
         betNFT = BetNFT(_newBetNFT);
+    }
+
+    /**
+     * @dev Approve a submitted market to make it open for trading
+     */
+    function approveMarket() external onlyAdmin {
+        require(marketInfo.status == MarketStatus.Submited, "Market must be submitted");
+        marketInfo.status = MarketStatus.Open;
+    }
+
+    /**
+     * @dev Cancel a market (only before it's opened)
+     */
+    function cancelMarket() external onlyAdmin {
+        require(marketInfo.status == MarketStatus.Submited, "Market must be submitted");
+        marketInfo.status = MarketStatus.Canceled;
     }
 
     /**

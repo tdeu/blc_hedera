@@ -50,7 +50,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children, walletConn
           displayName: `User ${walletAddress.slice(-6)}`,
           preferences: {
             language: 'en',
-            currency: 'HBAR',
+            currency: 'CAST',
             notifications: true,
             theme: 'system'
           }

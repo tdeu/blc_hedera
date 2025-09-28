@@ -52,7 +52,17 @@
       "Read(//c/Users/thoma/**)",
       "Bash(grep:*)",
       "Bash(move test-factory.js test-factory.cjs)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(echo $VITE_HEDERA_PRIVATE_KEY_EVM)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_evaluate",
+      "WebFetch(domain:hashscan.io)"
     ],
     "deny": [],
     "ask": []

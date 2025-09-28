@@ -190,6 +190,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
   const countries = ['all', ...Array.from(new Set(markets.map(m => m.country || m.region).filter(Boolean)))];
 
   const handleOpenBetDialog = (market: BettingMarket, position: 'yes' | 'no') => {
+    console.log('🎯 BettingMarkets: handleOpenBetDialog called with market:', { id: market.id, claim: market.claim.substring(0, 30) });
     setSelectedMarket(market);
     setBetPosition(position);
     setBetAmount('');
@@ -211,6 +212,8 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
       toast.error('Please enter a valid amount');
       return;
     }
+
+    console.log('🎯 BettingMarkets: handlePlaceBet called with selectedMarket:', { id: selectedMarket.id, claim: selectedMarket.claim.substring(0, 30) });
 
     try {
       await onPlaceBet(selectedMarket.id, betPosition, amount);

@@ -75,6 +75,17 @@ export class HederaEVMService {
         console.log('🔍 Creating wallet with private key length:', config.privateKey.length);
         this.signer = new ethers.Wallet(config.privateKey, this.provider);
         console.log('✅ EVM Service initialized with private key');
+
+        // Check wallet balance
+        this.signer.provider.getBalance(this.signer.address).then(balance => {
+          const hbarBalance = parseFloat(ethers.formatEther(balance));
+          console.log('💰 Private key wallet balance:', hbarBalance, 'HBAR');
+          if (hbarBalance < 0.1) {
+            console.warn('⚠️ Low HBAR balance - transactions may fail!');
+          }
+        }).catch(err => {
+          console.error('❌ Failed to check wallet balance:', err);
+        });
       } else {
         throw new Error('Either connected wallet or private key must be provided');
       }
@@ -452,23 +463,83 @@ export class HederaEVMService {
         console.log('✅ Collateral approved with unlimited allowance');
       }
 
-      // Place the bet
+      // Place the bet with proper gas estimation
       console.log(`🎲 Placing ${position.toUpperCase()} bet...`);
-      const tx = position === 'yes'
-        ? await market.buyYes(shares, { gasLimit: 1000000 })
-        : await market.buyNo(shares, { gasLimit: 1000000 });
-        
-      console.log('📤 Bet transaction sent:', tx.hash);
 
-      // Return transaction hash immediately to allow odds refresh
-      // Transaction confirmation will happen in background
-      tx.wait().then(receipt => {
-        console.log('✅ Bet transaction confirmed:', receipt.hash);
-      }).catch(error => {
-        console.warn('⚠️ Transaction confirmation failed (but bet was sent):', error.message);
-      });
+      let tx: any;
+      try {
+        // Estimate gas first
+        const gasEstimate = position === 'yes'
+          ? await market.buyYes.estimateGas(shares)
+          : await market.buyNo.estimateGas(shares);
 
-      return tx.hash;
+        console.log(`⛽ Estimated gas: ${gasEstimate.toString()}`);
+
+        // Add 20% buffer to gas estimate
+        const gasLimit = (gasEstimate * BigInt(120)) / BigInt(100);
+        console.log(`⛽ Using gas limit: ${gasLimit.toString()}`);
+
+        tx = position === 'yes'
+          ? await market.buyYes(shares, { gasLimit })
+          : await market.buyNo(shares, { gasLimit });
+
+        console.log('📤 Bet transaction sent:', tx.hash);
+
+      } catch (gasError: any) {
+        console.error('❌ Gas estimation failed:', gasError);
+
+        // Extract revert reason if available
+        let revertReason = 'Unknown error';
+        if (gasError.reason) {
+          revertReason = gasError.reason;
+        } else if (gasError.message) {
+          // Try to extract revert reason from error message
+          const reasonMatch = gasError.message.match(/reason="([^"]+)"/);
+          if (reasonMatch) {
+            revertReason = reasonMatch[1];
+          } else {
+            revertReason = gasError.message;
+          }
+        }
+
+        console.error('🚨 Revert reason:', revertReason);
+        throw new Error(`Transaction would fail: ${revertReason}`);
+      }
+
+      // Wait for transaction confirmation with proper error handling
+      console.log('⏳ Waiting for transaction confirmation...');
+
+      try {
+        const receipt = await Promise.race([
+          tx.wait(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Transaction confirmation timeout after 60s')), 60000)
+          )
+        ]);
+
+        console.log('✅ Transaction confirmed:', receipt.hash);
+        console.log('📊 Gas used:', receipt.gasUsed?.toString());
+
+        // Check if transaction was successful
+        if (receipt.status === 0) {
+          console.error('❌ Transaction failed during execution');
+          throw new Error('Transaction was mined but failed during execution');
+        }
+
+        return tx.hash;
+
+      } catch (confirmError: any) {
+        console.error('❌ Transaction confirmation failed:', confirmError);
+
+        // If it's a timeout, the transaction might still be pending
+        if (confirmError.message.includes('timeout')) {
+          console.warn('⚠️ Transaction confirmation timed out but may still succeed');
+          console.warn('🔍 Check transaction status manually:', tx.hash);
+          throw new Error(`Transaction sent but confirmation timed out. Hash: ${tx.hash}. Please check manually.`);
+        }
+
+        throw new Error(`Transaction failed: ${confirmError.message}`);
+      }
     } catch (error: any) {
       console.error('❌ Failed to place bet on Hedera EVM:', error);
       console.error('Error details:', {
@@ -658,8 +729,13 @@ export class HederaEVMService {
     try {
       console.log('🔍 Getting market volume for contract:', marketAddress);
 
-      // Load contract ABI
-      const predictionMarketABI = await this.loadContractABI('PredictionMarket');
+      // Use PredictionMarket contract ABI
+      const predictionMarketABI = [
+        "function reserve() external view returns (uint256)",
+        "function getCurrentPrice() external view returns (uint256 priceYes, uint256 priceNo)",
+        "function yesShares() external view returns (uint256)",
+        "function noShares() external view returns (uint256)"
+      ];
       const market = new ethers.Contract(marketAddress, predictionMarketABI, this.provider);
 
       // Get reserve (total volume)
