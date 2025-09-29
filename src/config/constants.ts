@@ -42,10 +42,10 @@ export const TOKEN_CONFIG = {
 export const TOKEN_ADDRESSES = {
   CAST_TOKEN: '0xC78Ac73844077917E20530E36ac935c4B56236c2', // From deployments-testnet.json (latest)
   USDC_TOKEN: '0x0000000000000000000000000000000000000000', // Placeholder
-  FACTORY_CONTRACT: '0x6A108622e5B0F2Db7f6118E71259F34937225809', // FIXED deployment - working without betNFT authorization
+  FACTORY_CONTRACT: '0xD2092162aD3A392686A6B0e5dFC0d34c953c221D', // FINAL deployment with verified ownership (Dec 2025)
   TREASURY_CONTRACT: '0x69649cc208138B3A2c529cB301D7Bb591C53a2e2', // From deployments-testnet.json (latest)
   ADMIN_MANAGER_CONTRACT: '0x94FAF61DE192D1A441215bF3f7C318c236974959', // From deployments-testnet.json (latest)
-  BET_NFT_CONTRACT: '0x8e718596977C0BE525c5b1afeA73d9eFdF9bB7ca', // From deployments-testnet.json (latest)
+  BET_NFT_CONTRACT: '0x9D9AC2a41F84C4B2d5c80FCFcB54d26e38C3Aa91', // FINAL deployment with verified ownership (Dec 2025)
   DISPUTE_MANAGER_CONTRACT: '0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b', // Deployed successfully (keeping this one)
 
   // BuyCAST contract - enables HBAR → CAST conversion

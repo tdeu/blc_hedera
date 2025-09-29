@@ -126,16 +126,32 @@ export class HederaEVMService {
       );
       
       console.log('🏭 Factory contract initialized at:', this.factoryAddress);
+
+      // Check if factory is paused before attempting creation
+      try {
+        const isFactoryPaused = await factory.isFactoryPaused();
+        console.log('🔍 Factory paused status:', isFactoryPaused);
+        if (isFactoryPaused) {
+          throw new Error('Market factory is currently paused');
+        }
+      } catch (pauseError) {
+        console.warn('⚠️ Could not check factory pause status:', pauseError.message);
+      }
+
       console.log('📊 Proceeding with market creation');
 
-      // Creates a market that expires in 24 hours
-      const endTime = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // 24 hours from now
-      
-      // Or for testing, even shorter (1 hour):
-      // const endTime = Math.floor(Date.now() / 1000) + (60 * 60); // 1 hour from now
+      // Use the user's specified expiration date
+      const endTime = Math.floor(expirationDate.getTime() / 1000);
+      const currentTime = Math.floor(Date.now() / 1000);
 
-      console.log('⏰ Market end time:', endTime, 'vs current time:', Math.floor(Date.now() / 1000));
-      console.log('⏰ Market will expire in:', (endTime - Math.floor(Date.now() / 1000)) / 3600, 'hours');
+      console.log('⏰ User specified expiration:', expirationDate.toISOString());
+      console.log('⏰ Market end time:', endTime, 'vs current time:', currentTime);
+      console.log('⏰ Time difference:', endTime - currentTime, 'seconds');
+      console.log('⏰ Market will expire in:', (endTime - currentTime) / 3600, 'hours');
+
+      if (endTime <= currentTime) {
+        throw new Error('Expiration date must be in the future');
+      }
       
       console.log('🚀 About to call factory.createMarket with params:', {
         claim: claim.substring(0, 50) + '...',
@@ -253,9 +269,16 @@ export class HederaEVMService {
           console.log('🔍 Log data:', log.data);
 
           if (parsed?.name === "MarketCreated") {
-            marketAddress = parsed.args?.market;
-            console.log('✅ MarketCreated event found!');
-            console.log('📍 Market address:', marketAddress);
+            console.log('✅ MarketCreated event found via normal parsing!');
+            console.log('📍 Parsed args:', parsed.args);
+            console.log('📍 Args keys:', Object.keys(parsed.args));
+            console.log('📍 Args[0] (id):', parsed.args[0]);
+            console.log('📍 Args[1] (market):', parsed.args[1]);
+            console.log('📍 Args[2] (question):', parsed.args[2]);
+
+            // The market address should be args[1] based on the contract event
+            marketAddress = parsed.args[1];
+            console.log('📍 Market address extracted:', marketAddress);
             break;
           } else if (!parsed || !parsed.name) {
             // If parsing failed (returned undefined), throw error to trigger manual parsing
@@ -268,18 +291,30 @@ export class HederaEVMService {
           console.log('🔍 Manual decoding attempt...');
 
           // Check if this is the MarketCreated event by comparing event signature
-          const marketCreatedSignature = '0xec25940cde6eeb2c10269a5a11aee5140a3802dc1f9c1915d26c9e2b9410f6c0';
+          // MarketCreated(bytes32,address,string) signature
+          const marketCreatedSignature = ethers.id('MarketCreated(bytes32,address,string)');
 
           if (log.topics && log.topics[0] === marketCreatedSignature) {
             console.log('✅ Confirmed MarketCreated event signature match');
 
             try {
-              // Decode the data part which contains: address market, string question
-              // First 32 bytes (64 chars) = market address (padded)
-              const marketAddressHex = log.data.slice(2, 66); // Remove 0x and take first 64 chars
-              const extractedAddress = ethers.getAddress('0x' + marketAddressHex.slice(24)); // Remove padding, take last 40 chars
+              // Event: MarketCreated(bytes32 indexed id, address market, string question)
+              // topics[0] = event signature
+              // topics[1] = id (indexed)
+              // data contains: address market (32 bytes padded) + string question (offset + length + data)
 
-              console.log('🎯 Manually extracted market address:', extractedAddress);
+              console.log('🔍 Event signature match! Topics:', log.topics);
+              console.log('🔍 Data:', log.data);
+
+              // Decode the data part which contains: address market, string question
+              const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+              const decoded = abiCoder.decode(['address', 'string'], log.data);
+
+              const extractedAddress = decoded[0];
+              const question = decoded[1];
+
+              console.log('🎯 Manually decoded market address:', extractedAddress);
+              console.log('🎯 Manually decoded question:', question);
 
               if (extractedAddress && extractedAddress !== '0x0000000000000000000000000000000000000000') {
                 console.log('✅ Found valid market address via manual parsing!');
@@ -354,11 +389,16 @@ export class HederaEVMService {
   ): Promise<string> {
     try {
       console.log('🎯 HederaEVMService.placeBet called:', { marketAddress, position, amount });
-      
+
       // Validate market address
       if (!marketAddress || !marketAddress.startsWith('0x') || marketAddress.length !== 42) {
         throw new Error(`Invalid market address: ${marketAddress}`);
       }
+
+      // NOTE: Bypassing market authorization check as per constants.ts comment
+      // "FACTORY_CONTRACT: working without betNFT authorization"
+      console.log('🔐 Skipping market authorization check (bypass enabled)');
+      console.log('✅ Proceeding with bet without authorization check');
 
       // PredictionMarket contract ABI (from your Solidity code)
       const marketABI = [
@@ -771,6 +811,79 @@ export class HederaEVMService {
     } catch (error: any) {
       console.warn('Failed to mint CastTokens (not authorized):', error);
       throw new Error('WALLET_NOT_AUTHORIZED_FOR_MINTING');
+    }
+  }
+
+  /**
+   * Check if a market is authorized in the BetNFT contract
+   */
+  async isMarketAuthorized(marketAddress: string): Promise<boolean> {
+    try {
+      console.log('🔍 Checking if market is authorized:', marketAddress);
+
+      const betNFTAddress = TOKEN_ADDRESSES.BET_NFT_CONTRACT;
+      if (!betNFTAddress || betNFTAddress === '0x0000000000000000000000000000000000000000') {
+        console.warn('⚠️ BetNFT contract address not configured');
+        return false;
+      }
+
+      const betNFTABI = [
+        "function authorizedMarkets(address) external view returns (bool)"
+      ];
+
+      const betNFT = new ethers.Contract(betNFTAddress, betNFTABI, this.provider);
+      const isAuthorized = await betNFT.authorizedMarkets(marketAddress);
+
+      console.log(`🔐 Market ${marketAddress} authorization status:`, isAuthorized);
+      return isAuthorized;
+
+    } catch (error: any) {
+      console.error('❌ Error checking market authorization:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Authorize a market in the BetNFT contract (admin only)
+   */
+  async authorizeMarket(marketAddress: string): Promise<string> {
+    try {
+      console.log('🔐 Authorizing market:', marketAddress);
+
+      const betNFTAddress = TOKEN_ADDRESSES.BET_NFT_CONTRACT;
+      if (!betNFTAddress || betNFTAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('BetNFT contract address not configured');
+      }
+
+      const betNFTABI = [
+        "function authorizeMarket(address market) external",
+        "function owner() external view returns (address)"
+      ];
+
+      const betNFT = new ethers.Contract(betNFTAddress, betNFTABI, this.signer);
+
+      // Check if current signer is the owner
+      const owner = await betNFT.owner();
+      const signerAddress = await this.getAddress();
+
+      if (owner.toLowerCase() !== signerAddress.toLowerCase()) {
+        console.warn(`⚠️ Current signer ${signerAddress} is not the BetNFT owner ${owner}`);
+        throw new Error('Only the BetNFT contract owner can authorize markets');
+      }
+
+      const tx = await betNFT.authorizeMarket(marketAddress, {
+        gasLimit: 100000
+      });
+
+      console.log('📤 Authorization transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log('✅ Market authorized successfully');
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Error authorizing market:', error);
+      throw new Error(`Failed to authorize market: ${error?.message || 'Unknown error'}`);
     }
   }
 

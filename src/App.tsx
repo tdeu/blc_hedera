@@ -238,6 +238,23 @@ export default function App() {
         noProb: (prices.noProb * 100).toFixed(1) + '%'
       });
 
+      // Persist odds to Supabase so they survive page reloads
+      try {
+        if (supabase) {
+          await supabase
+            .from('approved_markets')
+            .update({
+              yes_odds: prices.yesOdds,
+              no_odds: prices.noOdds,
+              volume: volume
+            })
+            .eq('id', marketId);
+          console.log(`💾 Saved odds to Supabase for market ${marketId}`);
+        }
+      } catch (dbError) {
+        console.warn(`⚠️ Failed to save odds to Supabase:`, dbError);
+      }
+
     } catch (error) {
       console.error(`❌ Failed to refresh market odds for ${marketId} with direct address:`, error);
     }

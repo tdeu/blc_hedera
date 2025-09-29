@@ -27,6 +27,10 @@ export interface ApprovedMarket {
   submitter_address: string;
   contract_address?: string;
   image_url?: string;
+  // Market odds and volume (fetched from blockchain)
+  yes_odds?: number;
+  no_odds?: number;
+  volume?: number;
   // New resolution fields
   status?: 'active' | 'pending_resolution' | 'disputing' | 'resolved' | 'disputed_resolution' | 'locked';
   resolution_data?: any;

@@ -92,4 +92,24 @@ contract PredictionMarketFactory {
         }
         return false;
     }
+
+    /**
+     * @dev Manually authorize a market in BetNFT contract (admin only)
+     * This function is useful for authorizing markets that were created before
+     * the automatic authorization was implemented.
+     */
+    function authorizeExistingMarket(address market) external onlyAdmin {
+        require(market != address(0), "Invalid market address");
+        betNFT.authorizeMarket(market);
+    }
+
+    /**
+     * @dev Batch authorize multiple markets (admin only)
+     */
+    function authorizeMultipleMarkets(address[] calldata markets) external onlyAdmin {
+        for (uint i = 0; i < markets.length; i++) {
+            require(markets[i] != address(0), "Invalid market address");
+            betNFT.authorizeMarket(markets[i]);
+        }
+    }
 }

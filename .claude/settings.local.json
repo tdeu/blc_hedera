@@ -62,7 +62,13 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_evaluate",
-      "WebFetch(domain:hashscan.io)"
+      "WebFetch(domain:hashscan.io)",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_tabs",
+      "Bash(dir:*)",
+      "Bash(echo:*)",
+      "Read(//c/**)"
     ],
     "deny": [],
     "ask": []

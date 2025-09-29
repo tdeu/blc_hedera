@@ -389,24 +389,55 @@ class AdminService {
         return;
       }
 
-      // Step 2: Get admin signer (this would use admin's private key or wallet)
-      const adminSigner = await this.getAdminSigner(adminAddress);
+      // Step 2: Use the private key from environment to sign the transaction
+      const privateKey = import.meta.env.VITE_HEDERA_PRIVATE_KEY_EVM;
 
-      if (!adminSigner) {
-        console.warn('⚠️ Cannot get admin signer - recording approval to HCS only');
+      if (!privateKey) {
+        console.warn('⚠️ No private key available - recording approval to HCS only');
         await this.recordApprovalToHCS(marketId, adminAddress, reason, 'no_signer');
         return;
       }
 
       // Step 3: Call smart contract to activate market (change status from Submitted to Open)
       try {
-        console.log(`📝 Calling contract.activateMarket() for ${marketContractAddress}`);
+        console.log(`📝 Calling contract.approveMarket() for ${marketContractAddress}`);
 
-        // Note: This would need to be implemented in the smart contract
-        // For now, we'll just log the intention
-        // const txHash = await contractService.activateMarket(marketContractAddress, adminSigner);
+        // Create provider and signer
+        const provider = new ethers.JsonRpcProvider('https://testnet.hashio.io/api');
+        const signer = new ethers.Wallet(privateKey, provider);
 
-        console.log(`✅ Market ${marketId} activated on-chain (simulated)`);
+        console.log(`🔐 Using signer address: ${signer.address}`);
+
+        // Create contract instance for the market
+        const marketABI = [
+          "function approveMarket() external",
+          "function getMarketInfo() external view returns (tuple(bytes32 id, string question, address creator, uint256 endTime, uint8 status))"
+        ];
+
+        const marketContract = new ethers.Contract(marketContractAddress, marketABI, signer);
+
+        // Check current status
+        const marketInfo = await marketContract.getMarketInfo();
+        const statusNumber = Number(marketInfo.status);
+        console.log(`📊 Current market status: ${statusNumber} (type: ${typeof marketInfo.status})`);
+
+        if (statusNumber === 0) {
+          // Status 0 = Submited, need to approve
+          console.log(`✅ Market is Submited, calling approveMarket()...`);
+          const tx = await marketContract.approveMarket({ gasLimit: 500000 });
+          console.log(`📤 Transaction sent: ${tx.hash}`);
+
+          const receipt = await tx.wait();
+          console.log(`✅ Market ${marketId} activated on-chain! Gas used: ${receipt.gasUsed.toString()}`);
+
+          // Verify new status
+          const newMarketInfo = await marketContract.getMarketInfo();
+          console.log(`🎉 New market status: ${Number(newMarketInfo.status)} (should be 1 for Open)`);
+        } else if (statusNumber === 1) {
+          console.log(`✅ Market is already Open`);
+        } else {
+          console.warn(`⚠️ Market is in unexpected status: ${statusNumber}`);
+        }
 
         // Step 4: Record successful approval to HCS
         await this.recordApprovalToHCS(marketId, adminAddress, reason, 'contract_activated');

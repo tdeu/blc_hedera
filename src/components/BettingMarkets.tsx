@@ -433,9 +433,9 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {sortedMarkets.map((market) => (
-            <Card 
-              key={market.id} 
-              className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group border-border hover:border-primary/50 ${
+            <Card
+              key={market.id}
+              className={`relative overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group border-border/50 hover:border-primary/50 bg-card/80 backdrop-blur-sm rounded-xl ${
                 market.trending ? 'trending-corner' : ''
               }`}
               onClick={() => onMarketSelect && onMarketSelect(market)}
@@ -460,7 +460,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                   {/* Category Badge */}
                   <Badge
                     variant="secondary"
-                    className="absolute top-2 right-2 text-xs px-2 py-1 bg-primary/90 text-primary-foreground font-medium"
+                    className="absolute top-3 right-3 text-xs px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-full shadow-lg"
                   >
                     {market.category.toUpperCase()}
                   </Badge>
@@ -474,9 +474,9 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 </div>
               )}
 
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <Badge variant="secondary" className="text-xs shrink-0 bg-primary/10 text-primary border-primary/20 font-medium">
+              <CardHeader className="pb-3 px-4 pt-4">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <Badge variant="secondary" className="text-xs shrink-0 bg-gradient-to-r from-primary/20 to-primary/30 text-primary border-primary/30 font-semibold rounded-full px-3 py-1">
                     {market.category}
                   </Badge>
                   <Button
@@ -486,13 +486,13 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                       e.stopPropagation();
                       handleShareMarket(market);
                     }}
-                    className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 rounded-full"
                   >
                     <Share2 className="h-4 w-4" />
                   </Button>
                 </div>
                 
-                <CardTitle className="text-sm md:text-base leading-tight line-clamp-3 group-hover:text-primary transition-colors">
+                <CardTitle className="text-sm md:text-base leading-tight line-clamp-3 group-hover:text-primary transition-colors font-semibold">
                   {getClaimText(market)}
                 </CardTitle>
                 
@@ -501,7 +501,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-4 pb-4">
                 {/* Pool Information */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -522,14 +522,10 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
                   {/* Pool Distribution */}
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
                       style={{ width: `${market.totalPool > 0 ? (market.yesPool / market.totalPool) * 100 : 0}%` }}
                     />
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>True: {market.totalPool > 0 ? ((market.yesPool / market.totalPool) * 100).toFixed(1) : '0.0'}%</span>
-                    <span>False: {market.totalPool > 0 ? ((market.noPool / market.totalPool) * 100).toFixed(1) : '0.0'}%</span>
                   </div>
                 </div>
 
@@ -543,7 +539,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                     case 'live':
                       // Phase 1: Live markets - Show Y/N buttons with odds
                       return (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-3">
                           <Button
                             variant="outline"
                             size="sm"
@@ -551,7 +547,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                               e.stopPropagation();
                               handleOpenBetDialog(market, 'yes');
                             }}
-                            className="flex-1 bg-green-500/10 border-green-500/30 hover:bg-green-500/20 text-green-400 hover:text-green-300 h-9 text-xs md:text-sm"
+                            className="flex-1 bg-green-500/10 border-green-500/40 hover:bg-green-500/20 text-green-400 hover:text-green-300 h-10 text-xs md:text-sm font-semibold rounded-lg shadow-sm hover:shadow-md transition-all"
                           >
                             <TrendingUp className="h-3 w-3 mr-1" />
                             YES {market.yesOdds.toFixed(2)}x
@@ -564,7 +560,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                               e.stopPropagation();
                               handleOpenBetDialog(market, 'no');
                             }}
-                            className="flex-1 bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400 hover:text-red-300 h-9 text-xs md:text-sm"
+                            className="flex-1 bg-red-500/10 border-red-500/40 hover:bg-red-500/20 text-red-400 hover:text-red-300 h-10 text-xs md:text-sm font-semibold rounded-lg shadow-sm hover:shadow-md transition-all"
                           >
                             <TrendingDown className="h-3 w-3 mr-1" />
                             NO {market.noOdds.toFixed(2)}x
@@ -578,7 +574,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                         <div className="space-y-2">
                           {/* DISPUTABLE Badge */}
                           <div className="flex justify-center">
-                            <Badge className={`text-sm font-bold px-4 py-1 ${statusColor} border-2`}>
+                            <Badge className={`text-sm font-bold px-4 py-2 ${statusColor} border-2 rounded-full shadow-md`}>
                               🔍 DISPUTABLE
                             </Badge>
                           </div>
@@ -639,7 +635,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                         <div className="space-y-2">
                           {/* EXPIRED Badge */}
                           <div className="flex justify-center">
-                            <Badge className={`text-sm font-bold px-4 py-1 ${statusColor}`}>
+                            <Badge className={`text-sm font-bold px-4 py-2 ${statusColor} rounded-full shadow-md`}>
                               ⏳ EXPIRED
                             </Badge>
                           </div>
@@ -649,7 +645,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                             <div className="text-center">
                               <div className="text-xs text-muted-foreground mb-1">Final Result:</div>
                               <Badge
-                                className={`text-sm font-bold ${
+                                className={`text-sm font-bold rounded-full px-4 py-1 shadow-md ${
                                   market.resolution_data.final_outcome === 'yes'
                                     ? 'bg-green-500 text-white'
                                     : 'bg-red-500 text-white'

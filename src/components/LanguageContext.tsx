@@ -404,11 +404,12 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
       if (saved && ['en', 'fr', 'sw'].includes(saved)) {
         return saved as Language;
       }
-      
-      // Auto-detect browser language
-      const browserLang = navigator.language.toLowerCase();
-      if (browserLang.includes('fr')) return 'fr';
-      if (browserLang.includes('sw')) return 'sw';
+
+      // Default to English - users can manually switch languages
+      // Auto-detect browser language (commented out to force English default)
+      // const browserLang = navigator.language.toLowerCase();
+      // if (browserLang.includes('fr')) return 'fr';
+      // if (browserLang.includes('sw')) return 'sw';
     }
     return 'en';
   });

@@ -238,10 +238,11 @@ class ApprovedMarketsService {
       resolution_data: approvedMarket.resolution_data as any,
       dispute_count: approvedMarket.dispute_count,
       dispute_period_end: approvedMarket.dispute_period_end || undefined,
-      // UI fields without on-chain data yet - will be updated by real-time price loading
-      yesOdds: 2.0,
-      noOdds: 2.0,
-      totalPool: 0,
+      // Load odds from database if available, otherwise default to 2.0
+      yesOdds: approvedMarket.yes_odds || 2.0,
+      noOdds: approvedMarket.no_odds || 2.0,
+      volume: approvedMarket.volume || 0,
+      totalPool: approvedMarket.volume || 0,
       yesPool: 0,
       noPool: 0,
       totalCasters: 0,

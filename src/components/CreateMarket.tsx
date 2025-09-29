@@ -156,9 +156,24 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
     }
 
     // Only validate expiration date if it's required (truth markets)
-    if (requiresExpirationDate && expirationDate && expirationDate <= new Date()) {
-      toast.error('Expiration date must be in the future');
-      return;
+    if (requiresExpirationDate && expirationDate) {
+      const now = new Date();
+      const selectedDate = new Date(expirationDate.getTime()); // Create a copy to avoid mutation
+
+      console.log('🕐 Date validation debug:', {
+        now: now.toISOString(),
+        selectedDate: selectedDate.toISOString(),
+        nowTime: now.getTime(),
+        selectedTime: selectedDate.getTime(),
+        difference: selectedDate.getTime() - now.getTime(),
+        isSelectedInFuture: selectedDate.getTime() > now.getTime()
+      });
+
+      // Just check if the selected date is in the future (no buffer needed)
+      if (selectedDate.getTime() <= now.getTime()) {
+        toast.error('Expiration date must be in the future');
+        return;
+      }
     }
 
     setIsCreating(true);
@@ -438,8 +453,17 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                 <Input
                   id="expirationDate"
                   type="datetime-local"
-                  value={expirationDate ? expirationDate.toISOString().slice(0, 16) : ''}
-                  onChange={(e) => setExpirationDate(new Date(e.target.value))}
+                  value={expirationDate && !isNaN(expirationDate.getTime()) ? expirationDate.toISOString().slice(0, 16) : ''}
+                  onChange={(e) => {
+                    const dateStr = e.target.value;
+                    if (dateStr) {
+                      // Parse the datetime-local string properly
+                      const date = new Date(dateStr);
+                      setExpirationDate(date);
+                    } else {
+                      setExpirationDate(undefined);
+                    }
+                  }}
                   min={new Date().toISOString().slice(0, 16)}
                   className="text-sm"
                 />
