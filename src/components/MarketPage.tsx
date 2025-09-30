@@ -81,6 +81,9 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
   const [aiAnalysis, setAIAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // Market activity (bets history)
+  const [marketBets, setMarketBets] = useState<any[]>([]);
+
   // Activity feed state
   const [marketEvidence, setMarketEvidence] = useState<EvidenceSubmission[]>([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
@@ -225,7 +228,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
       // Check if user has sufficient CAST tokens
       const { castTokenService } = await import('../utils/castTokenService');
-      await castTokenService.initialize(connection);
       const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
 
       if (userBalance < bondAmount) {
@@ -334,6 +336,11 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       // Load evidence submissions for this market
       const evidence = await evidenceService.getMarketEvidence(market.id);
       setMarketEvidence(evidence);
+
+      // Load bet history for this market
+      const bets = userDataService.getMarketBets(market.id);
+      setMarketBets(bets);
+      console.log('📊 Loaded market bets:', bets);
     } catch (error) {
       console.error('Failed to load market activity:', error);
     } finally {
@@ -417,7 +424,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
       // Check if user has sufficient CAST tokens
       const { castTokenService } = await import('../utils/castTokenService');
-      await castTokenService.initialize(connection);
       const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
 
       if (userBalance < bondAmount) {
@@ -1435,6 +1441,50 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                   </div>
                 </div>
               </div>
+
+              {/* Betting Activity */}
+              {marketBets.map((bet) => (
+                <div key={bet.id} className="flex gap-4 p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200">
+                  <div className="flex-shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      bet.position === 'yes' ? 'bg-green-500' : 'bg-red-500'
+                    }`}>
+                      {bet.position === 'yes' ? (
+                        <ThumbsUp className="h-4 w-4 text-white" />
+                      ) : (
+                        <ThumbsDown className="h-4 w-4 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-semibold ${
+                        bet.position === 'yes' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
+                      }`}>
+                        {bet.position === 'yes' ? 'YES' : 'NO'} Prediction Placed
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {bet.amount} CAST
+                      </Badge>
+                      {bet.odds && (
+                        <Badge variant="secondary" className="text-xs">
+                          @ {bet.odds.toFixed(2)}x
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Cast by{' '}
+                      <span className="font-mono text-xs bg-muted px-1 rounded">
+                        {bet.walletAddress ? `${bet.walletAddress.slice(0, 6)}...${bet.walletAddress.slice(-4)}` : 'Unknown'}
+                      </span>
+                      {' '}• Potential return: {bet.potentialReturn ? bet.potentialReturn.toFixed(3) : (bet.amount * 2).toFixed(3)} CAST
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(bet.placedAt).toLocaleDateString()} at {new Date(bet.placedAt).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
 
               {/* Market Expiration Event */}
               {new Date() > market.expiresAt && (

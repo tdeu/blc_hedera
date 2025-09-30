@@ -68,7 +68,9 @@
       "mcp__playwright__browser_tabs",
       "Bash(dir:*)",
       "Bash(echo:*)",
-      "Read(//c/**)"
+      "Read(//c/**)",
+      "mcp__playwright__browser_close",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

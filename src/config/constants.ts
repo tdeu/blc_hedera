@@ -46,7 +46,7 @@ export const TOKEN_ADDRESSES = {
   TREASURY_CONTRACT: '0x69649cc208138B3A2c529cB301D7Bb591C53a2e2', // From deployments-testnet.json (latest)
   ADMIN_MANAGER_CONTRACT: '0x94FAF61DE192D1A441215bF3f7C318c236974959', // From deployments-testnet.json (latest)
   BET_NFT_CONTRACT: '0x9D9AC2a41F84C4B2d5c80FCFcB54d26e38C3Aa91', // FINAL deployment with verified ownership (Dec 2025)
-  DISPUTE_MANAGER_CONTRACT: '0xCB8B4E630b3443a34ceDB9B8C58B8cF5675d362b', // Deployed successfully (keeping this one)
+  DISPUTE_MANAGER_CONTRACT: '0xFa244C9a3e3A77D2933b73Bc7B584779e7C06172', // Updated with 1 CAST bond requirement
 
   // BuyCAST contract - enables HBAR → CAST conversion
   BUYCAST_CONTRACT: '0x103eD6472e50D7746b90860aAd528E9c0F1cD5B4', // Fixed with correct Hedera decimal handling

@@ -41,6 +41,8 @@ export interface UserBettingHistory {
   currentValue?: number;
   potentialReturn?: number;
   actualWinning?: number;
+  walletAddress?: string; // Track which wallet placed this bet
+  odds?: number; // Store the odds at the time of placing the bet
 }
 
 class UserDataService {
@@ -137,6 +139,28 @@ class UserDataService {
   }
 
   /**
+   * Get all bets for a specific market (from all users)
+   */
+  getMarketBets(marketId: string): UserBettingHistory[] {
+    try {
+      const marketBetsKey = `market_bets_${marketId}`;
+      const data = localStorage.getItem(marketBetsKey);
+      if (!data) return [];
+
+      const bets = JSON.parse(data);
+      return bets.map((bet: any) => ({
+        ...bet,
+        placedAt: new Date(bet.placedAt)
+      })).sort((a: UserBettingHistory, b: UserBettingHistory) =>
+        b.placedAt.getTime() - a.placedAt.getTime() // Most recent first
+      );
+    } catch (error) {
+      console.error('Error reading market bets:', error);
+      return [];
+    }
+  }
+
+  /**
    * Record a new bet in local storage (called when user places a bet)
    */
   recordBet(
@@ -163,13 +187,21 @@ class UserDataService {
         status: 'active',
         marketStatus: 'active',
         potentialReturn: potentialReturn || amount * 2.0, // Default to 2x if not provided
-        currentValue: potentialReturn || amount * 2.0 // Set current value to potential return for active bets
+        currentValue: potentialReturn || amount * 2.0, // Set current value to potential return for active bets
+        walletAddress: walletAddress.toLowerCase(),
+        odds: odds
       };
 
       const storageKey = `user_bets_${walletAddress.toLowerCase()}`;
       const existingBets = JSON.parse(localStorage.getItem(storageKey) || '[]');
       existingBets.push(bet);
       localStorage.setItem(storageKey, JSON.stringify(existingBets));
+
+      // Also store in a global market-specific key for market activity timeline
+      const marketBetsKey = `market_bets_${marketId}`;
+      const existingMarketBets = JSON.parse(localStorage.getItem(marketBetsKey) || '[]');
+      existingMarketBets.push(bet);
+      localStorage.setItem(marketBetsKey, JSON.stringify(existingMarketBets));
 
       console.log('✅ Bet recorded locally:', bet);
     } catch (error) {
