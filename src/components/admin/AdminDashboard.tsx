@@ -20,7 +20,8 @@ import {
   Gavel,
   ChevronDown,
   ChevronUp,
-  Scale
+  Scale,
+  RefreshCw
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
@@ -30,6 +31,8 @@ import { AIAgentSimple } from '../AIAgentSimple';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
 import { BettingMarket } from '../BettingMarkets';
 import TwoStageResolutionPanel from './TwoStageResolutionPanel';
+import { resolutionService } from '../../utils/resolutionService';
+import { toast } from 'sonner';
 
 interface AdminOverviewProps {
   userProfile?: {
@@ -48,6 +51,7 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
   const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [isOfflineMarketsExpanded, setIsOfflineMarketsExpanded] = useState(false);
+  const [syncingMarkets, setSyncingMarkets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadAdminStats();
@@ -266,6 +270,50 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
     }
   };
 
+  const handleSyncToBlockchain = async (market: BettingMarket) => {
+    if (!userProfile?.walletAddress) {
+      toast.error('Wallet not connected');
+      return;
+    }
+
+    // Add to syncing set
+    setSyncingMarkets(prev => new Set(prev).add(market.id));
+
+    try {
+      toast.info('Syncing market to blockchain...');
+
+      // Call preliminaryResolve - default to YES (1) as outcome
+      // The resolutionService will fetch the contract address from the database
+      const outcome = 1; // YES
+
+      const result = await resolutionService.preliminaryResolveMarket(
+        market.id,
+        outcome,
+        'Synced to blockchain by admin'
+      );
+
+      // If we got here without throwing, it succeeded
+      if (result.transactionId) {
+        toast.success(`Market synced to blockchain! TX: ${result.transactionId.slice(0, 10)}...`);
+      } else {
+        toast.success('Market synced to blockchain!');
+      }
+
+      // Reload markets to refresh status
+      await loadMarkets();
+    } catch (error: any) {
+      console.error('Error syncing market to blockchain:', error);
+      toast.error(`Sync failed: ${error.message || 'Unknown error'}`);
+    } finally {
+      // Remove from syncing set
+      setSyncingMarkets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(market.id);
+        return newSet;
+      });
+    }
+  };
+
   const StatCard = ({ 
     title, 
     value, 
@@ -385,51 +433,67 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
       {(() => {
         const marketData = categorizeMarkets(markets);
 
-        const MarketCard = ({ market }: { market: BettingMarket }) => (
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-            <div className="flex-1">
-              <p className="font-medium text-sm line-clamp-1">{market.claim}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="text-xs">{market.category}</Badge>
-                <span className="text-xs text-muted-foreground">
-                  {market.expiresAt ? new Date(market.expiresAt).toLocaleDateString() : 'No expiry'}
-                </span>
-                {market.status === 'offline' && (
-                  <Badge variant="secondary" className="text-xs bg-red-100 text-red-800">
-                    Offline
-                  </Badge>
+        const MarketCard = ({ market, showSyncButton = false }: { market: BettingMarket; showSyncButton?: boolean }) => {
+          const isSyncing = syncingMarkets.has(market.id);
+
+          return (
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div className="flex-1">
+                <p className="font-medium text-sm line-clamp-1">{market.claim}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-xs">{market.category}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {market.expiresAt ? new Date(market.expiresAt).toLocaleDateString() : 'No expiry'}
+                  </span>
+                  {market.status === 'offline' && (
+                    <Badge variant="secondary" className="text-xs bg-red-100 text-red-800">
+                      Offline
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <p className="text-sm font-medium">{market.totalPool.toFixed(2)} HBAR</p>
+                  <p className="text-xs text-muted-foreground">{market.totalCasters} bets</p>
+                </div>
+                {showSyncButton && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSyncToBlockchain(market)}
+                    disabled={isSyncing}
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    title="Sync market to blockchain (calls preliminaryResolve)"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                  </Button>
+                )}
+                {market.status === 'offline' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOnlineMarket(market)}
+                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                    title="Bring market back online"
+                  >
+                    <Eye className="h-3 w-3" />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOfflineMarket(market)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    title="Take market offline"
+                  >
+                    <EyeOff className="h-3 w-3" />
+                  </Button>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <p className="text-sm font-medium">{market.totalPool.toFixed(2)} HBAR</p>
-                <p className="text-xs text-muted-foreground">{market.totalCasters} bets</p>
-              </div>
-              {market.status === 'offline' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleOnlineMarket(market)}
-                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                  title="Bring market back online"
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleOfflineMarket(market)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  title="Take market offline"
-                >
-                  <EyeOff className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        );
+          );
+        };
 
         return (
           <div className="space-y-6">
@@ -467,7 +531,7 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
                 <CardContent className="space-y-3 max-h-80 overflow-y-auto">
                   {marketData.disputable.length > 0 ? (
                     marketData.disputable.slice(0, 10).map(market => (
-                      <MarketCard key={market.id} market={market} />
+                      <MarketCard key={market.id} market={market} showSyncButton={true} />
                     ))
                   ) : (
                     <div className="text-center py-4 text-muted-foreground">

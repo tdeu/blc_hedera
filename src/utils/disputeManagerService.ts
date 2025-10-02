@@ -11,16 +11,15 @@ const DISPUTE_MANAGER_ABI = [
   "function DISPUTE_PERIOD_HOURS() external view returns (uint256)",
   "function adminManager() external view returns (address)",
   "function bondToken() external view returns (address)",
-  "function getDispute(uint256 _disputeId) external view returns (tuple(uint256 id, address disputer, address marketAddress, uint256 bondAmount, string evidence, string reason, bytes32 evidenceHash, uint256 createdAt, uint256 resolvedAt, uint8 status, uint8 outcome))",
+  "function getDispute(uint256 _disputeId) external view returns (tuple(uint256 id, address disputer, address marketAddress, uint256 bondAmount, string evidence, string reason, bytes32 evidenceHash, uint256 createdAt, uint256 resolveBy, uint8 status, uint8 outcome, address resolvedBy, uint256 resolvedAt, string adminNotes))",
   "function getActiveDisputes() external view returns (uint256[])",
-  "function getDisputesByMarket(address _marketAddress) external view returns (uint256[])",
-  "function getDisputesByUser(address _user) external view returns (uint256[])",
+  "function getMarketDisputes(address _marketAddress) external view returns (uint256[])",
+  "function getUserDisputes(address _user) external view returns (uint256[])",
   "function hasActiveDisputes(address _marketAddress) external view returns (bool)",
-  "function canCreateDispute(address _marketAddress) external view returns (bool)",
 
   // State-changing functions
-  "function createDispute(address _marketAddress, string calldata _evidence, string calldata _reason) external returns (uint256)",
-  "function resolveDispute(uint256 _disputeId, uint8 _outcome) external",
+  "function createDispute(address _marketAddress, string calldata _reason, string calldata _evidence, bytes32 _evidenceHash) external returns (uint256)",
+  "function resolveDispute(uint256 _disputeId, uint8 _outcome, string calldata _adminNotes) external",
 
   // Events
   "event DisputeCreated(uint256 indexed disputeId, address indexed disputer, address indexed marketAddress, uint256 bondAmount, string evidence)",
@@ -99,42 +98,52 @@ class DisputeManagerService {
       return parseFloat(ethers.formatEther(bondAmount));
     } catch (error) {
       console.error('❌ Error getting bond requirement:', error);
-      // Return default value if contract call fails
-      return 100; // 100 CAST tokens
+      // Return default value if contract call fails (1 CAST = 1e18 wei)
+      return 1; // 1 CAST token
     }
   }
 
   /**
    * Create a new dispute for a market resolution
+   *
+   * Contract signature: createDispute(address _marketAddress, string calldata _reason, string calldata _evidence, bytes32 _evidenceHash)
    */
   async createDispute(
-    marketId: string,
     marketAddress: string,
-    evidence: string,
-    reason: string
+    reason: string,
+    evidence: string
   ): Promise<DisputeCreationResult> {
     try {
       if (!this.contract || !this.signer) {
         throw new Error('DisputeManager contract not initialized');
       }
 
-      console.log('🏛️ Creating dispute for market:', marketId);
+      console.log('🏛️ Creating dispute for market contract:', marketAddress);
       console.log('📋 Evidence length:', evidence.length);
       console.log('📋 Reason:', reason);
 
-      // Check if dispute can be created
-      const canDispute = await this.contract.canCreateDispute(marketAddress);
-      if (!canDispute) {
-        throw new Error('Cannot create dispute for this market at this time');
+      // Validate inputs
+      if (!marketAddress || marketAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid market address');
+      }
+      if (!evidence || evidence.trim().length < 20) {
+        throw new Error('Evidence must be at least 20 characters');
+      }
+      if (!reason || reason.trim().length < 5) {
+        throw new Error('Reason must be at least 5 characters');
       }
 
       // Get bond requirement
       const bondAmount = await this.getBondRequirement();
       console.log('💰 Required bond amount:', bondAmount, 'CAST');
 
-      // Create the dispute transaction
+      // Create evidence hash
+      const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes(evidence));
+      console.log('🔐 Evidence hash:', evidenceHash);
+
+      // Create the dispute transaction with correct parameter order
       console.log('📤 Submitting dispute transaction...');
-      const tx = await this.contract.createDispute(marketAddress, evidence, reason);
+      const tx = await this.contract.createDispute(marketAddress, reason, evidence, evidenceHash);
 
       console.log('⏳ Waiting for dispute transaction confirmation...');
       const receipt = await tx.wait();
@@ -181,7 +190,7 @@ class DisputeManagerService {
   /**
    * Resolve a dispute (admin only)
    */
-  async resolveDispute(disputeId: string, outcome: 'Upheld' | 'Rejected'): Promise<void> {
+  async resolveDispute(disputeId: string, outcome: 'Upheld' | 'Rejected', adminNotes: string = 'Resolved by admin'): Promise<void> {
     try {
       if (!this.contract) {
         throw new Error('DisputeManager contract not initialized');
@@ -193,7 +202,10 @@ class DisputeManagerService {
       // Convert outcome to contract enum (0 = Pending, 1 = Upheld, 2 = Rejected)
       const outcomeEnum = outcome === 'Upheld' ? 1 : 2;
 
-      const tx = await this.contract.resolveDispute(disputeId, outcomeEnum);
+      // Ensure admin notes meet minimum length requirement (5 characters)
+      const notes = adminNotes.length >= 5 ? adminNotes : 'Resolved by admin';
+
+      const tx = await this.contract.resolveDispute(disputeId, outcomeEnum, notes);
       console.log('⏳ Waiting for resolution transaction...');
 
       const receipt = await tx.wait();
@@ -269,22 +281,6 @@ class DisputeManagerService {
   }
 
   /**
-   * Check if a dispute can be created for a market
-   */
-  async canCreateDispute(marketAddress: string): Promise<boolean> {
-    try {
-      if (!this.contract) {
-        return false;
-      }
-
-      return await this.contract.canCreateDispute(marketAddress);
-    } catch (error) {
-      console.error('❌ Error checking if dispute can be created:', error);
-      return false;
-    }
-  }
-
-  /**
    * Get disputes for a specific market
    */
   async getDisputesByMarket(marketAddress: string): Promise<Dispute[]> {
@@ -293,7 +289,7 @@ class DisputeManagerService {
         return [];
       }
 
-      const disputeIds = await this.contract.getDisputesByMarket(marketAddress);
+      const disputeIds = await this.contract.getMarketDisputes(marketAddress);
       const disputes: Dispute[] = [];
 
       for (const disputeId of disputeIds) {

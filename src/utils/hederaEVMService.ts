@@ -109,7 +109,8 @@ export class HederaEVMService {
     claim: string,
     description: string,
     expirationDate: Date,
-    category: string
+    category: string,
+    marketId?: string
   ): Promise<MarketContract> {
     try {
       console.log('Creating market on Hedera EVM:', { claim, expirationDate });
@@ -350,11 +351,22 @@ export class HederaEVMService {
         if (supabaseUrl && supabaseAnon) {
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(supabaseUrl, supabaseAnon);
-          await supabase
-            .from('approved_markets')
-            .update({ contract_address: marketAddress })
-            .eq('claim', claim);
-          console.log('✅ Contract address persisted to Supabase:', marketAddress);
+
+          if (marketId) {
+            // Use market ID for unique identification (preferred)
+            await supabase
+              .from('approved_markets')
+              .update({ contract_address: marketAddress })
+              .eq('id', marketId);
+            console.log('✅ Contract address persisted to Supabase using market ID:', marketAddress);
+          } else {
+            // Fallback to claim for backward compatibility
+            await supabase
+              .from('approved_markets')
+              .update({ contract_address: marketAddress })
+              .eq('claim', claim);
+            console.log('✅ Contract address persisted to Supabase using claim:', marketAddress);
+          }
         }
       } catch (persistErr) {
         console.warn('⚠️ Supabase persistence failed:', persistErr);
@@ -1035,6 +1047,75 @@ export class HederaEVMService {
     }
   }
 
+  /**
+   * Fetch all bets (BetNFTMinted events) for a specific market
+   */
+  async getMarketBetHistory(marketAddress: string): Promise<any[]> {
+    try {
+      console.log('📊 Fetching bet history for market:', marketAddress);
+
+      const betNFTAddress = TOKEN_ADDRESSES.BET_NFT_CONTRACT;
+      if (!betNFTAddress || betNFTAddress === '0x0000000000000000000000000000000000000000') {
+        console.warn('⚠️ BetNFT contract address not configured');
+        return [];
+      }
+
+      const betNFTABI = [
+        "event BetNFTMinted(uint256 indexed tokenId, address indexed market, address indexed owner, uint256 shares, bool isYes)",
+        "function betMetadata(uint256) external view returns (address market, uint256 shares, bool isYes, uint256 timestamp)"
+      ];
+
+      const betNFT = new ethers.Contract(betNFTAddress, betNFTABI, this.provider);
+
+      // Query for BetNFTMinted events filtered by this market
+      // We use the 'market' parameter which is the 2nd indexed parameter
+      const filter = betNFT.filters.BetNFTMinted(null, marketAddress, null);
+
+      // Get events from the last 100,000 blocks (adjust as needed)
+      const currentBlock = await this.provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 100000);
+
+      console.log(`🔍 Querying BetNFTMinted events from block ${fromBlock} to ${currentBlock}`);
+      const events = await betNFT.queryFilter(filter, fromBlock, currentBlock);
+
+      console.log(`📊 Found ${events.length} bet events for market ${marketAddress}`);
+
+      // Transform events into bet objects
+      const bets = await Promise.all(events.map(async (event: any) => {
+        const tokenId = event.args.tokenId;
+        const owner = event.args.owner;
+        const shares = event.args.shares;
+        const isYes = event.args.isYes;
+
+        // Get block to extract timestamp
+        const block = await event.getBlock();
+        const timestamp = block.timestamp * 1000; // Convert to milliseconds
+
+        // Convert shares from wei to CAST
+        const amount = parseFloat(ethers.formatEther(shares));
+
+        return {
+          id: `bet-${event.transactionHash}-${tokenId}`,
+          marketId: marketAddress,
+          position: isYes ? 'yes' : 'no',
+          amount: amount,
+          walletAddress: owner,
+          placedAt: new Date(timestamp).toISOString(),
+          transactionHash: event.transactionHash,
+          tokenId: tokenId.toString(),
+          shares: shares.toString()
+        };
+      }));
+
+      console.log(`✅ Processed ${bets.length} bets from blockchain`);
+      return bets;
+
+    } catch (error: any) {
+      console.error('❌ Error fetching bet history:', error);
+      return [];
+    }
+  }
+
 }
 
 /**
@@ -1046,4 +1127,18 @@ export const getHederaEVMConfig = (): HederaEVMConfig => {
     privateKey: (import.meta.env as any).VITE_HEDERA_PRIVATE_KEY_EVM || '0xf8ba79af7c966d32d2f19e8d0a33dea8bb46347089c5cf9dc3ba6f84a30812b9',
     factoryAddress: TOKEN_ADDRESSES.FACTORY_CONTRACT
   };
+};
+
+// Singleton instance for easy access
+let globalHederaEVMService: HederaEVMService | null = null;
+
+/**
+ * Get or create the global HederaEVMService instance
+ */
+export const getHederaEVMServiceInstance = (): HederaEVMService => {
+  if (!globalHederaEVMService) {
+    const config = getHederaEVMConfig();
+    globalHederaEVMService = new HederaEVMService(config);
+  }
+  return globalHederaEVMService;
 };

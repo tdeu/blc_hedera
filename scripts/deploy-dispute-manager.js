@@ -18,7 +18,7 @@ async function main() {
 
   // Get AdminManager address from env (lowercase for Hedera)
   const adminManagerAddress = '0x18ae8c6bc5ed1bedc6da3f2d6df36d87beb48b37'; // From constants.ts
-  const castTokenAddress = '0xb9e39c8d1856cf1e1b9f1dd0b35dfb7c62b80c84'; // From constants.ts
+  const castTokenAddress = '0xC78Ac73844077917E20530E36ac935c4B56236c2'; // CORRECT CAST token address
 
   console.log('AdminManager address:', adminManagerAddress);
   console.log('CAST Token address:', castTokenAddress);

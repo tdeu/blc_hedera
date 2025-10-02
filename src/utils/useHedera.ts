@@ -157,7 +157,8 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
         market.claim || '',
         market.description || '',
         market.expiresAt || new Date(),
-        market.category || 'General'
+        market.category || 'General',
+        market.id // Pass market ID for unique identification
       );
 
       console.log('✅ Market created on Hedera EVM:', marketContract.contractId);

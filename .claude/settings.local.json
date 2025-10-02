@@ -70,7 +70,10 @@
       "Bash(echo:*)",
       "Read(//c/**)",
       "mcp__playwright__browser_close",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(start brave http://localhost:3001)",
+      "Bash(start chrome http://localhost:3001)",
+      "WebFetch(domain:docs.hedera.com)"
     ],
     "deny": [],
     "ask": []

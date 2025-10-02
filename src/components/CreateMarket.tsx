@@ -320,12 +320,13 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
-                  <Input
+                  <input
                     id="image-upload"
                     type="file"
                     accept="image/*"
                     onChange={handleImageUpload}
-                    className="hidden"
+                    className="sr-only"
+                    style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', borderWidth: 0 }}
                   />
                   <Label htmlFor="image-upload" className="cursor-pointer">
                     <div className="flex flex-col items-center gap-2">
@@ -453,18 +454,29 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                 <Input
                   id="expirationDate"
                   type="datetime-local"
-                  value={expirationDate && !isNaN(expirationDate.getTime()) ? expirationDate.toISOString().slice(0, 16) : ''}
+                  value={expirationDate && !isNaN(expirationDate.getTime())
+                    ? new Date(expirationDate.getTime() - expirationDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+                    : ''}
                   onChange={(e) => {
                     const dateStr = e.target.value;
                     if (dateStr) {
-                      // Parse the datetime-local string properly
-                      const date = new Date(dateStr);
+                      // datetime-local gives us "YYYY-MM-DDTHH:mm" in local time
+                      // When we do new Date(dateStr), it parses it as UTC
+                      // We need to create a Date that represents the local time the user selected
+                      const [datePart, timePart] = dateStr.split('T');
+                      const [year, month, day] = datePart.split('-').map(Number);
+                      const [hours, minutes] = timePart.split(':').map(Number);
+                      // Create date using local timezone
+                      const date = new Date(year, month - 1, day, hours, minutes);
                       setExpirationDate(date);
                     } else {
                       setExpirationDate(undefined);
                     }
                   }}
-                  min={new Date().toISOString().slice(0, 16)}
+                  min={(() => {
+                    const now = new Date();
+                    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                  })()}
                   className="text-sm"
                 />
                 <p className="text-xs text-muted-foreground">

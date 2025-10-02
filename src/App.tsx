@@ -1183,7 +1183,8 @@ export default function App() {
       // Handle different market types differently
       if (newMarket.status === 'disputable') {
         // Disputable markets (Verify Truth) go directly to approved markets with dispute period
-        const disputePeriodEnd = new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS); // Standardized dispute period
+        // IMPORTANT: Calculate dispute period from market expiry time, not current time
+        const disputePeriodEnd = new Date(newMarket.expiresAt.getTime() + DISPUTE_PERIOD.MILLISECONDS);
 
         // Create the market with dispute period
         const disputableMarket = {

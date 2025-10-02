@@ -238,10 +238,10 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
                           </div>
                           <Badge variant="secondary">{market.category}</Badge>
                         </div>
-                        {market.resolution_data?.preliminary_outcome && (
+                        {market.resolution_data?.preliminary_outcome !== undefined && (
                           <div className="mt-2">
                             <Badge variant="outline">
-                              Preliminary: {market.resolution_data.preliminary_outcome.toUpperCase()}
+                              Preliminary: {String(market.resolution_data.preliminary_outcome).toUpperCase()}
                             </Badge>
                           </div>
                         )}
@@ -287,10 +287,10 @@ const TwoStageResolutionPanel: React.FC<TwoStageResolutionPanelProps> = ({ userP
                           </div>
                           <Badge variant="secondary">{market.category}</Badge>
                         </div>
-                        {market.resolution_data?.preliminary_outcome && (
+                        {market.resolution_data?.preliminary_outcome !== undefined && (
                           <div className="mt-2">
                             <Badge variant="outline">
-                              Preliminary: {market.resolution_data.preliminary_outcome.toUpperCase()}
+                              Preliminary: {String(market.resolution_data.preliminary_outcome).toUpperCase()}
                             </Badge>
                           </div>
                         )}

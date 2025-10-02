@@ -86,6 +86,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
   // Activity feed state
   const [marketEvidence, setMarketEvidence] = useState<EvidenceSubmission[]>([]);
+  const [marketDisputes, setMarketDisputes] = useState<any[]>([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
 
   // Helper function to get translated text
@@ -251,10 +252,9 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       // Create the dispute on blockchain
       toast.info('Step 2/2: Creating dispute on blockchain...');
       const result = await disputeManagerService.createDispute(
-        market.id,
         marketAddress,
-        disputeData.evidenceDescription || disputeData.reason,
-        disputeData.reason
+        disputeData.reason,
+        disputeData.evidenceDescription || disputeData.reason
       );
 
       console.log('✅ Dispute created successfully:', result);
@@ -337,10 +337,48 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       const evidence = await evidenceService.getMarketEvidence(market.id);
       setMarketEvidence(evidence);
 
-      // Load bet history for this market
-      const bets = userDataService.getMarketBets(market.id);
+      // Load bet history from blockchain if contract address exists
+      let bets: any[] = [];
+      if (market.contractAddress) {
+        try {
+          const { getHederaEVMServiceInstance } = await import('../utils/hederaEVMService');
+          const evmService = getHederaEVMServiceInstance();
+          const blockchainBets = await evmService.getMarketBetHistory(market.contractAddress);
+          console.log('📊 Loaded blockchain bets:', blockchainBets);
+          bets = blockchainBets;
+        } catch (error) {
+          console.error('Failed to load blockchain bets, falling back to localStorage:', error);
+          // Fallback to localStorage bets if blockchain fetch fails
+          bets = userDataService.getMarketBets(market.id);
+        }
+      } else {
+        // No contract address, use localStorage bets
+        bets = userDataService.getMarketBets(market.id);
+      }
+
       setMarketBets(bets);
-      console.log('📊 Loaded market bets:', bets);
+      console.log('📊 Total bets loaded:', bets.length);
+
+      // Load disputes from DisputeManager contract
+      if (market.contractAddress) {
+        try {
+          const { disputeManagerService } = await import('../utils/disputeManagerService');
+
+          // Create a minimal wallet connection object for initialization
+          const walletConnection = {
+            isConnected: true,
+            signer: null // Service will fallback to MetaMask provider
+          };
+
+          await disputeManagerService.initialize(walletConnection);
+          const disputes = await disputeManagerService.getDisputesByMarket(market.contractAddress);
+          console.log('📋 Loaded market disputes:', disputes);
+          setMarketDisputes(disputes);
+        } catch (error) {
+          console.error('Failed to load disputes:', error);
+          // Don't fail the whole loading process if disputes fail
+        }
+      }
     } catch (error) {
       console.error('Failed to load market activity:', error);
     } finally {
@@ -391,6 +429,12 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
   const handleEvidenceSubmit = async () => {
     if (!evidenceText.trim() && !evidenceLinks.some(link => link.trim())) {
       toast.error('Please provide evidence text or at least one link');
+      return;
+    }
+
+    // Validate minimum evidence length (contract requires 20+ characters)
+    if (evidenceText.trim().length < 20) {
+      toast.error('Evidence must be at least 20 characters long');
       return;
     }
 
@@ -447,10 +491,9 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
 
       const disputeResult = await disputeManagerService.createDispute(
-        market.id,
         marketAddress,
-        evidenceWithLinks,
-        'Evidence submitted via dispute form'
+        'Evidence submitted via dispute form',
+        evidenceWithLinks
       );
 
       // Convert to expected result format
@@ -770,7 +813,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                       <span className="text-sm font-medium text-amber-800">Wallet Required</span>
                     </div>
                     <div className="text-sm text-amber-700">
-                      Connect your MetaMask wallet to submit evidence and pay the 0.1 HBAR fee.
+                      Connect your MetaMask wallet to submit evidence (FREE - no fees).
                     </div>
                   </div>
                   <Button onClick={handleConnectWallet} className="bg-amber-600 hover:bg-amber-700">
@@ -785,16 +828,11 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                   <span className="text-sm font-medium text-blue-800">Evidence Submission Fee & Rewards</span>
                 </div>
                 <div className="text-sm text-blue-700 space-y-1">
-                  <div>• <strong>Submission Fee:</strong> 0.1 HBAR (paid from wallet)</div>
+                  <div>• <strong>Submission Fee:</strong> FREE (no fees)</div>
                   <div>• <strong>Your Balance:</strong> {userWalletBalance.toFixed(4)} HBAR</div>
                   <div>• <strong>Reward if Accepted:</strong> Up to 1.0 HBAR + quality bonus</div>
-                  <div>• <strong>Partial Refund:</strong> 50% fee refunded for good-faith attempts</div>
+                  <div>• <strong>Note:</strong> Only gas fees in HBAR for transaction</div>
                 </div>
-                {userWalletBalance < 0.1 && (
-                  <div className="text-red-600 text-sm font-medium mt-2">
-                    ⚠️ Insufficient balance. You need at least 0.1 HBAR to submit evidence.
-                  </div>
-                )}
               </div>
             )}
 
@@ -855,7 +893,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 disabled={
                   isSubmittingEvidence ||
                   !isWalletConnected ||
-                  (!evidenceText.trim() && !evidenceLinks.some(link => link.trim())) ||
+                  evidenceText.trim().length < 20 ||
                   userWalletBalance < 0.1
                 }
                 className="gap-2"
@@ -873,8 +911,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                   if (submissionStep === 'storing') return 'Saving Evidence...';
                   if (submissionStep === 'complete') return 'Evidence Submitted! ✅';
                   if (!isWalletConnected) return 'Connect Wallet First';
-                  if (userWalletBalance < 0.1) return 'Insufficient Balance';
-                  return 'Submit Evidence (0.1 HBAR)';
+                  return 'Submit Evidence (FREE)';
                 })()}
               </Button>
             </div>
@@ -1479,8 +1516,16 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                       </span>
                       {' '}• Potential return: {bet.potentialReturn ? bet.potentialReturn.toFixed(3) : (bet.amount * 2).toFixed(3)} CAST
                     </p>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(bet.placedAt).toLocaleDateString()} at {new Date(bet.placedAt).toLocaleTimeString()}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{new Date(bet.placedAt).toLocaleDateString()} at {new Date(bet.placedAt).toLocaleTimeString()}</span>
+                      {bet.transactionHash && (
+                        <span className="font-mono">
+                          TX: {bet.transactionHash.slice(0, 8)}...{bet.transactionHash.slice(-6)}
+                        </span>
+                      )}
+                      {bet.tokenId && (
+                        <span>NFT #{bet.tokenId}</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1511,7 +1556,59 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 </div>
               )}
 
-              {/* Evidence Submissions */}
+              {/* Dispute Submissions */}
+              {marketDisputes.map((dispute) => (
+                <div key={dispute.id} className="flex gap-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                      <FileText className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-purple-700 dark:text-purple-400">Evidence Submitted</span>
+                      <Badge variant="outline" className="text-xs bg-purple-100 text-purple-700 border-purple-200">
+                        Dispute #{dispute.id}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${
+                          dispute.status === 1 ? 'bg-green-100 text-green-700 border-green-200' :
+                          dispute.status === 2 ? 'bg-red-100 text-red-700 border-red-200' :
+                          dispute.status === 0 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                          'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        {dispute.status === 0 ? 'Active' : dispute.status === 1 ? 'Resolved' : dispute.status === 2 ? 'Rejected' : 'Expired'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Submitted by{' '}
+                      <span className="font-mono text-xs bg-muted px-1 rounded">
+                        {dispute.disputer.slice(0, 6)}...{dispute.disputer.slice(-4)}
+                      </span>
+                      {' '}• Bond: {dispute.bondAmount ? (Number(dispute.bondAmount) / 1e18).toFixed(1) : '1'} CAST
+                    </p>
+                    {/* Evidence preview */}
+                    <p className="text-sm">
+                      "{dispute.evidence.length > 100 ? dispute.evidence.slice(0, 100) + '...' : dispute.evidence}"
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{dispute.createdAt ? new Date(Number(dispute.createdAt) * 1000).toLocaleDateString() : 'Recent'}</span>
+                      {dispute.evidenceHash && (
+                        <span className="font-mono">
+                          Hash: {dispute.evidenceHash.slice(0, 10)}...
+                        </span>
+                      )}
+                      {dispute.reason && (
+                        <span>Reason: {dispute.reason.slice(0, 30)}{dispute.reason.length > 30 ? '...' : ''}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Old Evidence Submissions (from database) */}
               {marketEvidence.map((evidence) => (
                 <div key={evidence.id} className="flex gap-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
                   <div className="flex-shrink-0">
@@ -1521,7 +1618,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-purple-700 dark:text-purple-400">Evidence Submitted</span>
+                      <span className="font-semibold text-purple-700 dark:text-purple-400">Evidence Submitted (Legacy)</span>
                       <Badge
                         variant="outline"
                         className={`text-xs ${
@@ -1564,8 +1661,8 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 </div>
               ))}
 
-              {/* AI Resolution Event */}
-              {market.resolution_data && (
+              {/* AI Resolution Event - only show for resolved markets */}
+              {market.status === 'resolved' && market.resolution_data && (
                 <div className="flex gap-4 p-4 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-200">
                   <div className="flex-shrink-0">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">

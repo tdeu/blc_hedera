@@ -352,17 +352,59 @@ export class ResolutionService {
     try {
       console.log(`Starting preliminary resolution for market ${marketId}: ${outcome}`);
 
-      // Convert outcome to contract format
+      // Convert outcome to contract format (0=Invalid, 1=Yes, 2=No)
       const contractOutcome = outcome === 'yes' ? 1 : 2;
 
-      // TODO: Get contract address for this market
-      const marketContract = '0x...'; // This should come from database
+      // Get market contract address from database
+      let marketContractAddress: string | null = null;
+      let txHash: string | undefined;
 
-      // TODO: Get admin signer
-      // const adminSigner = this.getAdminSigner(adminAddress);
+      if (supabase) {
+        const { data: market, error } = await supabase
+          .from('approved_markets')
+          .select('contract_address')
+          .eq('id', marketId)
+          .single();
 
-      // TODO: Call contract preliminary resolve
-      // const txHash = await contractService.preliminaryResolve(marketContract, contractOutcome, adminSigner);
+        if (error) {
+          console.error('Error fetching market:', error);
+        } else {
+          marketContractAddress = market?.contract_address;
+        }
+      }
+
+      // Call smart contract if contract address exists
+      if (marketContractAddress && marketContractAddress !== '0x0000000000000000000000000000000000000000') {
+        try {
+          console.log(`📞 Calling preliminaryResolve on contract: ${marketContractAddress}`);
+
+          // Get signer from MetaMask/connected wallet
+          if (typeof window !== 'undefined' && (window as any).ethereum) {
+            const provider = new (await import('ethers')).BrowserProvider((window as any).ethereum);
+            const signer = await provider.getSigner();
+
+            // Create a simple contract instance to call preliminaryResolve
+            const ethers = await import('ethers');
+            const PREDICTION_MARKET_ABI = [
+              "function preliminaryResolve(uint8 outcome) external"
+            ];
+
+            const marketContract = new ethers.Contract(marketContractAddress, PREDICTION_MARKET_ABI, signer);
+            const tx = await marketContract.preliminaryResolve(contractOutcome);
+            await tx.wait(); // Wait for confirmation
+            txHash = tx.hash;
+
+            console.log(`✅ Preliminary resolve transaction sent: ${txHash}`);
+          } else {
+            console.warn('⚠️ No wallet connection available, skipping contract call');
+          }
+        } catch (contractError) {
+          console.error('❌ Contract preliminary resolve failed:', contractError);
+          // Continue with database update even if contract call fails
+        }
+      } else {
+        console.warn(`⚠️ No contract address for market ${marketId}, skipping contract call`);
+      }
 
       // Update database to disputable status
       if (supabase) {
@@ -370,7 +412,12 @@ export class ResolutionService {
           .from('approved_markets')
           .update({
             status: 'disputable',
-            dispute_period_end: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString()
+            dispute_period_end: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString(),
+            resolution_data: {
+              preliminary_outcome: outcome,
+              preliminary_time: new Date().toISOString(),
+              resolved_by: adminAddress
+            }
           })
           .eq('id', marketId);
       }
@@ -393,7 +440,7 @@ export class ResolutionService {
       }
 
       return {
-        // transactionId: txHash,
+        transactionId: txHash,
         hcsTopicId: hederaResolutionService.getTopicIds().resolution
       };
 
