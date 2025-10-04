@@ -73,7 +73,8 @@
       "Bash(tee:*)",
       "Bash(start brave http://localhost:3001)",
       "Bash(start chrome http://localhost:3001)",
-      "WebFetch(domain:docs.hedera.com)"
+      "WebFetch(domain:docs.hedera.com)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

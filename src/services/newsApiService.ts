@@ -299,6 +299,159 @@ export class NewsApiService {
       return false;
     }
   }
+
+  /**
+   * THREE-SIGNAL SYSTEM: Calculate API score (0-30 points)
+   * Based on news article analysis with source credibility weighting
+   */
+  async calculateAPISignalScore(
+    marketClaim: string,
+    region?: string
+  ): Promise<{
+    score: number;
+    percentage: number;
+    articles: ProcessedNewsArticle[];
+    totalResults: number;
+    sentiment: { positive: number; negative: number; neutral: number; score: number };
+    recommendation: 'YES' | 'NO' | 'UNCERTAIN';
+    warnings: string[];
+  }> {
+    const MAX_POINTS = 30;
+    const warnings: string[] = [];
+
+    try {
+      // Fetch news articles
+      const articles = await this.searchNews(marketClaim, [], 20);
+
+      if (articles.length === 0) {
+        warnings.push('No external API data available');
+        return {
+          score: 15, // Neutral score if no data
+          percentage: 50,
+          articles: [],
+          totalResults: 0,
+          sentiment: { positive: 0, negative: 0, neutral: 0, score: 0 },
+          recommendation: 'UNCERTAIN',
+          warnings
+        };
+      }
+
+      // Source credibility tier weights
+      const getSourceWeight = (sourceName: string): number => {
+        const lowerSource = sourceName.toLowerCase();
+
+        // Tier 1: Major African + International trusted sources (1.5x weight)
+        const tier1 = ['bbc', 'reuters', 'associated press', 'nation.africa', 'standardmedia', 'thecitizen', 'premiumtimes', 'aljazeera'];
+        if (tier1.some(s => lowerSource.includes(s))) return 1.5;
+
+        // Tier 2: International news (1.2x weight)
+        const tier2 = ['cnn', 'guardian', 'bloomberg', 'financial times', 'wall street journal', 'washington post', 'new york times'];
+        if (tier2.some(s => lowerSource.includes(s))) return 1.2;
+
+        // Tier 3: Regional media (1.0x weight)
+        const tier3 = ['allafrica', 'africanews', 'yahoo', 'google news'];
+        if (tier3.some(s => lowerSource.includes(s))) return 1.0;
+
+        // Tier 4: Unknown sources (0.4x weight)
+        return 0.4;
+      };
+
+      // Analyze sentiment with credibility weighting
+      const positiveWords = ['confirm', 'confirmed', 'success', 'win', 'won', 'achieve', 'achieved', 'complete', 'completed', 'yes', 'true', 'approved', 'passed'];
+      const negativeWords = ['deny', 'denied', 'fail', 'failed', 'lose', 'lost', 'cancel', 'cancelled', 'delay', 'delayed', 'no', 'false', 'rejected'];
+
+      let weightedConfirming = 0;
+      let weightedDenying = 0;
+      let weightedNeutral = 0;
+
+      let sentimentPositive = 0;
+      let sentimentNegative = 0;
+      let sentimentNeutral = 0;
+
+      articles.forEach(article => {
+        const weight = getSourceWeight(article.source);
+        const text = `${article.title} ${article.content}`.toLowerCase();
+
+        const posCount = positiveWords.filter(word => text.includes(word)).length;
+        const negCount = negativeWords.filter(word => text.includes(word)).length;
+
+        if (posCount > negCount) {
+          weightedConfirming += weight;
+          sentimentPositive++;
+        } else if (negCount > posCount) {
+          weightedDenying += weight;
+          sentimentNegative++;
+        } else {
+          weightedNeutral += weight;
+          sentimentNeutral++;
+        }
+      });
+
+      const total = weightedConfirming + weightedDenying + weightedNeutral;
+      const yesPercentage = total > 0 ? (weightedConfirming / total) * 100 : 50;
+      const apiConsensus = Math.abs(yesPercentage - 50);
+
+      // Base score (0-25 points) based on consensus strength
+      let score = (apiConsensus / 50) * 25;
+
+      // Source quality bonus (0-5 points)
+      const avgWeight = articles.length > 0 ? total / articles.length : 0;
+      const qualityBonus = Math.min(5, avgWeight * 5);
+      score += qualityBonus;
+
+      // Low article count warning
+      if (articles.length < 5) {
+        warnings.push(`Low API result count: only ${articles.length} articles`);
+      }
+
+      score = Math.max(0, Math.min(MAX_POINTS, score));
+
+      // Determine recommendation
+      let recommendation: 'YES' | 'NO' | 'UNCERTAIN' = 'UNCERTAIN';
+      if (yesPercentage > 66) recommendation = 'YES';
+      else if (yesPercentage < 34) recommendation = 'NO';
+
+      // Calculate sentiment score (-1 to +1)
+      const sentimentTotal = articles.length || 1;
+      const sentimentScore = (sentimentPositive - sentimentNegative) / sentimentTotal;
+
+      console.log(`📊 API Signal Score:
+        Score: ${score.toFixed(2)}/30
+        Percentage: ${yesPercentage.toFixed(1)}% YES
+        Articles: ${articles.length}
+        Sentiment: ${sentimentPositive} positive, ${sentimentNegative} negative, ${sentimentNeutral} neutral
+        Recommendation: ${recommendation}
+      `);
+
+      return {
+        score,
+        percentage: yesPercentage,
+        articles,
+        totalResults: articles.length,
+        sentiment: {
+          positive: sentimentPositive,
+          negative: sentimentNegative,
+          neutral: sentimentNeutral,
+          score: sentimentScore
+        },
+        recommendation,
+        warnings
+      };
+
+    } catch (error) {
+      console.error('❌ API signal calculation failed:', error);
+      warnings.push('API fetch failed');
+      return {
+        score: 15,
+        percentage: 50,
+        articles: [],
+        totalResults: 0,
+        sentiment: { positive: 0, negative: 0, neutral: 0, score: 0 },
+        recommendation: 'UNCERTAIN',
+        warnings
+      };
+    }
+  }
 }
 
 export const newsApiService = new NewsApiService();

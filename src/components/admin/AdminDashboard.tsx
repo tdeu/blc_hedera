@@ -21,7 +21,8 @@ import {
   ChevronDown,
   ChevronUp,
   Scale,
-  RefreshCw
+  RefreshCw,
+  Target
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
 import AdminDisputePanel from '../AdminDisputePanel';
@@ -31,6 +32,7 @@ import { AIAgentSimple } from '../AIAgentSimple';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
 import { BettingMarket } from '../BettingMarkets';
 import TwoStageResolutionPanel from './TwoStageResolutionPanel';
+import ThreeSignalPanel from './ThreeSignalPanel';
 import { resolutionService } from '../../utils/resolutionService';
 import { toast } from 'sonner';
 
@@ -598,6 +600,23 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ userProfile }) => {
           </div>
         );
       })()}
+
+      {/* Three-Signal Analysis Panel */}
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Three-Signal Resolution Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ThreeSignalPanel
+              userProfile={userProfile || { walletAddress: 'unknown' }}
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Two-Stage Resolution Panel */}
       <div className="mt-6">

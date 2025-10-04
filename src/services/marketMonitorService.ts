@@ -5,6 +5,7 @@ import { SupabaseService } from './supabaseService';
 import { getBlockCastAIAgent, MarketResolutionRequest } from './blockcastAIAgent';
 import { initializeHederaConfig } from '../utils/hederaConfig';
 import { HCSService } from '../utils/hcsService';
+import { calculateThreeSignals, getResolutionScore, SignalScores } from './threeSignalCalculator';
 import fs from 'fs';
 import path from 'path';
 
@@ -384,15 +385,66 @@ export class MarketMonitorService {
   }
 
   /**
-   * Get AI resolution analysis using BlockCast AI Agent
+   * Get AI resolution analysis using THREE-SIGNAL SYSTEM
+   * Priority: Three-Signal > BlockCast AI Agent > Fallback
    */
   private async getAIResolution(marketData: MarketInfo, evidence: any[]): Promise<any> {
     try {
+      console.log(`🎯 Using THREE-SIGNAL SYSTEM for market ${marketData.id} resolution...`);
+
+      // STEP 1: Try three-signal analysis first
+      let threeSignalResult: SignalScores | null = null;
+      try {
+        // Check if we already have a cached three-signal score
+        threeSignalResult = await getResolutionScore(marketData.id);
+
+        if (!threeSignalResult) {
+          // Calculate fresh three-signal analysis
+          console.log(`📊 Calculating fresh three-signal analysis for ${marketData.id}...`);
+          threeSignalResult = await calculateThreeSignals(marketData.id);
+        } else {
+          console.log(`✅ Using cached three-signal analysis for ${marketData.id}`);
+        }
+
+        // Convert three-signal result to AI analysis format
+        if (threeSignalResult) {
+          const recommendation = threeSignalResult.combined.recommendedOutcome;
+          const confidence = threeSignalResult.combined.confidence / 100; // Convert to 0-1 range
+
+          console.log(`✅ Three-Signal Analysis Complete:`, {
+            recommendation,
+            confidence,
+            totalScore: threeSignalResult.combined.totalScore,
+            aligned: threeSignalResult.combined.allSignalsAligned
+          });
+
+          return {
+            recommendation,
+            confidence,
+            reasoning: `Three-Signal Analysis (${threeSignalResult.combined.totalScore.toFixed(1)}/108 points):
+- Betting Signal: ${threeSignalResult.betting.score.toFixed(1)}/25 (${threeSignalResult.betting.percentage.toFixed(1)}% ${threeSignalResult.betting.percentage > 50 ? 'YES' : 'NO'})
+- Evidence Signal: ${threeSignalResult.evidence.score.toFixed(1)}/45 (${threeSignalResult.evidence.percentage.toFixed(1)}% ${threeSignalResult.evidence.percentage > 50 ? 'YES' : 'NO'})
+- API Signal: ${threeSignalResult.api.score.toFixed(1)}/30 (${threeSignalResult.api.percentage.toFixed(1)}% ${threeSignalResult.api.percentage > 50 ? 'YES' : 'NO'})
+${threeSignalResult.combined.allSignalsAligned ? '✅ All signals aligned (+8 bonus)' : '⚠️ Signals not fully aligned'}`,
+            riskFactors: [
+              ...threeSignalResult.betting.warnings,
+              ...threeSignalResult.evidence.warnings,
+              ...threeSignalResult.api.warnings
+            ],
+            threeSignalData: threeSignalResult,
+            usedThreeSignalSystem: true
+          };
+        }
+      } catch (threeSignalError) {
+        console.warn(`⚠️ Three-Signal System failed, falling back to BlockCast AI Agent:`, threeSignalError);
+      }
+
+      // STEP 2: Fallback to BlockCast AI Agent
       console.log(`🤖 Using BlockCast AI Agent for market ${marketData.id} resolution...`);
-      
+
       // Get the BlockCast AI Agent instance
       const aiAgent = getBlockCastAIAgent();
-      
+
       // Prepare the market resolution request
       const resolutionRequest: MarketResolutionRequest = {
         marketId: marketData.id,
