@@ -157,50 +157,17 @@ export class HederaEVMService {
 
       console.log('📊 Proceeding with market creation');
 
-      // Get blockchain time from latest block to handle clock skew
-      let blockchainTime: number;
-      try {
-        const latestBlock = await this.provider.getBlock('latest');
-        blockchainTime = latestBlock?.timestamp || Math.floor(Date.now() / 1000);
-        console.log('⏰ Blockchain time:', blockchainTime, '(', new Date(blockchainTime * 1000).toISOString(), ')');
-      } catch (error) {
-        console.warn('⚠️ Could not fetch blockchain time, using system time');
-        blockchainTime = Math.floor(Date.now() / 1000);
-      }
-
       // Use the user's specified expiration date
       const endTime = Math.floor(expirationDate.getTime() / 1000);
-      const clientTime = Math.floor(Date.now() / 1000);
-
-      // Check for significant clock skew (more than 1 hour difference)
-      const clockSkew = Math.abs(clientTime - blockchainTime);
-      if (clockSkew > 3600) {
-        console.error('🚨 CRITICAL: Your system clock is off by', Math.floor(clockSkew / 3600), 'hours!');
-        console.error('   System time:', new Date(clientTime * 1000).toISOString());
-        console.error('   Blockchain time:', new Date(blockchainTime * 1000).toISOString());
-        throw new Error(`Your system clock is incorrect (off by ${Math.floor(clockSkew / 3600)} hours). Please sync your computer's time settings and try again.`);
-      }
-
-      // Add 5-minute buffer to account for:
-      // 1. Network propagation delay (can be 30-60 seconds)
-      // 2. Minor clock skew (up to 2-3 minutes)
-      // 3. Transaction processing time (10-30 seconds)
-      // 4. Block timestamp vs wall clock time differences
-      const TIME_BUFFER_SECONDS = 300; // 5 minutes safety buffer
-      const minimumEndTime = blockchainTime + TIME_BUFFER_SECONDS;
+      const currentTime = Math.floor(Date.now() / 1000);
 
       console.log('⏰ User specified expiration:', expirationDate.toISOString());
-      console.log('⏰ Current time (client):', new Date(clientTime * 1000).toISOString());
-      console.log('⏰ Current time (blockchain):', new Date(blockchainTime * 1000).toISOString());
-      console.log('⏰ Market end time:', endTime, 'vs blockchain time:', blockchainTime);
-      console.log('⏰ Minimum safe end time:', minimumEndTime, '(with 5-min buffer)');
-      console.log('⏰ Time difference (blockchain):', endTime - blockchainTime, 'seconds (', Math.floor((endTime - blockchainTime) / 60), 'minutes)');
-      console.log('⏰ Market will expire in:', (endTime - blockchainTime) / 3600, 'hours (from blockchain perspective)');
+      console.log('⏰ Market end time:', endTime, 'vs current time:', currentTime);
+      console.log('⏰ Time difference:', endTime - currentTime, 'seconds');
+      console.log('⏰ Market will expire in:', (endTime - currentTime) / 3600, 'hours');
 
-      if (endTime <= minimumEndTime) {
-        const minutesNeeded = Math.ceil(TIME_BUFFER_SECONDS / 60);
-        const currentDifference = Math.floor((endTime - blockchainTime) / 60);
-        throw new Error(`Expiration date must be at least ${minutesNeeded} minutes in the future based on blockchain time (currently ${currentDifference} minutes). Please select a later time. Note: Your system clock shows ${new Date(clientTime * 1000).toISOString()} but blockchain time is ${new Date(blockchainTime * 1000).toISOString()}`);
+      if (endTime <= currentTime) {
+        throw new Error('Expiration date must be in the future');
       }
       
       console.log('🚀 About to call factory.createMarket with params:', {

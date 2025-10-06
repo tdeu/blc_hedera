@@ -503,22 +503,18 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                   }
 
                   const isValid = diff > 0;
-                  const isTooShort = minutes < 5; // Must be at least 5 minutes (blockchain buffer requirement)
-                  const isVeryShort = minutes >= 5 && minutes < 15; // 5-15 minutes is allowed but not recommended
+                  const isTooShort = minutes < 10;
 
                   return (
                     <div className={`text-xs mt-1 p-2 rounded ${
                       !isValid ? 'bg-red-50 text-red-600 border border-red-200' :
-                      isTooShort ? 'bg-red-50 text-red-600 border border-red-200' :
-                      isVeryShort ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                      isTooShort ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
                       'bg-green-50 text-green-700 border border-green-200'
                     }`}>
                       {!isValid ? (
                         <span>⚠️ Market must expire in the future</span>
                       ) : isTooShort ? (
-                        <span>❌ Too short: expires in {durationText}. Minimum required: 5 minutes (blockchain processing buffer)</span>
-                      ) : isVeryShort ? (
-                        <span>⚡ Short market: expires in {durationText} (min: 5 minutes, recommended: 15+ minutes)</span>
+                        <span>⚡ Very short market: expires in {durationText} (min recommended: 10 minutes)</span>
                       ) : (
                         <span>✅ Market will expire in {durationText}</span>
                       )}
@@ -526,7 +522,7 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                   );
                 })()}
                 <p className="text-xs text-muted-foreground">
-                  Markets must be at least 5 minutes long (blockchain requirement). Recommended: 15+ minutes for better participation.
+                  Markets can be as short as 10 minutes or longer. Select when this prediction should be resolved.
                 </p>
               </div>
             )}
