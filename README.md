@@ -4,6 +4,28 @@
 
 ---
 
+## 📍 Smart Contract Addresses (Hedera Testnet)
+
+| Contract | Address | Status |
+|----------|---------|--------|
+| **PredictionMarketFactory** | `0xD2092162aD3A3ebd26cA44BB7C8F5E2F87BDB17c` | ✅ Active |
+| **CAST Token** | `0xC78Ac73844077917E20530E36ac935c4B56236c2` | ✅ Active |
+| **BetNFT** | `0x8e718596977C0BE525c5b1afeA73d9eFdF9bB7ca` | ✅ Active |
+| **AdminManager** | `0x94FAF61DE192D1A441215bF3f7C318c236974959` | ✅ Active |
+| **Treasury** | `0x69649cc208138B3A2c529cB301D7Bb591C53a2e2` | ✅ Active |
+| **DisputeManager** | `0xCB8B4E630dFf7803055199A75969a25e7Ec48f39` | ✅ Active |
+
+**HCS Topics:**
+- Evidence: `0.0.6701034`
+- AI Attestations: `0.0.6701035`
+- Challenges: `0.0.6701036`
+- User Profiles: `0.0.6701037`
+
+**Network:** Hedera Testnet (Chain ID: 296)
+**RPC:** `https://testnet.hashio.io/api`
+
+---
+
 ## 🚀 CURRENT STATUS: FULLY OPERATIONAL
 
 ### ✅ **MAJOR UPDATE: Real Blockchain Betting - FULLY OPERATIONAL** 🎯
@@ -60,6 +82,51 @@
 - **Reuters**: Real-time search results processing
 - **Associated Press**: Automated content scraping
 - **Smart Fallbacks**: Graceful handling when sites block requests
+
+### 📋 **Complete Market Lifecycle (Updated 2025-01-06)**
+
+**Phase 1: Creation & Approval**
+```
+1. User creates market → Deployed to blockchain
+2. Auto-approval executed → Status: 'open' (bettable)
+3. Market appears on homepage → Users can bet YES/NO
+```
+
+**Phase 2: Active Betting**
+```
+4. Users place bets → Real-time odds updates
+5. Volume accumulates → Crowd wisdom signal forming
+6. End time approaches → Market monitors status
+```
+
+**Phase 3: Expiration & Evidence**
+```
+7. End time reached → Status: 'expired'
+8. 7-day evidence period begins
+9. Users submit evidence → Stored in HCS + database
+10. Evidence period ends → AI analysis triggered
+```
+
+**Phase 4: AI Analysis**
+```
+11. Three-Tier AI System executes:
+    - Tier 1: Three-Signal Analysis (betting + evidence + APIs)
+    - Tier 2: Hedera AI Agent (6 tools, multi-language)
+    - Tier 3: BlockCast AI Agent (LangChain)
+    - Tier 4: Simple fallback analysis
+12. Result: Status → 'pending_resolution' with AI recommendation
+```
+
+**Phase 5: Admin Resolution**
+```
+13. Admin reviews AI recommendation
+14. High confidence (≥90%): Execute preliminaryResolve()
+15. 7-day dispute period begins → Users can challenge
+16. Dispute period ends → Admin executes finalResolve()
+17. Payouts execute on-chain → Winners redeem
+```
+
+**Key Innovation:** Backend analyzes and recommends, frontend executes contracts. This separates intelligence from execution, maintaining security while enabling automation.
 
 ---
 
