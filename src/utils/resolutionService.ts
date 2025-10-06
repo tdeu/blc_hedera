@@ -1,5 +1,6 @@
 import { supabase, MarketResolution, ApprovedMarket, APIIntegrationLog } from './supabase';
 import { hederaResolutionService } from './hederaResolutionService';
+import { getHederaAIResolutionService } from '../services/hederaAIResolutionService';
 import { DISPUTE_PERIOD } from '../config/constants';
 
 interface APISource {
@@ -251,31 +252,88 @@ export class ResolutionService {
   }
 
   // Resolution Management
-  async initiateResolution(marketId: string, apiSources: string[] = ['flashscore']): Promise<{
+  async initiateResolution(marketId: string, apiSources: string[] = ['flashscore'], useHederaAI: boolean = true): Promise<{
     resolutionId: string;
     hcsTopicId?: string;
     transactionId?: string;
   }> {
     try {
       console.log(`Initiating resolution for market ${marketId} with sources: ${apiSources.join(', ')}`);
-      
+
       let resolutionData: ResolutionData | null = null;
       let lastError: Error | null = null;
+      let aiAnalysisUsed = false;
 
-      // Try each API source until we get a successful resolution
-      for (const source of apiSources) {
+      // PRIORITY 1: Try Hedera AI Agent with direct tool invocation
+      if (useHederaAI) {
         try {
-          resolutionData = await this.fetchResolutionFromAPI(marketId, source);
-          break; // Success, exit loop
-        } catch (error) {
-          console.warn(`API source ${source} failed for market ${marketId}:`, error);
-          lastError = error as Error;
-          continue;
+          console.log(`🔷 Attempting Hedera AI Agent resolution for market ${marketId}...`);
+
+          const hederaAI = getHederaAIResolutionService();
+
+          // Get market evidence for AI analysis
+          const market = await this.getMarketById(marketId);
+          if (market) {
+            // Fetch evidence from various sources
+            const evidenceItems: any[] = [];
+
+            // This would be replaced with actual evidence fetching
+            // For now, we'll create a mock evidence structure
+            evidenceItems.push({
+              source: 'market_data',
+              type: 'market_info',
+              content: market.claim || market.question || 'Market claim',
+              timestamp: new Date(),
+              credibility: 0.8,
+              language: 'en'
+            });
+
+            const hederaResult = await hederaAI.resolveMarket(
+              marketId,
+              evidenceItems,
+              {
+                region: 'general',
+                marketType: market.category || 'general',
+                complexity: 'medium'
+              }
+            );
+
+            if (hederaResult.metadata.usedHederaAgent && hederaResult.confidence >= 0.5) {
+              console.log(`✅ Hedera AI Agent resolved market ${marketId}: ${hederaResult.recommendation} (${hederaResult.confidence} confidence)`);
+
+              resolutionData = {
+                outcome: hederaResult.recommendation.toLowerCase() as 'yes' | 'no',
+                confidence: hederaResult.confidence >= 0.9 ? 'high' : hederaResult.confidence >= 0.7 ? 'medium' : 'low',
+                source: 'hedera_ai_agent',
+                apiData: hederaResult,
+                reasoning: hederaResult.reasoning
+              };
+
+              aiAnalysisUsed = true;
+            }
+          }
+        } catch (hederaError) {
+          console.warn(`⚠️ Hedera AI Agent failed for market ${marketId}, falling back to API sources:`, hederaError);
+          lastError = hederaError as Error;
+        }
+      }
+
+      // PRIORITY 2: Try API sources if Hedera AI didn't work
+      if (!resolutionData) {
+        for (const source of apiSources) {
+          try {
+            resolutionData = await this.fetchResolutionFromAPI(marketId, source);
+            break; // Success, exit loop
+          } catch (error) {
+            console.warn(`API source ${source} failed for market ${marketId}:`, error);
+            lastError = error as Error;
+            continue;
+          }
         }
       }
 
       if (!resolutionData) {
-        throw lastError || new Error('All API sources failed');
+        throw lastError || new Error('All resolution sources failed (Hedera AI + API sources)');
       }
 
       // Calculate dispute period end (72 hours from now by default)
@@ -296,7 +354,7 @@ export class ResolutionService {
           api_data: resolutionData.apiData,
           confidence: resolutionData.confidence,
           dispute_period_end: disputePeriodEnd.toISOString(),
-          resolved_by: 'api'
+          resolved_by: aiAnalysisUsed ? 'hedera_ai' : 'api'
         })
         .select()
         .single();
@@ -314,7 +372,7 @@ export class ResolutionService {
             resolution: resolutionData,
             disputePeriodEnd: disputePeriodEnd.toISOString()
           },
-          'api'
+          aiAnalysisUsed ? 'hedera_ai' : 'api'
         );
 
         // Update resolution record with HCS transaction ID
@@ -330,7 +388,7 @@ export class ResolutionService {
         console.warn('HCS submission failed, continuing without:', hcsError);
       }
 
-      console.log(`Resolution initiated for market ${marketId}: ${resolutionData.outcome} (${resolutionData.confidence} confidence)`);
+      console.log(`Resolution initiated for market ${marketId}: ${resolutionData.outcome} (${resolutionData.confidence} confidence) via ${aiAnalysisUsed ? 'Hedera AI' : 'API'}`);
 
       return {
         resolutionId: resolution.id,

@@ -462,47 +462,90 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       // Initialize the service
       await disputeManagerService.initialize(connection);
 
-      // Get bond requirement (should be 100 CAST)
-      const bondAmount = await disputeManagerService.getBondRequirement();
-      console.log('💰 Dispute bond requirement:', bondAmount, 'CAST');
-
-      // Check if user has sufficient CAST tokens
-      const { castTokenService } = await import('../utils/castTokenService');
-      const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
-
-      if (userBalance < bondAmount) {
-        throw new Error(`Insufficient CAST tokens. Required: ${bondAmount} CAST, Available: ${userBalance.toFixed(2)} CAST`);
-      }
-
-      // Get market contract address
+      // Get market contract address first to determine if bond is needed
       const marketAddress = (market as any).contractAddress;
-      if (!marketAddress) {
-        throw new Error('Market contract address not found. Cannot create dispute.');
+
+      let bondAmount = 0;
+
+      // Only require bond for markets with blockchain contracts
+      if (marketAddress) {
+        // Get bond requirement (should be 1 CAST)
+        bondAmount = await disputeManagerService.getBondRequirement();
+        console.log('💰 Dispute bond requirement:', bondAmount, 'CAST');
+
+        // Check if user has sufficient CAST tokens
+        const { castTokenService } = await import('../utils/castTokenService');
+        const userBalance = parseFloat(await castTokenService.getBalance(connection.address));
+
+        if (userBalance < bondAmount) {
+          throw new Error(`Insufficient CAST tokens. Required: ${bondAmount} CAST, Available: ${userBalance.toFixed(2)} CAST`);
+        }
+      } else {
+        console.log('ℹ️ Market has no contract - no bond required, evidence will be stored in database');
       }
 
-      // Approve CAST tokens for dispute bond
-      toast.info('Approving CAST tokens for dispute bond...');
-      const { TOKEN_ADDRESSES } = await import('../config/constants');
-      await castTokenService.approve(TOKEN_ADDRESSES.DISPUTE_MANAGER_CONTRACT, bondAmount.toString());
-      console.log('✅ CAST tokens approved for dispute bond');
+      let result: any;
 
-      // Create the dispute on blockchain
-      toast.info('Creating dispute on blockchain...');
-      const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
+      if (!marketAddress) {
+        // For markets without blockchain contracts, store evidence directly in database
+        console.log('⚠️ Market has no contract address, storing evidence in database only');
+        toast.info('Submitting evidence to database (no bond required)...');
 
-      const disputeResult = await disputeManagerService.createDispute(
-        marketAddress,
-        'Evidence submitted via dispute form',
-        evidenceWithLinks
-      );
+        const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
 
-      // Convert to expected result format
-      const result = {
-        success: true,
-        transactionId: disputeResult.transactionHash,
-        disputeId: disputeResult.disputeId,
-        bondAmount: disputeResult.bondAmount
-      };
+        // Store evidence in database
+        const { supabase } = await import('../utils/supabase');
+        if (supabase) {
+          const { error: insertError } = await supabase
+            .from('market_evidence')
+            .insert({
+              market_id: market.id,
+              submitter_address: connection.address,
+              evidence: evidenceWithLinks,
+              reason: 'Evidence submitted via dispute form',
+              created_at: new Date().toISOString(),
+              status: 'pending'
+            });
+
+          if (insertError) {
+            throw new Error('Failed to store evidence: ' + insertError.message);
+          }
+
+          result = {
+            success: true,
+            transactionId: `db-${Date.now()}`,
+            disputeId: `evidence-${Date.now()}`,
+            bondAmount: 0 // No bond required for database-only evidence
+          };
+        } else {
+          throw new Error('Database not available');
+        }
+      } else {
+        // For markets with blockchain contracts, use the normal dispute process
+        // Approve CAST tokens for dispute bond
+        toast.info('Approving CAST tokens for dispute bond...');
+        const { TOKEN_ADDRESSES } = await import('../config/constants');
+        await castTokenService.approve(TOKEN_ADDRESSES.DISPUTE_MANAGER_CONTRACT, bondAmount.toString());
+        console.log('✅ CAST tokens approved for dispute bond');
+
+        // Create the dispute on blockchain
+        toast.info('Creating dispute on blockchain...');
+        const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
+
+        const disputeResult = await disputeManagerService.createDispute(
+          marketAddress,
+          'Evidence submitted via dispute form',
+          evidenceWithLinks
+        );
+
+        // Convert to expected result format
+        result = {
+          success: true,
+          transactionId: disputeResult.transactionHash,
+          disputeId: disputeResult.disputeId,
+          bondAmount: disputeResult.bondAmount
+        };
+      }
 
       setSubmissionStep('storing');
 
@@ -1759,4 +1802,4 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       />
     </div>
   );
-}
+} 

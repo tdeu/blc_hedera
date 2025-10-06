@@ -31,6 +31,7 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
   });
   const [expirationDate, setExpirationDate] = useState<Date>();
   const [isCreating, setIsCreating] = useState(false);
+  const [creatingStatus, setCreatingStatus] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -177,6 +178,7 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
     }
 
     setIsCreating(true);
+    setCreatingStatus('Preparing market data...');
 
     try {
       let imageUrl: string | undefined = undefined;
@@ -187,10 +189,12 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
 
       if (selectedImage) {
         console.log('🖼️ Uploading image to Supabase...', selectedImage.name);
+        setCreatingStatus('Uploading market image...');
         imageUrl = await uploadImageToSupabase(selectedImage);
         if (!imageUrl) {
           // Image upload failed, stop the process
           setIsCreating(false);
+          setCreatingStatus('');
           return;
         }
         console.log('✅ Image uploaded successfully:', imageUrl);
@@ -224,10 +228,13 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
         hasImage: !!imageUrl
       });
 
+      setCreatingStatus('Submitting to blockchain (this may take 30-60 seconds)...');
       await onCreateMarket(newMarket);
-      onBack();
+      setCreatingStatus('Market created successfully!');
+      setTimeout(() => onBack(), 1000);
     } catch (error) {
       toast.error('Failed to create market. Please try again.');
+      setCreatingStatus('');
     } finally {
       setIsCreating(false);
     }
@@ -479,8 +486,43 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                   })()}
                   className="text-sm"
                 />
+                {expirationDate && (() => {
+                  const now = new Date();
+                  const diff = expirationDate.getTime() - now.getTime();
+                  const minutes = Math.floor(diff / 1000 / 60);
+                  const hours = Math.floor(minutes / 60);
+                  const days = Math.floor(hours / 24);
+
+                  let durationText = '';
+                  if (days > 0) {
+                    durationText = `${days} day${days > 1 ? 's' : ''} ${hours % 24} hour${(hours % 24) !== 1 ? 's' : ''}`;
+                  } else if (hours > 0) {
+                    durationText = `${hours} hour${hours > 1 ? 's' : ''} ${minutes % 60} minute${(minutes % 60) !== 1 ? 's' : ''}`;
+                  } else {
+                    durationText = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                  }
+
+                  const isValid = diff > 0;
+                  const isTooShort = minutes < 10;
+
+                  return (
+                    <div className={`text-xs mt-1 p-2 rounded ${
+                      !isValid ? 'bg-red-50 text-red-600 border border-red-200' :
+                      isTooShort ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                      'bg-green-50 text-green-700 border border-green-200'
+                    }`}>
+                      {!isValid ? (
+                        <span>⚠️ Market must expire in the future</span>
+                      ) : isTooShort ? (
+                        <span>⚡ Very short market: expires in {durationText} (min recommended: 10 minutes)</span>
+                      ) : (
+                        <span>✅ Market will expire in {durationText}</span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <p className="text-xs text-muted-foreground">
-                  When should this prediction be resolved?
+                  Markets can be as short as 10 minutes or longer. Select when this prediction should be resolved.
                 </p>
               </div>
             )}
@@ -590,8 +632,8 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
           </div>
 
           {/* Create Button */}
-          <div className="pt-4">
-            <Button 
+          <div className="pt-4 space-y-2">
+            <Button
               onClick={handleSubmit}
               disabled={isCreating}
               className="w-full gap-2 bg-primary hover:bg-primary/90"
@@ -608,6 +650,18 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                 </>
               )}
             </Button>
+            {creatingStatus && (
+              <div className="text-center p-3 bg-blue-50 border border-blue-200 rounded-lg animate-pulse">
+                <p className="text-sm text-blue-700 font-medium">
+                  {creatingStatus.includes('blockchain') ? '⏳' : creatingStatus.includes('success') ? '✅' : '📤'} {creatingStatus}
+                </p>
+                {creatingStatus.includes('blockchain') && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Please wait while your transaction is confirmed on Hedera network
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
