@@ -538,6 +538,23 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
           evidenceWithLinks
         );
 
+        // ALSO save to database for AI analysis and admin review
+        const { supabase } = await import('../utils/supabase');
+        if (supabase) {
+          await supabase
+            .from('evidence_submissions')
+            .insert({
+              market_id: market.id,
+              user_id: connection.address,
+              evidence_text: evidenceText,
+              evidence_links: evidenceLinks.filter(link => link.trim()),
+              submission_fee: parseFloat(disputeResult.bondAmount),
+              transaction_id: disputeResult.transactionHash,
+              status: 'pending'
+            });
+          console.log('✅ Evidence also saved to database for AI analysis');
+        }
+
         // Convert to expected result format
         result = {
           success: true,
