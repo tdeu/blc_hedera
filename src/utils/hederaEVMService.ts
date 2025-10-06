@@ -161,13 +161,25 @@ export class HederaEVMService {
       const endTime = Math.floor(expirationDate.getTime() / 1000);
       const currentTime = Math.floor(Date.now() / 1000);
 
+      // Add 5-minute buffer to account for:
+      // 1. Network propagation delay (can be 30-60 seconds)
+      // 2. Clock skew between client and Hedera nodes (up to 2-3 minutes)
+      // 3. Transaction processing time (10-30 seconds)
+      // 4. Block timestamp vs wall clock time differences
+      const TIME_BUFFER_SECONDS = 300; // 5 minutes safety buffer
+      const minimumEndTime = currentTime + TIME_BUFFER_SECONDS;
+
       console.log('⏰ User specified expiration:', expirationDate.toISOString());
+      console.log('⏰ Current time (client):', new Date(currentTime * 1000).toISOString());
       console.log('⏰ Market end time:', endTime, 'vs current time:', currentTime);
-      console.log('⏰ Time difference:', endTime - currentTime, 'seconds');
+      console.log('⏰ Minimum safe end time:', minimumEndTime, '(with 5-min buffer)');
+      console.log('⏰ Time difference:', endTime - currentTime, 'seconds (', Math.floor((endTime - currentTime) / 60), 'minutes)');
       console.log('⏰ Market will expire in:', (endTime - currentTime) / 3600, 'hours');
 
-      if (endTime <= currentTime) {
-        throw new Error('Expiration date must be in the future');
+      if (endTime <= minimumEndTime) {
+        const minutesNeeded = Math.ceil(TIME_BUFFER_SECONDS / 60);
+        const currentDifference = Math.floor((endTime - currentTime) / 60);
+        throw new Error(`Expiration date must be at least ${minutesNeeded} minutes in the future (currently ${currentDifference} minutes). This buffer accounts for blockchain clock differences and transaction processing time. Please select a later time.`);
       }
       
       console.log('🚀 About to call factory.createMarket with params:', {
