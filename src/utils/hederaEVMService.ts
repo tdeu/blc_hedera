@@ -71,10 +71,26 @@ export class HederaEVMService {
       } else if (config.privateKey) {
         // Fallback to hardcoded private key for development
         console.log('🔍 Creating provider with RPC URL:', config.rpcUrl);
-        this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
+
+        // Create provider with explicit network config for Hedera testnet
+        this.provider = new ethers.JsonRpcProvider(config.rpcUrl, {
+          name: 'hedera-testnet',
+          chainId: 296  // Hedera testnet chainId
+        });
+
         console.log('🔍 Creating wallet with private key length:', config.privateKey.length);
         this.signer = new ethers.Wallet(config.privateKey, this.provider);
         console.log('✅ EVM Service initialized with private key');
+
+        // Verify network connection
+        this.provider.getNetwork().then(network => {
+          console.log('🌐 Connected to network:', {
+            name: network.name,
+            chainId: network.chainId
+          });
+        }).catch(err => {
+          console.error('❌ Failed to get network info:', err);
+        });
 
         // Check wallet balance
         this.signer.provider.getBalance(this.signer.address).then(balance => {
@@ -160,48 +176,197 @@ export class HederaEVMService {
         gasLimit: 15000000
       });
 
+      // Estimate gas first
+      let estimatedGas;
+      try {
+        console.log('⛽ Attempting gas estimation...');
+        estimatedGas = await factory.createMarket.estimateGas(claim, endTime);
+        console.log('⛽ Estimated gas:', estimatedGas.toString());
+      } catch (gasError: any) {
+        console.error('❌ Gas estimation failed!');
+        console.error('Error details:', {
+          message: gasError?.message,
+          reason: gasError?.reason,
+          code: gasError?.code,
+          data: gasError?.data,
+          error: gasError?.error
+        });
+
+        // If gas estimation fails, the transaction will likely revert
+        // Check if it's a contract revert
+        if (gasError?.reason) {
+          throw new Error(`Contract will revert: ${gasError.reason}`);
+        }
+        if (gasError?.data) {
+          console.error('Revert data:', gasError.data);
+        }
+
+        console.warn('⚠️ Using fallback gas limit: 15000000');
+        console.warn('⚠️ WARNING: Transaction may fail on-chain!');
+      }
+
+      // Use 150% of estimated gas, or fallback to 15M
+      const gasLimit = estimatedGas ? Math.floor(Number(estimatedGas) * 1.5) : 15000000;
+      console.log('⛽ Using gas limit:', gasLimit);
+
+      // Get current gas price from network
+      let gasPrice;
+      try {
+        const feeData = await this.provider.getFeeData();
+        gasPrice = feeData.gasPrice;
+        console.log('⛽ Current network gas price:', gasPrice?.toString());
+      } catch (gasPriceError) {
+        console.warn('⚠️ Could not fetch gas price, using default');
+      }
+
       // Proceed directly to createMarket call
-      const tx = await factory.createMarket(claim, endTime, {
-        gasLimit: 15000000  // Much higher gas limit for contract deployment
-      });
-      
+      let tx;
+      try {
+        console.log('🔍 Calling factory.createMarket...');
+        const txOptions: any = {
+          gasLimit
+        };
+
+        // Add gas price if we got it from the network
+        if (gasPrice) {
+          txOptions.gasPrice = gasPrice;
+        }
+
+        tx = await factory.createMarket(claim, endTime, txOptions);
+        console.log('✅ Transaction object created');
+        console.log('🔍 Transaction hash:', tx.hash);
+        console.log('🔍 Transaction details:', {
+          from: tx.from,
+          to: tx.to,
+          gasLimit: tx.gasLimit?.toString(),
+          nonce: tx.nonce,
+          chainId: tx.chainId,
+          data: tx.data ? tx.data.substring(0, 66) + '...' : 'no data'
+        });
+
+        // CRITICAL: Verify the transaction was actually broadcast
+        console.log('🔍 Verifying transaction was broadcast to network...');
+        try {
+          const txFromNetwork = await this.provider.getTransaction(tx.hash);
+          if (txFromNetwork) {
+            console.log('✅ Transaction confirmed on network!');
+            console.log('🔍 Network tx details:', {
+              blockNumber: txFromNetwork.blockNumber,
+              blockHash: txFromNetwork.blockHash,
+              confirmations: txFromNetwork.confirmations
+            });
+          } else {
+            console.warn('⚠️ Transaction not yet visible on network (might be in mempool)');
+          }
+        } catch (networkCheckError) {
+          console.warn('⚠️ Could not verify transaction on network:', networkCheckError);
+        }
+
+      } catch (txError) {
+        console.error('❌ Transaction failed to send:', txError);
+        console.error('❌ Full error object:', JSON.stringify(txError, null, 2));
+
+        // Check if it's a revert error
+        if ((txError as any).reason) {
+          throw new Error(`Contract reverted: ${(txError as any).reason}`);
+        }
+        if ((txError as any).message?.includes('insufficient funds')) {
+          throw new Error('Insufficient HBAR balance to pay for gas');
+        }
+        if ((txError as any).code === 'NONCE_EXPIRED') {
+          throw new Error('Transaction nonce expired. Please try again.');
+        }
+        if ((txError as any).code === 'REPLACEMENT_UNDERPRICED') {
+          throw new Error('Gas price too low. Please try again with higher gas.');
+        }
+        throw txError;
+      }
+
       console.log('⏳ Waiting for transaction confirmation...');
       console.log('🔍 About to wait for receipt...');
 
       let receipt;
+
+      // First, try immediate lookup (sometimes tx is already mined)
       try {
-        // Use a longer timeout for Hedera's block times (up to 60 seconds)
-        const receiptPromise = tx.wait();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Receipt timeout after 60 seconds')), 60000)
-        );
-        
-        receipt = await Promise.race([receiptPromise, timeoutPromise]);
-        
-        if (receipt.status === 0) {
-          throw new Error('Transaction failed on blockchain');
+        console.log('🔍 Attempting immediate receipt lookup...');
+        const immediateReceipt = await this.provider.getTransactionReceipt(tx.hash);
+        if (immediateReceipt && immediateReceipt.status !== null) {
+          receipt = immediateReceipt;
+          console.log('✅ Immediate receipt found! Status:', receipt.status);
         }
-        
-        console.log('✅ Transaction confirmed:', receipt.hash);
-        console.log('📋 Receipt status:', receipt.status);
-        console.log('📋 Gas used:', receipt.gasUsed?.toString());
-        console.log('📋 Receipt logs count:', receipt.logs?.length || 0);
-        
-      } catch (receiptError) {
-        console.error('❌ Receipt confirmation error:', receiptError);
-        
-        // Try manual lookup with multiple attempts
-        console.log('🔄 Attempting manual receipt lookup...');
-        
-        for (let attempt = 1; attempt <= 5; attempt++) {
+      } catch (immediateError) {
+        console.log('📋 No immediate receipt, will wait...');
+      }
+
+      if (!receipt) {
+        try {
+          // Strategy: Race between tx.wait() and aggressive polling
+          console.log('⏰ Starting dual-strategy receipt confirmation at:', new Date().toISOString());
+
+          const receiptPromise = tx.wait();
+
+          // Aggressive polling strategy - check every 2 seconds
+          const pollingPromise = new Promise<any>(async (resolve, reject) => {
+            const maxAttempts = 30; // 30 attempts × 2s = 60 seconds max
+            for (let i = 0; i < maxAttempts; i++) {
+              await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+              try {
+                const polledReceipt = await this.provider.getTransactionReceipt(tx.hash);
+                if (polledReceipt && polledReceipt.status !== null) {
+                  console.log(`✅ Polling found receipt on attempt ${i + 1}`);
+                  resolve(polledReceipt);
+                  return;
+                }
+                console.log(`🔄 Polling attempt ${i + 1}/${maxAttempts}...`);
+              } catch (pollError) {
+                // Continue polling even on errors
+              }
+            }
+            reject(new Error('Polling timed out after 60 seconds'));
+          });
+
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+              console.log('⏰ Final timeout triggered at:', new Date().toISOString());
+              reject(new Error('Receipt timeout after 90 seconds'));
+            }, 90000);
+          });
+
+          receipt = await Promise.race([receiptPromise, pollingPromise, timeoutPromise]);
+          console.log('⏰ Receipt received at:', new Date().toISOString());
+
+          if (receipt.status === 0) {
+            throw new Error('Transaction failed on blockchain');
+          }
+
+          console.log('✅ Transaction confirmed:', receipt.hash);
+          console.log('📋 Receipt status:', receipt.status);
+          console.log('📋 Gas used:', receipt.gasUsed?.toString());
+          console.log('📋 Receipt logs count:', receipt.logs?.length || 0);
+
+        } catch (receiptError) {
+          console.error('❌ Receipt confirmation error:', receiptError);
+          console.error('Error details:', {
+            message: receiptError instanceof Error ? receiptError.message : 'Unknown',
+            txHash: tx.hash
+          });
+
+          // Try manual lookup with multiple attempts
+          console.log('🔄 Attempting manual receipt lookup for tx:', tx.hash);
+
+          for (let attempt = 1; attempt <= 8; attempt++) {
           try {
-            console.log(`🔍 Manual lookup attempt ${attempt}/5...`);
-            await new Promise(resolve => setTimeout(resolve, 5000 * attempt)); // Progressive delay
-            
+            const delay = Math.min(3000 * attempt, 15000); // Cap at 15 seconds
+            console.log(`🔍 Manual lookup attempt ${attempt}/8 (waiting ${delay}ms)...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
             const manualReceipt = await this.provider.getTransactionReceipt(tx.hash);
+            console.log(`📋 Attempt ${attempt} receipt:`, manualReceipt ? 'Found' : 'Not found', manualReceipt?.status);
+
             if (manualReceipt && manualReceipt.status !== null) {
               receipt = manualReceipt;
-              console.log('✅ Manual receipt obtained!');
+              console.log('✅ Manual receipt obtained on attempt', attempt);
               console.log('📋 Manual receipt status:', receipt.status);
 
               // Add detailed debugging for failed transactions
@@ -236,13 +401,24 @@ export class HederaEVMService {
               break;
             }
           } catch (manualError) {
-            console.log(`⚠️ Manual attempt ${attempt} failed:`, manualError.message);
+            console.log(`⚠️ Manual attempt ${attempt} failed:`, (manualError as Error).message);
           }
-        }
-        
-        if (!receipt) {
-          console.error('❌ Could not get receipt after multiple attempts');
-          throw new Error(`Transaction sent but receipt confirmation failed: ${tx.hash}`);
+          }
+
+          if (!receipt) {
+            console.error('❌ Could not get receipt after multiple attempts');
+            console.error('📋 Transaction hash:', tx.hash);
+            console.error('🔗 Check transaction on HashScan:', `https://hashscan.io/testnet/transaction/${tx.hash}`);
+
+            // Throw error with helpful info
+            const error = new Error(
+              `Transaction sent but confirmation timed out. ` +
+              `Transaction hash: ${tx.hash}. ` +
+              `Check status at: https://hashscan.io/testnet/transaction/${tx.hash}`
+            );
+            (error as any).txHash = tx.hash;
+            throw error;
+          }
         }
       }
 
@@ -341,29 +517,45 @@ export class HederaEVMService {
 
       console.log('🎉 Market created successfully at address:', marketAddress);
 
+      // Auto-approve the market so users can start betting immediately
+      let approvalTxHash: string | undefined;
+      try {
+        console.log('🎯 Auto-approving market to make it Open for betting...');
+        approvalTxHash = await this.approveMarket(marketAddress);
+        console.log('✅ Market auto-approved:', approvalTxHash);
+      } catch (approvalError) {
+        console.error('⚠️ Auto-approval failed, market will need manual approval:', approvalError);
+        // Don't fail the entire creation, just log the error
+      }
+
       // Persist to Supabase if available
       try {
-        const supabaseUrl = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_URL 
+        const supabaseUrl = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_URL
           || (typeof window !== 'undefined' ? (window as any).VITE_SUPABASE_URL : undefined);
-        const supabaseAnon = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_ANON_KEY 
+        const supabaseAnon = (globalThis as any)?.import?.meta?.env?.VITE_SUPABASE_ANON_KEY
           || (typeof window !== 'undefined' ? (window as any).VITE_SUPABASE_ANON_KEY : undefined);
 
         if (supabaseUrl && supabaseAnon) {
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(supabaseUrl, supabaseAnon);
 
+          const updateData: any = {
+            contract_address: marketAddress,
+            status: approvalTxHash && approvalTxHash !== 'already_approved' ? 'open' : 'submitted'
+          };
+
           if (marketId) {
             // Use market ID for unique identification (preferred)
             await supabase
               .from('approved_markets')
-              .update({ contract_address: marketAddress })
+              .update(updateData)
               .eq('id', marketId);
             console.log('✅ Contract address persisted to Supabase using market ID:', marketAddress);
           } else {
             // Fallback to claim for backward compatibility
             await supabase
               .from('approved_markets')
-              .update({ contract_address: marketAddress })
+              .update(updateData)
               .eq('claim', claim);
             console.log('✅ Contract address persisted to Supabase using claim:', marketAddress);
           }
@@ -376,7 +568,7 @@ export class HederaEVMService {
         contractId: marketAddress,
         topicId: `market-${marketAddress.slice(0, 10)}`,
         createdAt: new Date(),
-        status: 'active'
+        status: approvalTxHash ? 'active' : 'submitted'
       };
 
     } catch (error: any) {
@@ -900,13 +1092,166 @@ export class HederaEVMService {
   }
 
   /**
+   * Approve a market (change status from Submited to Open)
+   * This must be called after market creation for users to be able to bet
+   */
+  async approveMarket(marketAddress: string): Promise<string> {
+    try {
+      console.log('📋 Approving market:', marketAddress);
+
+      const marketABI = [
+        "function approveMarket() external",
+        "function marketInfo() external view returns (tuple(bytes32 id, string question, address creator, uint256 endTime, uint8 status))"
+      ];
+
+      const market = new ethers.Contract(marketAddress, marketABI, this.signer);
+
+      // Check current status
+      const info = await market.marketInfo();
+      console.log('📊 Current market status:', info.status); // 0=Submited, 1=Open
+
+      if (info.status === 1) {
+        console.log('✅ Market already approved');
+        return 'already_approved';
+      }
+
+      // Approve the market
+      const tx = await market.approveMarket({
+        gasLimit: 200000
+      });
+
+      console.log('📤 Approval transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log('✅ Market approved successfully');
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Error approving market:', error);
+      throw new Error(`Failed to approve market: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Preliminary resolve a market (sets outcome but starts 7-day dispute period)
+   * Market status changes to PendingResolution
+   */
+  async preliminaryResolve(marketAddress: string, outcome: 'yes' | 'no'): Promise<string> {
+    try {
+      console.log(`🔍 Preliminary resolving market ${marketAddress} to ${outcome.toUpperCase()}`);
+
+      const marketABI = [
+        "function preliminaryResolve(uint8 outcome) external"
+      ];
+
+      const market = new ethers.Contract(marketAddress, marketABI, this.signer);
+
+      // Convert outcome to contract format (1=Yes, 2=No)
+      const outcomeValue = outcome === 'yes' ? 1 : 2;
+
+      const tx = await market.preliminaryResolve(outcomeValue, {
+        gasLimit: 300000
+      });
+
+      console.log('📤 Preliminary resolution transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log('✅ Market preliminarily resolved, dispute period started');
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Error in preliminary resolution:', error);
+      throw new Error(`Failed to preliminary resolve market: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Final resolve a market (after dispute period, executes payouts)
+   * Market status changes to Resolved
+   */
+  async finalResolve(marketAddress: string, outcome: 'yes' | 'no', confidence: number): Promise<string> {
+    try {
+      console.log(`✅ Final resolving market ${marketAddress} to ${outcome.toUpperCase()} with ${confidence}% confidence`);
+
+      const marketABI = [
+        "function finalResolve(uint8 outcome, uint256 confidenceScore) external"
+      ];
+
+      const market = new ethers.Contract(marketAddress, marketABI, this.signer);
+
+      // Convert outcome to contract format (1=Yes, 2=No)
+      const outcomeValue = outcome === 'yes' ? 1 : 2;
+
+      // Confidence should be 0-100
+      const confidenceScore = Math.min(100, Math.max(0, confidence));
+
+      const tx = await market.finalResolve(outcomeValue, confidenceScore, {
+        gasLimit: 500000
+      });
+
+      console.log('📤 Final resolution transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log('✅ Market finally resolved, payouts available');
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Error in final resolution:', error);
+      throw new Error(`Failed to final resolve market: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get market resolution info
+   */
+  async getMarketResolutionInfo(marketAddress: string): Promise<{
+    status: number;
+    isPendingResolution: boolean;
+    preliminaryOutcome: number;
+    resolvedOutcome: number;
+    confidenceScore: number;
+  }> {
+    try {
+      const marketABI = [
+        "function marketInfo() external view returns (tuple(bytes32 id, string question, address creator, uint256 endTime, uint8 status))",
+        "function isPendingResolution() external view returns (bool)",
+        "function getPreliminaryOutcome() external view returns (uint8)",
+        "function resolvedOutcome() external view returns (uint8)",
+        "function getConfidenceScore() external view returns (uint256)"
+      ];
+
+      const market = new ethers.Contract(marketAddress, marketABI, this.provider);
+
+      const [info, isPending, prelimOutcome, resolvedOut, confidence] = await Promise.all([
+        market.marketInfo(),
+        market.isPendingResolution(),
+        market.getPreliminaryOutcome().catch(() => 0),
+        market.resolvedOutcome().catch(() => 0),
+        market.getConfidenceScore().catch(() => 0)
+      ]);
+
+      return {
+        status: info.status,
+        isPendingResolution: isPending,
+        preliminaryOutcome: prelimOutcome,
+        resolvedOutcome: resolvedOut,
+        confidenceScore: Number(confidence)
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error getting resolution info:', error);
+      throw new Error(`Failed to get resolution info: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Check transaction status and receipt
    */
   async checkTransactionStatus(txHash: string) {
     try {
       const tx = await this.provider.getTransaction(txHash);
       const receipt = await this.provider.getTransactionReceipt(txHash);
-      
+
       return {
         tx,
         receipt,

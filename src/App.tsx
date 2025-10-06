@@ -28,6 +28,7 @@ import { marketStatusService } from './utils/marketStatusService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
 import { approvedMarketsService } from './utils/approvedMarketsService';
 import { userDataService } from './utils/userDataService';
+import { supabase } from './utils/supabase';
 import { UserProvider } from './contexts/UserContext';
 import { DISPUTE_PERIOD } from './config/constants';
 import { BettingMarket } from './components/BettingMarkets';
@@ -1172,7 +1173,29 @@ export default function App() {
           }
         } catch (error) {
           console.error('❌ Blockchain market creation failed:', error);
-          toast.error(`Market creation failed: ${error.message}`);
+
+          // Check if it's a timeout error with transaction hash
+          const txHash = (error as any)?.txHash;
+          if (txHash) {
+            const hashScanUrl = `https://hashscan.io/testnet/transaction/${txHash}`;
+            toast.error(
+              <div className="space-y-2">
+                <p className="font-semibold">Transaction confirmation timed out</p>
+                <p className="text-sm">Your transaction was sent but we couldn't confirm it yet.</p>
+                <a
+                  href={hashScanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline block"
+                >
+                  Check status on HashScan →
+                </a>
+              </div>,
+              { duration: 10000 }
+            );
+          } else {
+            toast.error(`Market creation failed: ${(error as Error).message}`);
+          }
           return; // Don't create the market if blockchain deployment fails
         }
       } else {
