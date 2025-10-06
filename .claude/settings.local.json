@@ -74,7 +74,17 @@
       "Bash(start brave http://localhost:3001)",
       "Bash(start chrome http://localhost:3001)",
       "WebFetch(domain:docs.hedera.com)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then echo \"✅ .env file exists\")",
+      "Bash(else echo \"❌ .env file not found\")",
+      "Bash(fi)",
+      "Bash(1)",
+      "Bash(del nul)",
+      "Bash(git reset:*)",
+      "Bash(git revert:*)",
+      "Bash(taskkill:*)",
+      "Bash(start chrome http://localhost:3002)"
     ],
     "deny": [],
     "ask": []
