@@ -71,11 +71,13 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
           {/* Left: Logo and Brand */}
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
-                BC
-              </div>
+              <img 
+                src="/blockcast-logo.png" 
+                alt="Blockcast Logo" 
+                className="w-8 h-8 rounded-lg object-contain"
+              />
               <div>
-                <h1 className="text-lg font-bold text-primary">Blockcast</h1>
+                <h1 className="text-xl font-bold text-white">Blockcast</h1>
               </div>
             </div>
 
@@ -262,9 +264,11 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                 <SheetContent side="right" className="w-80">
                   <SheetHeader className="pb-6">
                     <SheetTitle className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-xs">
-                        BC
-                      </div>
+                      <img 
+                        src="/blockcast-logo.png" 
+                        alt="Blockcast Logo" 
+                        className="w-6 h-6 rounded object-contain"
+                      />
                       Blockcast
                     </SheetTitle>
                   </SheetHeader>

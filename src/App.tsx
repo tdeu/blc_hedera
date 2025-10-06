@@ -36,7 +36,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { Button } from './components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './components/ui/dialog';
-import { Gift, Sparkles, Wallet, Shield, Target, Zap, Users } from 'lucide-react';
+import { Sparkles, Wallet, Shield, Target, Zap, Users } from 'lucide-react';
 // Logo placeholder - replace with actual image when available
 import { mockVerificationHistory } from './utils/mockData';
 import { useHedera } from './utils/useHedera';
@@ -1486,13 +1486,12 @@ export default function App() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-center flex items-center gap-3 justify-center">
-                <div className="w-12 h-12 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
-                  <Gift className="h-6 w-6 text-white" />
-                </div>
                                   <div>
-                    <div className="w-8 h-8 rounded-lg mx-auto mb-2 bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
-                      BC
-                    </div>
+                    <img 
+                      src="/blockcast-logo.png" 
+                      alt="Blockcast Logo" 
+                      className="w-8 h-8 rounded-lg mx-auto mb-2 object-contain"
+                    />
                     Welcome to Blockcast!
                   </div>
               </DialogTitle>

@@ -457,13 +457,6 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                   
-                  {/* Category Badge */}
-                  <Badge
-                    variant="secondary"
-                    className="absolute top-3 right-3 text-xs px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-full shadow-lg"
-                  >
-                    {market.category.toUpperCase()}
-                  </Badge>
 
                   {/* Country/Region Badge */}
                   {(market.country || market.region) && (
@@ -476,7 +469,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
               <CardHeader className="pb-3 px-4 pt-4">
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <Badge variant="secondary" className="text-xs shrink-0 bg-gradient-to-r from-primary/20 to-primary/30 text-primary border-primary/30 font-semibold rounded-full px-3 py-1">
+                  <Badge variant="secondary" className="text-xs shrink-0 bg-slate-700 text-white border border-gray-400 font-semibold rounded-lg px-4 py-2 shadow-sm">
                     {market.category}
                   </Badge>
                   <Button

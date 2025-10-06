@@ -22,9 +22,11 @@ export default function Footer({ onNavigate }: FooterProps) {
           {/* Brand Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
-                BC
-              </div>
+              <img 
+                src="/blockcast-logo.png" 
+                alt="Blockcast Logo" 
+                className="w-8 h-8 rounded-lg object-contain"
+              />
               <div>
                 <h3 className="text-lg font-bold text-primary">Blockcast</h3>
               </div>

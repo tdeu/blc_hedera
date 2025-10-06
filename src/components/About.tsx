@@ -11,11 +11,13 @@ export default function About() {
       {/* Hero Section */}
       <div className="text-center space-y-6">
         <div className="flex items-center justify-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-white font-bold text-2xl">
-            BC
-          </div>
+          <img 
+            src="/blockcast-logo.png" 
+            alt="Blockcast Logo" 
+            className="w-16 h-16 rounded-2xl object-contain"
+          />
           <div>
-            <h1 className="text-4xl font-bold text-primary">BLockcast</h1>
+            <h1 className="text-4xl font-bold text-primary">Blockcast</h1>
             <p className="text-lg text-muted-foreground">Africa's Truth Verification Platform</p>
           </div>
         </div>
