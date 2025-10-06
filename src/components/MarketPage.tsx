@@ -493,17 +493,17 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
         const evidenceWithLinks = evidenceText + (evidenceLinks.filter(link => link.trim()).length > 0 ? '\n\nLinks: ' + evidenceLinks.filter(link => link.trim()).join(', ') : '');
 
-        // Store evidence in database
+        // Store evidence in database using correct table and columns
         const { supabase } = await import('../utils/supabase');
         if (supabase) {
           const { error: insertError } = await supabase
-            .from('market_evidence')
+            .from('evidence_submissions')
             .insert({
               market_id: market.id,
-              submitter_address: connection.address,
-              evidence: evidenceWithLinks,
-              reason: 'Evidence submitted via dispute form',
-              created_at: new Date().toISOString(),
+              user_id: connection.address,
+              evidence_text: evidenceText,
+              evidence_links: evidenceLinks.filter(link => link.trim()),
+              submission_fee: 0,
               status: 'pending'
             });
 
