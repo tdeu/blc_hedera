@@ -581,9 +581,16 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
 
                           {/* Time remaining for dispute period */}
                           {(() => {
-                            const disputeEnd = market.dispute_period_end
-                              ? new Date(market.dispute_period_end)
-                              : new Date((market.expiresAt?.getTime() || Date.now()) + DISPUTE_PERIOD.MILLISECONDS);
+                            // Priority: dispute_period_end > expired_at + 7 days > expiresAt + 7 days
+                            let disputeEnd: Date;
+                            if (market.dispute_period_end) {
+                              disputeEnd = new Date(market.dispute_period_end);
+                            } else if ((market as any).expired_at) {
+                              disputeEnd = new Date(new Date((market as any).expired_at).getTime() + DISPUTE_PERIOD.MILLISECONDS);
+                            } else {
+                              // Fallback for old markets: use expiresAt
+                              disputeEnd = new Date((market.expiresAt?.getTime() || Date.now()) + DISPUTE_PERIOD.MILLISECONDS);
+                            }
                             const now = new Date();
                             const timeLeft = disputeEnd.getTime() - now.getTime();
 
