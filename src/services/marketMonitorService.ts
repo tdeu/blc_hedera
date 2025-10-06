@@ -142,15 +142,19 @@ export class MarketMonitorService {
     console.log(`⏰ Processing expired market: ${market.id} - "${market.question}"`);
 
     try {
-      // Update market status to disputable and set evidence period
+      // Update market status to 'expired' first (allows evidence submission)
       const evidencePeriodHours = 168; // 168 hours (7 days) for evidence submission
       const evidencePeriodEnd = new Date(Date.now() + evidencePeriodHours * 60 * 60 * 1000);
 
-      await this.supabaseService.updateMarketStatus(market.id, 'disputable', {
-        dispute_period_end: evidencePeriodEnd.toISOString()
+      await this.supabaseService.updateMarketStatus(market.id, 'expired', {
+        dispute_period_end: evidencePeriodEnd.toISOString(),
+        expired_at: new Date().toISOString()
       });
 
-      // Schedule resolution job AFTER evidence period ends
+      console.log(`📋 Market ${market.id} status changed to 'expired'. Evidence collection period: 7 days`);
+      console.log(`⏰ Evidence period ends: ${evidencePeriodEnd.toISOString()}`);
+
+      // Schedule resolution analysis job AFTER evidence period ends
       const resolutionJob: ResolutionJob = {
         marketId: market.id,
         contractAddress: market.contractAddress,
@@ -160,7 +164,7 @@ export class MarketMonitorService {
       };
 
       this.resolutionQueue.push(resolutionJob);
-      console.log(`📋 Market ${market.id} entered evidence period. Resolution scheduled for: ${evidencePeriodEnd.toISOString()}`);
+      console.log(`🤖 AI resolution scheduled for: ${evidencePeriodEnd.toISOString()}`);
 
     } catch (error) {
       console.error(`❌ Error handling expired market ${market.id}:`, error);
@@ -634,66 +638,44 @@ ${threeSignalResult.combined.allSignalsAligned ? '✅ All signals aligned (+8 bo
   }
 
   /**
-   * Execute smart contract resolution
+   * Prepare market for resolution (database-only, contract calls happen from frontend)
+   * This service analyzes evidence and prepares AI recommendation, but does NOT execute on-chain
    */
   private async executeSmartContractResolution(job: ResolutionJob, aiAnalysis: any): Promise<{success: boolean, error?: string}> {
-    console.log(`📝 Executing smart contract call for ${job.marketId}...`);
+    console.log(`📝 Preparing resolution recommendation for ${job.marketId}...`);
 
     try {
       if (!job.contractAddress || job.contractAddress === 'pending') {
-        throw new Error('Missing market contract address for on-chain resolution');
+        console.warn(`⚠️ Market ${job.marketId} has no contract address - database-only resolution`);
       }
 
       // Map AI recommendation to contract enum
-      const outcomeMap: {[key: string]: number} = { YES: 1, NO: 2 };
       const rec = String(aiAnalysis.recommendation || '').toUpperCase();
-      if (!(rec in outcomeMap)) {
+      if (!['YES', 'NO'].includes(rec)) {
         // If AI suggests INVALID, we skip on-chain and mark for manual review
         console.warn(`AI suggested INVALID or unknown outcome for ${job.marketId}. Queueing for admin review.`);
         await this.queueForAdminReview(job, aiAnalysis);
         return { success: true };
       }
 
-      // Prepare EVM call using ethers
-      const provider = new ethers.JsonRpcProvider(process.env.JSON_RPC_URL || 'https://testnet.hashio.io/api');
-      const pk = process.env.HEDERA_PRIVATE_KEY;
-      if (!pk) throw new Error('HEDERA_PRIVATE_KEY not configured');
-      const wallet = new ethers.Wallet(pk, provider);
-
-      // Load PredictionMarket ABI
-      let abi: any;
-      try {
-        // Try to read from artifacts (runtime in Node)
-        const artifactPath = path.resolve(process.cwd(), 'artifacts/contracts/PredictionMarket.sol/PredictionMarket.json');
-        const raw = fs.readFileSync(artifactPath, 'utf8');
-        abi = JSON.parse(raw).abi;
-      } catch (readErr) {
-        console.warn('⚠️ Failed to read ABI from artifacts, falling back to dynamic import:', readErr);
-        const pmArtifact = await import('../../artifacts/contracts/PredictionMarket.sol/PredictionMarket.json', { with: { type: 'json' } } as any).then((m:any) => m.default || m);
-        abi = pmArtifact.abi;
-      }
-      const pm = new ethers.Contract(job.contractAddress, abi, wallet);
-
-      console.log('🔗 Calling resolveMarket on contract:', job.contractAddress, 'with outcome', rec);
-      const tx = await pm.resolveMarket(outcomeMap[rec], { gasLimit: 1_000_000 });
-      const receipt = await tx.wait();
-
-      if (receipt.status === 0) {
-        throw new Error('On-chain resolution transaction reverted');
-      }
-
-      // Update market status and attach resolution data
-      await this.supabaseService.updateMarketStatus(job.marketId, 'resolved', {
+      // Update market status to 'pending_resolution' with AI recommendation
+      // This signals to admins that AI has analyzed the evidence and recommends a resolution
+      // Admin can then execute preliminaryResolve() from the frontend
+      await this.supabaseService.updateMarketStatus(job.marketId, 'pending_resolution', {
         ai_confidence_score: aiAnalysis.confidence,
-        resolution: rec === 'YES' ? 'YES' : 'NO',
-        resolved_at: new Date().toISOString(),
-        resolution_reason: aiAnalysis.reasoning?.slice(0, 500) || null,
-        resolution_data: aiAnalysis
+        ai_recommendation: rec === 'YES' ? 'YES' : 'NO',
+        ai_reasoning: aiAnalysis.reasoning?.slice(0, 1000) || null,
+        ai_risk_factors: aiAnalysis.riskFactors || [],
+        resolution_data: aiAnalysis,
+        ready_for_preliminary_resolve: true,
+        analysis_completed_at: new Date().toISOString()
       });
 
-      console.log(`✅ Smart contract resolution completed: ${receipt.hash}`);
+      console.log(`✅ AI analysis complete for ${job.marketId}:`);
+      console.log(`   Recommendation: ${rec} (confidence: ${aiAnalysis.confidence})`);
+      console.log(`   Status: pending_resolution (awaiting admin to call preliminaryResolve)`);
 
-      // Optionally, post attestation to HCS
+      // Post AI attestation to HCS for transparency
       try {
         const config = initializeHederaConfig();
         const hcs = new HCSService(config);
@@ -704,8 +686,10 @@ ${threeSignalResult.combined.allSignalsAligned ? '✅ All signals aligned (+8 bo
           confidence: aiAnalysis.confidence,
           reasoning: aiAnalysis.reasoning || '',
           evidenceReviewed: [],
-          aiAgentId: 'claude'
+          aiAgentId: 'blockcast-monitor-service',
+          timestamp: new Date().toISOString()
         });
+        console.log(`📝 AI attestation submitted to HCS for transparency`);
       } catch (hcsErr) {
         console.warn('HCS attestation submission failed (non-blocking):', hcsErr);
       }
@@ -713,38 +697,73 @@ ${threeSignalResult.combined.allSignalsAligned ? '✅ All signals aligned (+8 bo
       return { success: true };
 
     } catch (error) {
-      console.error(`❌ Smart contract execution failed:`, error);
+      console.error(`❌ Resolution preparation failed:`, error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Smart contract call failed'
+        error: error instanceof Error ? error.message : 'Resolution preparation failed'
       };
     }
   }
 
   /**
-   * Queue for admin review
+   * Queue for admin review (medium confidence or uncertain outcomes)
    */
   private async queueForAdminReview(job: ResolutionJob, aiAnalysis: any): Promise<{success: boolean}> {
-    console.log(`📋 Queuing ${job.marketId} for admin review...`);
+    console.log(`📋 Queuing ${job.marketId} for admin review (medium confidence)...`);
 
-    // TODO: Implement admin review queue
-    // For now, just log and mark as completed
+    try {
+      await this.supabaseService.updateMarketStatus(job.marketId, 'pending_resolution', {
+        ai_confidence_score: aiAnalysis.confidence,
+        ai_recommendation: aiAnalysis.recommendation || 'UNCERTAIN',
+        ai_reasoning: aiAnalysis.reasoning?.slice(0, 1000) || null,
+        ai_risk_factors: aiAnalysis.riskFactors || [],
+        resolution_data: aiAnalysis,
+        requires_admin_review: true,
+        analysis_completed_at: new Date().toISOString(),
+        admin_review_reason: `Medium confidence (${aiAnalysis.confidence}) - requires human verification`
+      });
 
-    await this.updateMarketStatus(job.marketId, 'expired');
+      console.log(`✅ Market ${job.marketId} queued for admin review`);
+      console.log(`   Confidence: ${aiAnalysis.confidence} (threshold: 0.7-0.9)`);
+      console.log(`   Recommendation: ${aiAnalysis.recommendation}`);
 
-    return { success: true };
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to queue for admin review:`, error);
+      return { success: false };
+    }
   }
 
   /**
-   * Require manual resolution
+   * Require manual resolution (low confidence - human decision needed)
    */
   private async requireManualResolution(job: ResolutionJob, aiAnalysis: any): Promise<{success: boolean}> {
-    console.log(`👨‍💼 Market ${job.marketId} requires manual resolution`);
+    console.log(`👨‍💼 Market ${job.marketId} requires manual resolution (low confidence)`);
 
-    // TODO: Alert administrators
-    await this.updateMarketStatus(job.marketId, 'expired');
+    try {
+      await this.supabaseService.updateMarketStatus(job.marketId, 'pending_resolution', {
+        ai_confidence_score: aiAnalysis.confidence,
+        ai_recommendation: 'MANUAL_REVIEW_REQUIRED',
+        ai_reasoning: aiAnalysis.reasoning?.slice(0, 1000) || null,
+        ai_risk_factors: [...(aiAnalysis.riskFactors || []), 'LOW_CONFIDENCE'],
+        resolution_data: aiAnalysis,
+        requires_admin_review: true,
+        requires_manual_resolution: true,
+        analysis_completed_at: new Date().toISOString(),
+        admin_review_reason: `Low confidence (${aiAnalysis.confidence}) - AI cannot determine outcome reliably`
+      });
 
-    return { success: true };
+      console.log(`⚠️ Market ${job.marketId} flagged for MANUAL RESOLUTION`);
+      console.log(`   Confidence: ${aiAnalysis.confidence} (below 0.7 threshold)`);
+      console.log(`   Admin must review evidence and make decision`);
+
+      // TODO: Send notification to admins (email/Discord/Slack)
+
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Failed to flag for manual resolution:`, error);
+      return { success: false };
+    }
   }
 
   /**
