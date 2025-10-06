@@ -6,7 +6,7 @@
 import { ethers } from 'ethers';
 import { supabase } from '../utils/supabase';
 import { HEDERA_CONFIG } from '../config/constants';
-import { newsApiService } from './newsAPIService';
+import { newsApiService } from './newsApiService';
 import { calculateEvidenceSignalScore, getUserBetPosition, detectEvidencePosition, getWalletAge } from './evidenceBetPositionService';
 import { betTrackingService } from './betTrackingService';
 
