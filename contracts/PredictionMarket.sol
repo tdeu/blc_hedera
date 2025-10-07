@@ -184,8 +184,7 @@ contract PredictionMarket {
         reserve += cost;
         yesBalance[msg.sender] += shares;
 
-        // Mint NFT for this position
-        betNFT.mintBetNFT(msg.sender, address(this), shares, true);
+        // NFT minting is now user-initiated via mintNFTForPosition()
     }
 
     function buyNo(uint256 shares) external isOpen {
@@ -199,8 +198,7 @@ contract PredictionMarket {
         reserve += cost;
         noBalance[msg.sender] += shares;
 
-        // Mint NFT for this position
-        betNFT.mintBetNFT(msg.sender, address(this), shares, false);
+        // NFT minting is now user-initiated via mintNFTForPosition()
     }
 
     // 🆕 Première résolution : ferme juste le marché
@@ -324,6 +322,24 @@ contract PredictionMarket {
 
     function setBetNFT(address _newBetNFT) external onlyAdmin {
         betNFT = BetNFT(_newBetNFT);
+    }
+
+    /**
+     * @dev Mint an NFT for user's position (user-initiated, optional)
+     * This allows users to list their position on secondary market
+     * @param isYes true for YES position, false for NO position
+     * @return tokenId The ID of the minted NFT
+     */
+    function mintNFTForPosition(bool isYes) external returns (uint256) {
+        require(marketInfo.status == MarketStatus.Open, "Market must be open");
+
+        uint256 userShares = isYes ? yesBalance[msg.sender] : noBalance[msg.sender];
+        require(userShares > 0, "No shares to mint NFT for");
+
+        // Mint NFT for user's entire position
+        uint256 tokenId = betNFT.mintBetNFT(msg.sender, address(this), userShares, isYes);
+
+        return tokenId;
     }
 
     /**

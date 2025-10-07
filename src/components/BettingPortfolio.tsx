@@ -5,13 +5,14 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Eye, BarChart3, PieChart, Activity } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Eye, BarChart3, PieChart, Activity, Image } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 export interface UserBet {
   id: string;
   marketId: string;
   marketClaim?: string;
+  marketContractAddress?: string; // Contract address for NFT minting
   position: 'yes' | 'no';
   amount: number;
   odds?: number;
@@ -22,6 +23,8 @@ export interface UserBet {
   resolvedAt?: Date;
   actualWinning?: number;
   blockchainTxId?: string; // Hedera transaction ID - added for blockchain integration
+  hasNFT?: boolean; // Whether user has minted NFT for this position
+  nftTokenId?: number; // NFT token ID if minted
 }
 
 interface BettingPortfolioProps {
@@ -31,6 +34,60 @@ interface BettingPortfolioProps {
 
 export default function BettingPortfolio({ userBalance, userBets }: BettingPortfolioProps) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [mintingNFT, setMintingNFT] = useState<string | null>(null); // Track which bet is being minted
+
+  const handleMintNFT = async (cast: UserBet) => {
+    if (!cast.marketContractAddress) {
+      toast.error('Market contract address not found');
+      return;
+    }
+
+    setMintingNFT(cast.id);
+
+    try {
+      // Import ethers and get user's wallet
+      const ethers = await import('ethers');
+
+      if (!window.ethereum) {
+        throw new Error('Please connect your wallet first');
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      // Contract ABI for mintNFTForPosition
+      const MARKET_ABI = [
+        "function mintNFTForPosition(bool isYes) external returns (uint256)"
+      ];
+
+      const marketContract = new ethers.Contract(
+        cast.marketContractAddress,
+        MARKET_ABI,
+        signer
+      );
+
+      toast.info('Minting NFT... Please confirm transaction');
+
+      const tx = await marketContract.mintNFTForPosition(cast.position === 'yes');
+      toast.info('Transaction sent! Waiting for confirmation...');
+
+      const receipt = await tx.wait();
+
+      // Parse the NFT minted event to get token ID
+      console.log('NFT minted successfully!', receipt);
+
+      toast.success('NFT minted successfully! You can now list it on the secondary market.');
+
+      // Refresh the page to update UI
+      setTimeout(() => window.location.reload(), 2000);
+
+    } catch (error: any) {
+      console.error('Error minting NFT:', error);
+      toast.error(error.message || 'Failed to mint NFT');
+    } finally {
+      setMintingNFT(null);
+    }
+  };
 
   // Calculate portfolio stats
   const totalCastAmount = userBets.reduce((sum, cast) => sum + cast.amount, 0);
@@ -394,11 +451,29 @@ export default function BettingPortfolio({ userBalance, userBets }: BettingPortf
                       </div>
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Button variant="outline" size="sm" className="gap-1">
                         <Eye className="h-3 w-3" />
                         View Market
                       </Button>
+                      {!cast.hasNFT && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => handleMintNFT(cast)}
+                          disabled={mintingNFT === cast.id || !cast.marketContractAddress}
+                        >
+                          <Image className="h-3 w-3" />
+                          {mintingNFT === cast.id ? 'Minting...' : 'Mint NFT'}
+                        </Button>
+                      )}
+                      {cast.hasNFT && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Image className="h-3 w-3" />
+                          NFT #{cast.nftTokenId}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardContent>

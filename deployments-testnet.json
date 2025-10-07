@@ -1,19 +1,13 @@
 {
   "network": "testnet",
   "deployer": "0xfd76D4c18D5A10F558d057743bFB0218130157f4",
-  "timestamp": "2025-09-25T05:24:17.512Z",
+  "timestamp": "2025-10-07T09:35:52.671Z",
   "contracts": {
-    "AdminManager": "0x94FAF61DE192D1A441215bF3f7C318c236974959",
-    "CastToken": "0xC78Ac73844077917E20530E36ac935c4B56236c2",
-    "Treasury": "0x69649cc208138B3A2c529cB301D7Bb591C53a2e2",
-    "BetNFT": "0x8e718596977C0BE525c5b1afeA73d9eFdF9bB7ca",
-    "PredictionMarketFactory": "0x6A108622e5B0F2Db7f6118E71259F34937225809",
-    "BuyCAST": "0x103eD6472e50D7746b90860aAd528E9c0F1cD5B4"
+    "AdminManager": "0x7d86D05feeCBB3Efed3da57e7F82A4f626B485eA",
+    "CastToken": "0x3eAe2F34F7E775D98c6C65e0999c61B3b625a1F6",
+    "Treasury": "0x1E0a23f9d5a0079AcC21b623250207492809f298",
+    "BetNFT": "0x5A07EB58D55046ff35fCe1099f445d91E7042a9a",
+    "PredictionMarketFactory": "0x16782B27c6abc3628F1BCb9FaAbF0dDa1aD1Ed98"
   },
-  "status": "WORKING",
-  "marketCount": 3,
-  "lastTestedAt": "2025-09-25T06:48:54.000Z",
-  "notes": "Fixed factory deployed without betNFT authorization requirement. Market creation working perfectly.",
-  "BUYCAST_DEPLOYED_AT": "2025-09-26T07:59:15.863Z",
-  "lastUpdated": "2025-09-26T07:59:15.864Z"
+  "transactionHashes": {}
 }

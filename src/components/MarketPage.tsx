@@ -1648,6 +1648,33 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 </div>
               ))}
 
+              {/* Secondary Market NFT Listings */}
+              {/* TODO: Fetch actual NFT listings from BetNFT contract */}
+              {/* This section will show NFT positions listed for sale on the secondary market */}
+              {market.status === 'open' && (
+                <div className="flex gap-4 p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
+                      <Zap className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-indigo-700 dark:text-indigo-400">Secondary Market</span>
+                      <Badge variant="outline" className="text-xs bg-indigo-100 text-indigo-700 border-indigo-200">
+                        NFT Trading
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Users can mint NFTs for their positions and list them for sale on the secondary market
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      Go to Settings → Portfolio → Active Casts to mint NFTs for your positions
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Market Expiration Event */}
               {new Date() > market.expiresAt && (
                 <div className="flex gap-4 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200">

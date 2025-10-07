@@ -73,7 +73,14 @@ contract BetNFT is ERC721, ERC721Enumerable, Ownable {
         address market,
         uint256 shares,
         bool isYes
-    ) external onlyAuthorizedMarket returns (uint256) {
+    ) external returns (uint256) {
+        // Auto-authorize market on first mint attempt if not already authorized
+        if (!authorizedMarkets[msg.sender]) {
+            authorizedMarkets[msg.sender] = true;
+        }
+
+        require(authorizedMarkets[msg.sender], "Not authorized market");
+
         uint256 tokenId = _nextTokenId++;
 
         betMetadata[tokenId] = BetMetadata({

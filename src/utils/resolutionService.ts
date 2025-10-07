@@ -445,10 +445,18 @@ export class ResolutionService {
       const ethers = await import('ethers');
       const PREDICTION_MARKET_ABI = [
         "function preliminaryResolve(uint8 outcome) external",
-        "event PreliminaryResolution(uint8 outcome, uint256 timestamp)"
+        "event PreliminaryResolution(uint8 outcome, uint256 timestamp)",
+        "function marketInfo() view returns (bytes32 id, string question, address creator, uint256 endTime, uint8 status)"
       ];
 
       const marketContract = new ethers.Contract(marketContractAddress, PREDICTION_MARKET_ABI, adminSigner);
+
+      // CRITICAL: Fetch market end time from contract BEFORE resolving
+      // This ensures dispute period is calculated from market expiry, not resolution time
+      console.log(`📊 Fetching market end time from contract...`);
+      const marketInfo = await marketContract.marketInfo();
+      const marketEndTime = new Date(Number(marketInfo.endTime) * 1000);
+      console.log(`   Market ended at: ${marketEndTime.toISOString()}`);
 
       // Call preliminaryResolve on blockchain
       console.log(`🔐 Calling preliminaryResolve(${contractOutcome}) with admin signer...`);
@@ -481,10 +489,14 @@ export class ResolutionService {
         preliminaryResolveTime = new Date(); // Fallback to current time
       }
 
-      // Calculate dispute period end (168 hours = 7 days from preliminary resolve time)
-      const disputePeriodEnd = new Date(preliminaryResolveTime.getTime() + DISPUTE_PERIOD.MILLISECONDS);
+      // CRITICAL FIX: Calculate dispute period end from MARKET END TIME, not preliminary resolve time
+      // This ensures the 7-day evidence submission period is consistent and starts from market expiration
+      const disputePeriodEnd = new Date(marketEndTime.getTime() + DISPUTE_PERIOD.MILLISECONDS);
 
-      console.log(`⚖️  Dispute period: ${preliminaryResolveTime.toISOString()} → ${disputePeriodEnd.toISOString()}`);
+      console.log(`⚖️  Dispute period calculation:`);
+      console.log(`   Market ended: ${marketEndTime.toISOString()}`);
+      console.log(`   Preliminary resolved: ${preliminaryResolveTime.toISOString()}`);
+      console.log(`   Dispute period ends: ${disputePeriodEnd.toISOString()} (7 days from market end)`);
 
       // Update database to disputable status
       if (supabase) {
