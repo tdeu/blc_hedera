@@ -41,6 +41,8 @@ interface MarketWithEvidence {
   dispute_period_end?: string;
   evidence_count: number;
   evidences: Evidence[];
+  yesOdds?: number;
+  noOdds?: number;
   ai_resolution?: {
     recommendation: string;
     confidence: number;
@@ -95,7 +97,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'resolved'>('pending');
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
-  const [marketTabs, setMarketTabs] = useState<{[marketId: string]: 'evidence' | 'ai' | 'aggregate'}>({});
+  const [marketTabs, setMarketTabs] = useState<{[marketId: string]: 'odds' | 'evidence' | 'ai' | 'summary'}>({});
   const [showAIDialog, setShowAIDialog] = useState(false);
   const [aiConfig, setAiConfig] = useState({
     externalAPIs: ['bbc', 'reuters', 'newsapi'],
@@ -169,19 +171,19 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       setExpandedMarket(null);
     } else {
       setExpandedMarket(marketId);
-      // Set default tab to 'ai' if not already set
+      // Set default tab to 'odds' if not already set
       if (!marketTabs[marketId]) {
-        setMarketTabs(prev => ({ ...prev, [marketId]: 'ai' }));
+        setMarketTabs(prev => ({ ...prev, [marketId]: 'odds' }));
       }
     }
   };
 
-  const setMarketTab = (marketId: string, tab: 'evidence' | 'ai' | 'aggregate') => {
+  const setMarketTab = (marketId: string, tab: 'odds' | 'evidence' | 'ai' | 'summary') => {
     setMarketTabs(prev => ({ ...prev, [marketId]: tab }));
   };
 
-  const getActiveMarketTab = (marketId: string): 'evidence' | 'ai' | 'aggregate' => {
-    return marketTabs[marketId] || 'ai';
+  const getActiveMarketTab = (marketId: string): 'odds' | 'evidence' | 'ai' | 'summary' => {
+    return marketTabs[marketId] || 'odds';
   };
 
   const loadMarketsWithEvidence = async () => {
@@ -287,6 +289,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
           dispute_period_end: market.dispute_period_end,
           evidence_count: evidences.length,
           evidences,
+          yesOdds: market.yes_odds || 0,
+          noOdds: market.no_odds || 0,
           ai_resolution: aiResolution,
           resolution_data: market.resolution_data,
           // Hybrid AI fields with defaults
@@ -750,6 +754,16 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                   <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                     <button
                       className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        getActiveMarketTab(market.id) === 'odds'
+                          ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                      onClick={() => setMarketTab(market.id, 'odds')}
+                    >
+                      📊 Prediction Odds
+                    </button>
+                    <button
+                      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                         getActiveMarketTab(market.id) === 'evidence'
                           ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                           : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
@@ -770,21 +784,48 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                     </button>
                     <button
                       className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                        getActiveMarketTab(market.id) === 'aggregate'
+                        getActiveMarketTab(market.id) === 'summary'
                           ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                           : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                       }`}
-                      onClick={() => setMarketTab(market.id, 'aggregate')}
+                      onClick={() => setMarketTab(market.id, 'summary')}
                     >
-                      🔄 Aggregate
+                      📋 Summary
                     </button>
                   </div>
 
                   {/* Tab Content */}
                   <div className="p-4">
+                    {/* Prediction Odds Tab */}
+                    {getActiveMarketTab(market.id) === 'odds' && (
+                      <div>
+                        <h4 className="font-medium mb-4">Final Prediction Odds (Market Closed)</h4>
+                        <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
+                          <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            These are the final odds when the market closed for betting
+                          </div>
+                          <div className="grid grid-cols-2 gap-6 max-w-md mx-auto">
+                            <div className="text-center p-6 rounded-lg border-2 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                              <div className="text-sm mb-2 text-gray-500 dark:text-gray-400 font-medium">Yes Odds</div>
+                              <div className="text-4xl font-bold text-gray-700 dark:text-gray-300">{market.yesOdds?.toFixed(2) || '0.00'}x</div>
+                            </div>
+                            <div className="text-center p-6 rounded-lg border-2 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                              <div className="text-sm mb-2 text-gray-500 dark:text-gray-400 font-medium">No Odds</div>
+                              <div className="text-4xl font-bold text-gray-700 dark:text-gray-300">{market.noOdds?.toFixed(2) || '0.00'}x</div>
+                            </div>
+                          </div>
+                          <div className="mt-6 text-xs text-center text-gray-500 dark:text-gray-400">
+                            Market closed on {market.expiresAt.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evidence Tab */}
                     {getActiveMarketTab(market.id) === 'evidence' && (
                       <div>
-                        <h4 className="font-medium mb-3">User Evidence Submissions</h4>
+                        <h4 className="font-medium mb-4">User Evidence Submissions</h4>
+
                         {market.evidence_count === 0 ? (
                           <div className="text-center py-6 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
                             No evidence submitted yet
@@ -844,17 +885,39 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                         {evidence.status || 'pending'}
                                       </Badge>
                                     </div>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setEditingEvidence(prev => ({
-                                        ...prev,
-                                        [evidence.id]: !prev[evidence.id]
-                                      }))}
-                                      className="text-xs h-7"
-                                    >
-                                      {editingEvidence[evidence.id] ? 'Cancel' : 'Edit Stance'}
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                      {evidence.status !== 'accepted' && (
+                                        <Button
+                                          variant="default"
+                                          size="sm"
+                                          onClick={() => updateEvidenceStance(evidence.id, { status: 'accepted' })}
+                                          className="text-xs h-7 bg-green-600 hover:bg-green-700"
+                                        >
+                                          ✓ Keep
+                                        </Button>
+                                      )}
+                                      {evidence.status !== 'rejected' && (
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => updateEvidenceStance(evidence.id, { status: 'rejected' })}
+                                          className="text-xs h-7"
+                                        >
+                                          ✗ Reject
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setEditingEvidence(prev => ({
+                                          ...prev,
+                                          [evidence.id]: !prev[evidence.id]
+                                        }))}
+                                        className="text-xs h-7"
+                                      >
+                                        {editingEvidence[evidence.id] ? 'Cancel' : 'Edit Details'}
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1313,56 +1376,114 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                       </div>
                     )}
 
-                    {getActiveMarketTab(market.id) === 'aggregate' && (
+                    {/* Summary Tab */}
+                    {getActiveMarketTab(market.id) === 'summary' && (
                       <div>
-                        <h4 className="font-medium mb-3">Aggregate Analysis</h4>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
-                            <h5 className="font-medium mb-2">User Evidence Summary</h5>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                              {market.evidence_count} evidence submission(s)
-                            </p>
-                            {market.evidences.slice(0, 2).map((evidence, idx) => (
-                              <p key={idx} className="text-xs text-gray-500 truncate">
-                                • {evidence.evidence_text.slice(0, 60)}...
-                              </p>
-                            ))}
+                        <h4 className="font-medium mb-4">Resolution Summary</h4>
+                        <div className="space-y-4">
+                          {/* 1. Prediction Odds Summary */}
+                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <h5 className="font-medium mb-3 flex items-center gap-2">
+                              <span>📊</span> Prediction Odds (Market Closed)
+                            </h5>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">Yes Odds:</span>
+                                <span className="ml-2 font-bold text-lg">{market.yesOdds?.toFixed(2) || '0.00'}x</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">No Odds:</span>
+                                <span className="ml-2 font-bold text-lg">{market.noOdds?.toFixed(2) || '0.00'}x</span>
+                              </div>
+                            </div>
                           </div>
-                          
-                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
-                            <h5 className="font-medium mb-2">AI Analysis Summary</h5>
+
+                          {/* 2. Evidence Summary */}
+                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <h5 className="font-medium mb-3 flex items-center gap-2">
+                              <span>📝</span> Evidence Submissions
+                            </h5>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">Total Submissions:</span>
+                                <span className="font-semibold">{market.evidence_count}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">Kept (Accepted):</span>
+                                <span className="font-semibold text-green-600">
+                                  {market.evidences.filter(e => e.status === 'accepted').length}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">Rejected:</span>
+                                <span className="font-semibold text-red-600">
+                                  {market.evidences.filter(e => e.status === 'rejected').length}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">Pending Review:</span>
+                                <span className="font-semibold text-yellow-600">
+                                  {market.evidences.filter(e => !e.status || e.status === 'pending').length}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 3. AI Engine Summary */}
+                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <h5 className="font-medium mb-3 flex items-center gap-2">
+                              <span>🤖</span> AI Engine Analysis
+                            </h5>
                             {market.ai_resolution && market.ai_resolution.recommendation !== 'PENDING' ? (
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Badge variant={market.ai_resolution.recommendation === 'YES' ? 'default' : 'destructive'}>
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Recommendation:</span>
+                                  <Badge variant={market.ai_resolution.recommendation === 'YES' ? 'default' : 'destructive'} className="text-base">
                                     {market.ai_resolution.recommendation}
                                   </Badge>
-                                  {getConfidenceBadge(market.ai_resolution.confidence)}
                                 </div>
-                                <p className="text-xs text-gray-500">
-                                  {market.ai_resolution.reasoning.slice(0, 100)}...
-                                </p>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Confidence Score:</span>
+                                  <span className="text-xl font-bold text-primary">
+                                    {(market.ai_resolution.confidence * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                                <div className="text-sm">
+                                  <p className="text-gray-600 dark:text-gray-400 mb-1">Data Source:</p>
+                                  <p className="font-medium">
+                                    {market.ai_resolution.sourceType || market.ai_resolution.dataSourceUsed || 'External API'}
+                                  </p>
+                                </div>
                               </div>
                             ) : (
-                              <p className="text-sm text-gray-500">No AI analysis yet</p>
+                              <p className="text-sm text-gray-500">No AI analysis completed yet. Please run AI Engine analysis first.</p>
+                            )}
+                          </div>
+
+                          {/* Execute Final Resolution Button */}
+                          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                            {market.ai_resolution?.confidence > 0 ? (
+                              <Button
+                                onClick={() => {
+                                  setSelectedMarket(market);
+                                  setShowResolveDialog(true);
+                                }}
+                                className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
+                                size="lg"
+                              >
+                                <Gavel className="h-5 w-5" />
+                                Execute Final Resolution
+                              </Button>
+                            ) : (
+                              <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-yellow-600" />
+                                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                  Please complete AI Engine analysis before executing final resolution
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>
-                        
-                        {market.ai_resolution?.confidence > 0 && (
-                          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <Button
-                              onClick={() => {
-                                setSelectedMarket(market);
-                                setShowResolveDialog(true);
-                              }}
-                              className="gap-2"
-                            >
-                              <Gavel className="h-4 w-4" />
-                              Execute Final Resolution
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
