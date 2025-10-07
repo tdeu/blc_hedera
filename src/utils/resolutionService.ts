@@ -403,14 +403,14 @@ export class ResolutionService {
   }
 
   // NEW: Two-stage resolution - Step 1: Preliminary resolve
-  async preliminaryResolveMarket(marketId: string, outcome: 'yes' | 'no', adminAddress: string): Promise<{
+  async preliminaryResolveMarket(marketId: string, outcome: 'yes' | 'no'): Promise<{
     transactionId?: string;
     hcsTopicId?: string;
   }> {
     try {
-      console.log(`Starting preliminary resolution for market ${marketId}: ${outcome}`);
+      console.log(`🤖 Starting preliminary resolution for market ${marketId}: ${outcome}`);
 
-      // Convert outcome to contract format (0=Invalid, 1=Yes, 2=No)
+      // Convert outcome to contract format (0=Unset, 1=Yes, 2=No)
       const contractOutcome = outcome === 'yes' ? 1 : 2;
 
       // Get market contract address from database
@@ -425,77 +425,116 @@ export class ResolutionService {
           .single();
 
         if (error) {
-          console.error('Error fetching market:', error);
-        } else {
-          marketContractAddress = market?.contract_address;
+          throw new Error(`Failed to fetch market: ${error.message}`);
         }
+
+        marketContractAddress = market?.contract_address;
       }
 
-      // Call smart contract if contract address exists
-      if (marketContractAddress && marketContractAddress !== '0x0000000000000000000000000000000000000000') {
+      // CRITICAL: Contract address is REQUIRED
+      if (!marketContractAddress || marketContractAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Market ${marketId} has no contract address - cannot resolve on blockchain`);
+      }
+
+      // CRITICAL: Use ADMIN signer, not user's MetaMask
+      console.log(`📞 Calling preliminaryResolve on contract: ${marketContractAddress}`);
+
+      const { getAdminSigner } = await import('./adminSigner');
+      const adminSigner = await getAdminSigner();
+
+      const ethers = await import('ethers');
+      const PREDICTION_MARKET_ABI = [
+        "function preliminaryResolve(uint8 outcome) external",
+        "event PreliminaryResolution(uint8 outcome, uint256 timestamp)"
+      ];
+
+      const marketContract = new ethers.Contract(marketContractAddress, PREDICTION_MARKET_ABI, adminSigner);
+
+      // Call preliminaryResolve on blockchain
+      console.log(`🔐 Calling preliminaryResolve(${contractOutcome}) with admin signer...`);
+      const tx = await marketContract.preliminaryResolve(contractOutcome);
+
+      console.log(`⏳ Waiting for transaction confirmation... TX: ${tx.hash}`);
+      const receipt = await tx.wait();
+      txHash = receipt.hash;
+
+      console.log(`✅ Preliminary resolution confirmed on blockchain!`);
+      console.log(`   TX Hash: ${txHash}`);
+      console.log(`   Block: ${receipt.blockNumber}`);
+
+      // Parse events to get timestamp
+      let preliminaryResolveTime: Date | undefined;
+      for (const log of receipt.logs) {
         try {
-          console.log(`📞 Calling preliminaryResolve on contract: ${marketContractAddress}`);
-
-          // Get signer from MetaMask/connected wallet
-          if (typeof window !== 'undefined' && (window as any).ethereum) {
-            const provider = new (await import('ethers')).BrowserProvider((window as any).ethereum);
-            const signer = await provider.getSigner();
-
-            // Create a simple contract instance to call preliminaryResolve
-            const ethers = await import('ethers');
-            const PREDICTION_MARKET_ABI = [
-              "function preliminaryResolve(uint8 outcome) external"
-            ];
-
-            const marketContract = new ethers.Contract(marketContractAddress, PREDICTION_MARKET_ABI, signer);
-            const tx = await marketContract.preliminaryResolve(contractOutcome);
-            await tx.wait(); // Wait for confirmation
-            txHash = tx.hash;
-
-            console.log(`✅ Preliminary resolve transaction sent: ${txHash}`);
-          } else {
-            console.warn('⚠️ No wallet connection available, skipping contract call');
+          const parsedLog = marketContract.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === 'PreliminaryResolution') {
+            preliminaryResolveTime = new Date(Number(parsedLog.args.timestamp) * 1000);
+            console.log(`   Preliminary resolve time from event: ${preliminaryResolveTime.toISOString()}`);
+            break;
           }
-        } catch (contractError) {
-          console.error('❌ Contract preliminary resolve failed:', contractError);
-          // Continue with database update even if contract call fails
+        } catch (e) {
+          // Skip unparseable logs
         }
-      } else {
-        console.warn(`⚠️ No contract address for market ${marketId}, skipping contract call`);
       }
+
+      if (!preliminaryResolveTime) {
+        preliminaryResolveTime = new Date(); // Fallback to current time
+      }
+
+      // Calculate dispute period end (168 hours = 7 days from preliminary resolve time)
+      const disputePeriodEnd = new Date(preliminaryResolveTime.getTime() + DISPUTE_PERIOD.MILLISECONDS);
+
+      console.log(`⚖️  Dispute period: ${preliminaryResolveTime.toISOString()} → ${disputePeriodEnd.toISOString()}`);
 
       // Update database to disputable status
       if (supabase) {
+        const { getAdminAddress } = await import('./adminSigner');
+        const adminAddress = await getAdminAddress();
+
         await supabase
           .from('approved_markets')
           .update({
             status: 'disputable',
-            dispute_period_end: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString(),
+            dispute_period_end: disputePeriodEnd.toISOString(),
             resolution_data: {
               preliminary_outcome: outcome,
-              preliminary_time: new Date().toISOString(),
-              resolved_by: adminAddress
+              preliminary_time: preliminaryResolveTime.toISOString(),
+              resolved_by: adminAddress,
+              transaction_id: txHash
             }
           })
           .eq('id', marketId);
+
+        console.log(`✅ Database updated to 'disputable' status`);
       }
 
       // Record preliminary resolution to HCS
       let hcsTransactionId: string | undefined;
       try {
+        const { getAdminAddress } = await import('./adminSigner');
+        const adminAddress = await getAdminAddress();
+
         hcsTransactionId = await hederaResolutionService.submitResolutionMessage(
           marketId,
           {
             step: 'preliminary',
             outcome,
             adminAddress,
-            disputePeriodEnd: new Date(Date.now() + DISPUTE_PERIOD.MILLISECONDS).toISOString()
+            blockchainTx: txHash,
+            preliminaryResolveTime: preliminaryResolveTime.toISOString(),
+            disputePeriodEnd: disputePeriodEnd.toISOString()
           },
           'admin_preliminary'
         );
+        console.log(`✅ HCS message submitted: ${hcsTransactionId}`);
       } catch (hcsError) {
-        console.warn('HCS preliminary resolution submission failed:', hcsError);
+        console.warn('⚠️  HCS preliminary resolution submission failed (non-critical):', hcsError);
       }
+
+      console.log(`\n🎉 Preliminary resolution complete for market ${marketId}`);
+      console.log(`   Outcome: ${outcome.toUpperCase()}`);
+      console.log(`   Blockchain TX: ${txHash}`);
+      console.log(`   Dispute until: ${disputePeriodEnd.toLocaleString()}`);
 
       return {
         transactionId: txHash,
@@ -503,30 +542,101 @@ export class ResolutionService {
       };
 
     } catch (error) {
-      console.error('Error in preliminary resolution:', error);
+      console.error('❌ Error in preliminary resolution:', error);
       throw error;
     }
   }
 
   // NEW: Two-stage resolution - Step 2: Final resolve with confidence
-  async finalResolveMarket(marketId: string, outcome: 'yes' | 'no', confidence: number, adminAddress: string): Promise<{
+  async finalResolveMarket(marketId: string, outcome: 'yes' | 'no', confidence: number): Promise<{
     transactionId?: string;
     consensusTimestamp: Date;
   }> {
     try {
-      console.log(`Starting final resolution for market ${marketId}: ${outcome} (confidence: ${confidence}%)`);
+      console.log(`🏁 Starting final resolution for market ${marketId}: ${outcome} (confidence: ${confidence}%)`);
 
-      // Convert outcome to contract format
+      // Validate confidence score (must be 0-100)
+      if (confidence < 0 || confidence > 100) {
+        throw new Error(`Invalid confidence score: ${confidence}. Must be between 0 and 100.`);
+      }
+
+      // Convert outcome to contract format (0=Unset, 1=Yes, 2=No)
       const contractOutcome = outcome === 'yes' ? 1 : 2;
 
-      // TODO: Get contract address for this market
-      const marketContract = '0x...'; // This should come from database
+      // Get market contract address from database
+      let marketContractAddress: string | null = null;
+      let txHash: string | undefined;
 
-      // TODO: Get admin signer
-      // const adminSigner = this.getAdminSigner(adminAddress);
+      if (supabase) {
+        const { data: market, error } = await supabase
+          .from('approved_markets')
+          .select('contract_address, status')
+          .eq('id', marketId)
+          .single();
 
-      // TODO: Call contract final resolve
-      // const txHash = await contractService.finalResolve(marketContract, contractOutcome, confidence, adminSigner);
+        if (error) {
+          throw new Error(`Failed to fetch market: ${error.message}`);
+        }
+
+        marketContractAddress = market?.contract_address;
+
+        // Verify market is in correct state
+        if (market?.status !== 'disputable' && market?.status !== 'pending_resolution') {
+          console.warn(`⚠️  Market ${marketId} is in '${market?.status}' state, expected 'disputable'. Proceeding anyway...`);
+        }
+      }
+
+      // CRITICAL: Contract address is REQUIRED
+      if (!marketContractAddress || marketContractAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Market ${marketId} has no contract address - cannot finalize on blockchain`);
+      }
+
+      // CRITICAL: Use ADMIN signer
+      console.log(`📞 Calling finalResolve on contract: ${marketContractAddress}`);
+
+      const { getAdminSigner, getAdminAddress } = await import('./adminSigner');
+      const adminSigner = await getAdminSigner();
+      const adminAddress = await getAdminAddress();
+
+      const ethers = await import('ethers');
+      const PREDICTION_MARKET_ABI = [
+        "function finalResolve(uint8 outcome, uint256 _confidenceScore) external",
+        "event FinalResolution(uint8 outcome, uint256 confidenceScore, uint256 timestamp)"
+      ];
+
+      const marketContract = new ethers.Contract(marketContractAddress, PREDICTION_MARKET_ABI, adminSigner);
+
+      // Call finalResolve on blockchain
+      console.log(`🔐 Calling finalResolve(${contractOutcome}, ${confidence}) with admin signer...`);
+      const tx = await marketContract.finalResolve(contractOutcome, confidence);
+
+      console.log(`⏳ Waiting for transaction confirmation... TX: ${tx.hash}`);
+      const receipt = await tx.wait();
+      txHash = receipt.hash;
+
+      console.log(`✅ Final resolution confirmed on blockchain!`);
+      console.log(`   TX Hash: ${txHash}`);
+      console.log(`   Block: ${receipt.blockNumber}`);
+
+      // Parse events to get timestamp
+      let finalResolveTime: Date | undefined;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = marketContract.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === 'FinalResolution') {
+            finalResolveTime = new Date(Number(parsedLog.args.timestamp) * 1000);
+            console.log(`   Final resolve time from event: ${finalResolveTime.toISOString()}`);
+            console.log(`   Final confidence: ${parsedLog.args.confidenceScore}%`);
+            break;
+          }
+        } catch (e) {
+          // Skip unparseable logs
+        }
+      }
+
+      if (!finalResolveTime) {
+        finalResolveTime = new Date(); // Fallback to current time
+      }
 
       // Update database to resolved status
       if (supabase) {
@@ -536,12 +646,15 @@ export class ResolutionService {
             status: 'resolved',
             resolution_data: {
               outcome,
-              confidence,
+              confidence: `${confidence}%`,
               resolved_by: adminAddress,
-              final_resolution_time: new Date().toISOString()
+              final_resolution_time: finalResolveTime.toISOString(),
+              transaction_id: txHash
             }
           })
           .eq('id', marketId);
+
+        console.log(`✅ Database updated to 'resolved' status`);
       }
 
       // Record final resolution to HCS
@@ -552,25 +665,29 @@ export class ResolutionService {
           {
             finalOutcome: outcome,
             confidence,
-            adminAddress
+            adminAddress,
+            blockchainTx: txHash
           },
           `Final resolution: ${outcome} with ${confidence}% confidence`
         );
+        console.log(`✅ HCS message submitted: ${hcsTransactionId}`);
       } catch (hcsError) {
-        console.warn('HCS final resolution submission failed:', hcsError);
+        console.warn('⚠️  HCS final resolution submission failed (non-critical):', hcsError);
       }
 
-      const consensusTimestamp = new Date();
-
-      console.log(`Final resolution completed for market ${marketId}: ${outcome} (${confidence}% confidence)`);
+      console.log(`\n🎉 Final resolution complete for market ${marketId}`);
+      console.log(`   Outcome: ${outcome.toUpperCase()}`);
+      console.log(`   Confidence: ${confidence}%`);
+      console.log(`   Blockchain TX: ${txHash}`);
+      console.log(`   Payouts are now available!`);
 
       return {
-        // transactionId: txHash,
-        consensusTimestamp
+        transactionId: txHash,
+        consensusTimestamp: finalResolveTime
       };
 
     } catch (error) {
-      console.error('Error in final resolution:', error);
+      console.error('❌ Error in final resolution:', error);
       throw error;
     }
   }

@@ -25,7 +25,6 @@ import DisputeModal, { DisputeFormData } from './DisputeModal';
 import { MarketResolution } from '../utils/supabase';
 import { disputeService } from '../utils/disputeService';
 import { resolutionService } from '../utils/resolutionService';
-import { evidenceService, EvidenceSubmission } from '../utils/evidenceService';
 import { walletService } from '../utils/walletService';
 import { AIAgentSimple } from './AIAgentSimple';
 import { useBlockCastAI } from '../hooks/useBlockCastAI';
@@ -85,7 +84,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
   const [marketBets, setMarketBets] = useState<any[]>([]);
 
   // Activity feed state
-  const [marketEvidence, setMarketEvidence] = useState<EvidenceSubmission[]>([]);
   const [marketDisputes, setMarketDisputes] = useState<any[]>([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
 
@@ -333,9 +331,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
   const loadMarketActivity = async () => {
     setIsLoadingActivity(true);
     try {
-      // Load evidence submissions for this market
-      const evidence = await evidenceService.getMarketEvidence(market.id);
-      setMarketEvidence(evidence);
+      // Evidence is now loaded from on-chain disputes only (no legacy database evidence)
 
       // Load bet history from blockchain if contract address exists
       let bets: any[] = [];
@@ -522,6 +518,67 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
         }
       } else {
         // For markets with blockchain contracts, use the normal dispute process
+
+        // CRITICAL CHECK: Verify market contract is in PendingResolution state
+        console.log('🔍 Checking if market contract is in disputable state...');
+        const ethers = await import('ethers');
+        const PREDICTION_MARKET_ABI = [
+          "function isPendingResolution() external view returns (bool)",
+          "function getMarketInfo() external view returns (tuple(bytes32 id, string question, address creator, uint256 endTime, uint8 status))"
+        ];
+
+        const provider = new ethers.JsonRpcProvider('https://testnet.hashio.io/api');
+        const marketContract = new ethers.Contract(marketAddress, PREDICTION_MARKET_ABI, provider);
+
+        const isPending = await marketContract.isPendingResolution();
+
+        if (!isPending) {
+          // Check if market is expired but not yet resolved
+          const marketInfo = await marketContract.getMarketInfo();
+          const now = Math.floor(Date.now() / 1000);
+          const isExpired = Number(marketInfo.endTime) <= now;
+          
+          if (isExpired && marketInfo.status === 1) { // Open status but expired
+            console.log('🚀 Market is expired but not resolved - triggering immediate resolution...');
+            
+            // Import the automatic resolution logic
+            const { automaticResolutionMonitor } = await import('../services/automaticResolutionMonitor');
+            
+            // Manually trigger resolution for this specific market
+            try {
+              await automaticResolutionMonitor.resolveSpecificMarket(marketAddress);
+              console.log('✅ Market resolved successfully - retrying evidence submission...');
+              
+              // Wait a moment for the transaction to be mined
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Check again if it's now in PendingResolution state
+              const newIsPending = await marketContract.isPendingResolution();
+              if (newIsPending) {
+                console.log('✅ Market is now in PendingResolution state - proceeding with evidence submission');
+              } else {
+                throw new Error('❌ Market resolution failed - please try again in a moment');
+              }
+            } catch (resolveError) {
+              throw new Error(
+                '⏳ Market is expired but automatic resolution failed.\n\n' +
+                'The system attempted to resolve this market automatically but encountered an error.\n\n' +
+                '👉 Please try again in a moment, or contact support if the issue persists.\n\n' +
+                `Error: ${resolveError.message}`
+              );
+            }
+          } else {
+            throw new Error(
+              '⏳ Market is not ready for disputes yet.\n\n' +
+              'The market has expired but preliminary resolution has not been completed on the blockchain.\n\n' +
+              '👉 Please wait 1-5 minutes for the automatic resolution system to process this market, then try again.\n\n' +
+              'Current market status: The blockchain contract needs to be set to PendingResolution state by calling preliminaryResolve().'
+            );
+          }
+        }
+
+        console.log('✅ Market contract is in PendingResolution state - disputes allowed');
+
         // Approve CAST tokens for dispute bond
         toast.info('Approving CAST tokens for dispute bond...');
         const { TOKEN_ADDRESSES } = await import('../config/constants');
@@ -826,10 +883,10 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
             <div className="text-center mb-4">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Brain className="h-6 w-6 text-amber-600" />
-                <h2 className="text-xl font-bold text-amber-800">AI Resolution</h2>
+                <h2 className="text-xl font-bold text-amber-800">Community Resolution</h2>
               </div>
               <div className="text-lg">
-                AI says this market is:
+                The community says this market is:
                 <Badge className={`ml-2 text-lg px-4 py-1 ${
                   market.resolution_data.outcome === 'yes'
                     ? 'bg-green-100 text-green-800 border-green-200'
@@ -858,7 +915,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
               Do you want to dispute this resolution?
             </CardTitle>
             <CardDescription>
-              If you have evidence that contradicts the AI resolution, submit it here.
+              If you have evidence that contradicts the Community resolution, submit it here.
               Your evidence will be reviewed by our dispute resolution system.
             </CardDescription>
           </CardHeader>
@@ -873,7 +930,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                       <span className="text-sm font-medium text-amber-800">Wallet Required</span>
                     </div>
                     <div className="text-sm text-amber-700">
-                      Connect your MetaMask wallet to submit evidence (FREE - no fees).
+                      Connect your MetaMask wallet to submit evidence (no fees).
                     </div>
                   </div>
                   <Button onClick={handleConnectWallet} className="bg-amber-600 hover:bg-amber-700">
@@ -885,13 +942,13 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">Evidence Submission Fee & Rewards</span>
+                  <span className="text-sm font-medium text-blue-800">Evidence Submission Cost</span>
                 </div>
                 <div className="text-sm text-blue-700 space-y-1">
-                  <div>• <strong>Submission Fee:</strong> FREE (no fees)</div>
-                  <div>• <strong>Your Balance:</strong> {userWalletBalance.toFixed(4)} HBAR</div>
-                  <div>• <strong>Reward if Accepted:</strong> Up to 1.0 HBAR + quality bonus</div>
-                  <div>• <strong>Note:</strong> Only gas fees in HBAR for transaction</div>
+                  <div>• <strong>Bond Required:</strong> {DISPUTE_PERIOD.BOND_AMOUNT_CAST} CAST (refunded if accepted)</div>
+                  <div>• <strong>Gas Fee:</strong> ~0.05 HBAR for transaction</div>
+                  <div>• <strong>Your HBAR Balance:</strong> {userWalletBalance.toFixed(4)} HBAR</div>
+                  <div>• <strong>Note:</strong> Bond is locked until dispute is resolved, then refunded if evidence is valid</div>
                 </div>
               </div>
             )}
@@ -971,7 +1028,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                   if (submissionStep === 'storing') return 'Saving Evidence...';
                   if (submissionStep === 'complete') return 'Evidence Submitted! ✅';
                   if (!isWalletConnected) return 'Connect Wallet First';
-                  return 'Submit Evidence (FREE)';
+                  return 'Submit Evidence';
                 })()}
               </Button>
             </div>
@@ -1668,58 +1725,6 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 </div>
               ))}
 
-              {/* Old Evidence Submissions (from database) */}
-              {marketEvidence.map((evidence) => (
-                <div key={evidence.id} className="flex gap-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-200">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                      <FileText className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-purple-700 dark:text-purple-400">Evidence Submitted (Legacy)</span>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${
-                          evidence.status === 'accepted' ? 'bg-green-100 text-green-700 border-green-200' :
-                          evidence.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-200' :
-                          'bg-gray-100 text-gray-700 border-gray-200'
-                        }`}
-                      >
-                        {evidence.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Submitted by{' '}
-                      <span className="font-mono text-xs bg-muted px-1 rounded">
-                        {evidence.user_id.slice(0, 6)}...{evidence.user_id.slice(-4)}
-                      </span>
-                    </p>
-                    {/* First sentence of evidence */}
-                    <p className="text-sm">
-                      "{evidence.evidence_text.split('.')[0]}."
-                      {evidence.evidence_links && evidence.evidence_links.length > 0 && (
-                        <span className="text-blue-500 ml-1">
-                          [{evidence.evidence_links.length} link{evidence.evidence_links.length > 1 ? 's' : ''}]
-                        </span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>{evidence.created_at ? new Date(evidence.created_at).toLocaleDateString() : 'Recent'}</span>
-                      {evidence.transaction_id && (
-                        <span className="font-mono">
-                          TX: {evidence.transaction_id.slice(0, 8)}...{evidence.transaction_id.slice(-6)}
-                        </span>
-                      )}
-                      <span>Fee: {evidence.submission_fee} HBAR</span>
-                      {evidence.reward_amount && (
-                        <span className="text-green-600">Reward: {evidence.reward_amount} HBAR</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
 
               {/* AI Resolution Event - only show for resolved markets */}
               {market.status === 'resolved' && market.resolution_data && (
@@ -1737,7 +1742,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      AI analyzed {marketEvidence.length + 3} sources and determined outcome:{' '}
+                      AI analyzed multiple sources and determined outcome:{' '}
                       <span className={`font-semibold ${
                         market.resolution_data.outcome === 'yes' ? 'text-green-600' : 'text-red-600'
                       }`}>
@@ -1792,7 +1797,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
               )}
 
               {/* Empty State */}
-              {marketEvidence.length === 0 && !market.resolution_data && (
+              {marketDisputes.length === 0 && !market.resolution_data && (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No additional activity yet. Be the first to submit evidence!</p>

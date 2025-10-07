@@ -42,6 +42,7 @@ import { mockVerificationHistory } from './utils/mockData';
 import { useHedera } from './utils/useHedera';
 import { walletService, WalletConnection } from './utils/walletService';
 import { castTokenService } from './utils/castTokenService';
+import { automaticResolutionMonitor } from './services/automaticResolutionMonitor';
 
 interface UserProfile {
   id: string;
@@ -351,10 +352,20 @@ export default function App() {
     console.log('🚀 Starting market status service...');
     marketStatusService.start();
 
+    // Start automatic resolution monitoring
+    console.log('🚀 Starting automatic resolution monitor...');
+    try {
+      automaticResolutionMonitor.start();
+      console.log('✅ Automatic resolution monitor started successfully');
+    } catch (error) {
+      console.error('❌ Failed to start automatic resolution monitor:', error);
+    }
+
     // Make test function available in browser console for debugging
     (window as any).testMarketRefresh = testMarketRefresh;
     (window as any).marketContracts = marketContracts;
     (window as any).castTokenService = castTokenService;
+    (window as any).automaticResolutionMonitor = automaticResolutionMonitor;
     (window as any).walletService = walletService;
     (window as any).marketStatusService = marketStatusService;
     console.log('🧪 DEBUG: window.testMarketRefresh(), window.marketContracts, window.castTokenService, window.walletService, and window.marketStatusService available in console');

@@ -62,7 +62,7 @@ export class MarketStatusService {
       const { data: markets, error } = await supabase
         .from('approved_markets')
         .select('*')
-        .in('status', ['active', 'disputable']);
+        .in('status', ['active', 'expired', 'disputable']);
 
       if (error) {
         console.error('❌ Error fetching markets for status update:', error);
@@ -93,21 +93,22 @@ export class MarketStatusService {
       const expiresAt = new Date(market.expires_at);
       const isExpired = expiresAt <= now;
 
-      // Case 1: Active market that has expired → Move to disputable
+      // Case 1: Active market that has expired → Flag as expired (don't change to disputable yet)
+      // The AutomaticResolutionMonitor will call preliminaryResolve() and then set to 'disputable'
       if (market.status === 'active' && isExpired) {
-        console.log(`⏰ Market ${market.id} expired - moving to disputable status`);
+        console.log(`⏰ Market ${market.id} expired - flagging for preliminary resolution`);
 
-        const disputePeriodEnd = new Date(now.getTime() + DISPUTE_PERIOD.MILLISECONDS);
-
+        // Set to 'expired' status temporarily until preliminaryResolve() is called
+        // This prevents the market from accepting new bets but doesn't set it to disputable yet
         await supabase!
           .from('approved_markets')
           .update({
-            status: 'disputable',
-            dispute_period_end: disputePeriodEnd.toISOString()
+            status: 'expired',
+            // Don't set dispute_period_end yet - that happens after preliminaryResolve()
           })
           .eq('id', market.id);
 
-        console.log(`✅ Market ${market.id} updated to disputable status (dispute period ends: ${disputePeriodEnd.toISOString()})`);
+        console.log(`✅ Market ${market.id} updated to expired status - waiting for preliminary resolution`);
       }
 
       // Case 2: Disputable market with expired dispute period → Ready for final resolution

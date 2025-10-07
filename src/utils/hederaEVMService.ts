@@ -157,18 +157,43 @@ export class HederaEVMService {
 
       console.log('📊 Proceeding with market creation');
 
-      // Use the user's specified expiration date
-      const endTime = Math.floor(expirationDate.getTime() / 1000);
-      const currentTime = Math.floor(Date.now() / 1000);
+      // Use proper time utilities to handle timezone issues AND blockchain clock drift
+      const {
+        dateToUnixTimestamp,
+        getCurrentUnixTimestamp,
+        debugTimeComparison,
+        adjustDateForBlockchainDrift,
+        BLOCKCHAIN_CLOCK_DRIFT_SECONDS
+      } = await import('./timeUtils');
 
-      console.log('⏰ User specified expiration:', expirationDate.toISOString());
-      console.log('⏰ Market end time:', endTime, 'vs current time:', currentTime);
-      console.log('⏰ Time difference:', endTime - currentTime, 'seconds');
-      console.log('⏰ Market will expire in:', (endTime - currentTime) / 3600, 'hours');
+      console.log('📅 User selected expiration:', expirationDate.toISOString());
+      debugTimeComparison(expirationDate, 'User Selected Time');
+
+      // CRITICAL: Adjust for blockchain clock drift to improve UX
+      // User selects the REAL time they want, we add drift behind the scenes
+      const adjustedDate = adjustDateForBlockchainDrift(expirationDate);
+      console.log('⚡ Adjusted for blockchain drift (+3 hours):', adjustedDate.toISOString());
+      debugTimeComparison(adjustedDate, 'Blockchain Adjusted Time');
+
+      const endTime = dateToUnixTimestamp(adjustedDate); // Use adjusted date for blockchain
+      const currentTime = getCurrentUnixTimestamp();
+
+      const diffSeconds = endTime - currentTime;
+      const diffHours = diffSeconds / 3600;
+
+      console.log('⏰ Final blockchain timestamps:');
+      console.log(`   End time: ${endTime} (${adjustedDate.toISOString()})`);
+      console.log(`   Current time: ${currentTime} (${new Date().toISOString()})`);
+      console.log(`   Difference: ${diffSeconds} seconds (${diffHours.toFixed(2)} hours)`);
+      console.log(`   🎯 Market will expire at USER'S time: ${expirationDate.toISOString()}`);
+      console.log(`   🔧 But blockchain thinks it expires at: ${adjustedDate.toISOString()}`);
 
       if (endTime <= currentTime) {
-        throw new Error('Expiration date must be in the future');
+        throw new Error(`Expiration date must be in the future. Current diff: ${diffSeconds} seconds`);
       }
+
+      console.log(`✅ Time validation passed - market expires in ${diffHours.toFixed(2)} hours (blockchain time)`);
+
       
       console.log('🚀 About to call factory.createMarket with params:', {
         claim: claim.substring(0, 50) + '...',

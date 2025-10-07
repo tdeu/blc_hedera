@@ -11,6 +11,7 @@ import { BettingMarket } from './BettingMarkets';
 import { uploadMarketImage } from '../utils/supabase';
 import { MARKET_CREATION, CollateralToken, TOKEN_CONFIG, DISPUTE_PERIOD } from '../config/constants';
 import TokenService from '../utils/tokenService';
+import { validateMarketExpirationDate, debugTimeComparison } from '../utils/timeUtils';
 
 interface CreateMarketProps {
   onBack: () => void;
@@ -158,23 +159,18 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
 
     // Only validate expiration date if it's required (truth markets)
     if (requiresExpirationDate && expirationDate) {
-      const now = new Date();
-      const selectedDate = new Date(expirationDate.getTime()); // Create a copy to avoid mutation
+      // Use proper timezone-aware validation
+      debugTimeComparison(expirationDate, 'Selected Expiration');
 
-      console.log('🕐 Date validation debug:', {
-        now: now.toISOString(),
-        selectedDate: selectedDate.toISOString(),
-        nowTime: now.getTime(),
-        selectedTime: selectedDate.getTime(),
-        difference: selectedDate.getTime() - now.getTime(),
-        isSelectedInFuture: selectedDate.getTime() > now.getTime()
-      });
+      // Use default validation (includes 30-min blockchain safety buffer)
+      const validation = validateMarketExpirationDate(expirationDate);
 
-      // Just check if the selected date is in the future (no buffer needed)
-      if (selectedDate.getTime() <= now.getTime()) {
-        toast.error('Expiration date must be in the future');
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid expiration date');
         return;
       }
+
+      console.log('✅ Expiration date is valid (with blockchain safety buffer)');
     }
 
     setIsCreating(true);

@@ -265,11 +265,27 @@ export class CastTokenService {
     try {
       const contractWithSigner = this.contract.connect(walletConnection.signer);
       const amountWei = ethers.parseEther(amount);
+      const userAddress = await walletConnection.signer.getAddress();
 
-      const tx = await contractWithSigner.approve(spender, amountWei);
+      // Check current allowance first to avoid unnecessary approval
+      const currentAllowance = await this.contract.allowance(userAddress, spender);
+
+      // If already approved for sufficient amount, skip approval
+      if (currentAllowance >= amountWei) {
+        console.log('✅ Already approved for sufficient amount, skipping approval');
+        toast.success('CAST tokens already approved', {
+          id: 'cast-approve'
+        });
+        return 'already-approved';
+      }
 
       toast.loading(`Approving ${amount} CAST tokens...`, {
         id: 'cast-approve'
+      });
+
+      // Try to send approval transaction with explicit gas limit to avoid RPC estimation errors
+      const tx = await contractWithSigner.approve(spender, amountWei, {
+        gasLimit: 100000 // Explicit gas limit
       });
 
       const receipt = await tx.wait();
@@ -281,10 +297,23 @@ export class CastTokenService {
       return receipt.hash;
     } catch (error: any) {
       console.error('CAST approval failed:', error);
-      toast.error(`Approval failed: ${error.message}`, {
+
+      // Provide more helpful error messages based on error type
+      let errorMessage = 'Approval failed';
+      if (error.message?.includes('RPC endpoint')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('user rejected') || error.code === 'ACTION_REJECTED') {
+        errorMessage = 'Transaction rejected by user';
+      } else if (error.message?.includes('insufficient funds')) {
+        errorMessage = 'Insufficient HBAR for gas fees';
+      } else {
+        errorMessage = error.shortMessage || error.message || 'Unknown error';
+      }
+
+      toast.error(`Approval failed: ${errorMessage}`, {
         id: 'cast-approve'
       });
-      throw error;
+      throw new Error(errorMessage);
     }
   }
 

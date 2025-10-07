@@ -205,6 +205,15 @@ export default function DisputeModal({
     }
 
     validateBondRequirements();
+
+    // Re-validate every 10 seconds while modal is open to catch any changes
+    const intervalId = setInterval(() => {
+      if (isOpen && userAddress && marketAddress) {
+        validateBondRequirements();
+      }
+    }, 10000);
+
+    return () => clearInterval(intervalId);
   }, [isOpen, userAddress, marketAddress]);
 
   const disputeTypeOptions = [
@@ -247,7 +256,20 @@ export default function DisputeModal({
       return;
     }
 
+    // Re-validate dispute creation right before submission to prevent race conditions
+    setIsValidatingBond(true);
     try {
+      const finalValidation = await disputeBondService.validateDisputeCreationOnChain(userAddress, marketAddress);
+
+      if (!finalValidation.isValid) {
+        setBondValidation(finalValidation);
+        toast.error(finalValidation.error || 'Cannot create dispute at this time');
+        setIsValidatingBond(false);
+        return;
+      }
+
+      setIsValidatingBond(false);
+
       await onSubmit(formData);
       setFormData({
         reason: '',
@@ -259,6 +281,7 @@ export default function DisputeModal({
       toast.success('Dispute submitted successfully');
     } catch (error) {
       console.error('Error submitting dispute:', error);
+      setIsValidatingBond(false);
       toast.error('Failed to submit dispute. Please try again.');
     }
   };
@@ -623,8 +646,19 @@ export default function DisputeModal({
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
-                        <div className="text-xs text-red-700">
-                          {bondValidation.error}
+                        <div className="flex-1">
+                          <div className="text-xs font-medium text-red-700 mb-1">
+                            Cannot Submit Dispute
+                          </div>
+                          <div className="text-xs text-red-700">
+                            {bondValidation.error}
+                          </div>
+                          {bondValidation.error?.includes('already has active dispute') && (
+                            <div className="text-xs text-red-600 mt-2">
+                              💡 <strong>Tip:</strong> You can only have one active dispute per market at a time.
+                              Wait for your existing dispute to be resolved or expired before submitting a new one.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
