@@ -318,11 +318,11 @@ ${this.getStandardOutputFormat(scrapedContent)}
   }
 
   private getStandardOutputFormat(scrapedContent: ScrapedContent[]): string {
-    return `**REQUIRED OUTPUT FORMAT** (respond exactly in this format):
+    return `**CRITICAL: YOU MUST RESPOND IN EXACTLY THIS FORMAT** (do not deviate from this structure):
 
-RECOMMENDATION: [YES/NO/INCONCLUSIVE]
-CONFIDENCE: [number between 0.0 and 1.0]
-REASONING: [2-3 sentences explaining your decision based on the evidence]
+RECOMMENDATION: [MUST BE ONE OF: YES, NO, or INCONCLUSIVE]
+CONFIDENCE: [MUST BE a decimal number between 0.0 and 1.0, e.g., 0.85 for 85%]
+REASONING: [Write 2-3 clear sentences explaining your decision based on the evidence you analyzed]
 
 KEY_FACTORS:
 - [Most important supporting factor 1]
@@ -332,7 +332,21 @@ KEY_FACTORS:
 SOURCE_ANALYSIS:
 ${scrapedContent.map(content =>
 `${content.source}: [YES/NO/NEUTRAL] - [Brief summary of this source's position]`
-).join('\n')}`;
+).join('\n')}
+
+**EXAMPLE OF CORRECT FORMAT**:
+RECOMMENDATION: YES
+CONFIDENCE: 0.85
+REASONING: Multiple authoritative sources confirm this claim with strong evidence. The consensus across news outlets and verified data supports a positive outcome.
+
+KEY_FACTORS:
+- Official announcement from credible institution confirms the claim
+- Multiple independent sources report consistent information
+- Historical data and trends support this conclusion
+
+SOURCE_ANALYSIS:
+BBC News: YES - Reports official confirmation with direct quotes
+Reuters: YES - Verified through multiple sources`;
   }
 
   /**
@@ -445,17 +459,48 @@ ${scrapedContent.map(content =>
       // Extract the raw response text
       const responseText = aiResponse.rawResponse || aiResponse.content || aiResponse.toString();
 
+      console.log('🔍 Parsing AI response...');
+      console.log('📄 Response text length:', responseText.length);
+      console.log('📄 Response preview:', responseText.substring(0, 500));
+
       // Parse recommendation
       const recommendationMatch = responseText.match(/RECOMMENDATION:\s*(YES|NO|INCONCLUSIVE)/i);
       const recommendation = (recommendationMatch?.[1]?.toUpperCase() as 'YES' | 'NO' | 'INCONCLUSIVE') || 'INCONCLUSIVE';
+
+      if (!recommendationMatch) {
+        console.warn('⚠️  No RECOMMENDATION: found in response. Attempting intelligent parsing...');
+        // Try to intelligently determine recommendation from content
+        const lowerText = responseText.toLowerCase();
+        if (lowerText.includes('answer: yes') || lowerText.includes('verdict: yes') || lowerText.includes('result: yes')) {
+          console.log('✅ Detected YES from alternative format');
+          return this.parseAlternativeFormat(responseText, 'YES', scrapedContent, startTime);
+        } else if (lowerText.includes('answer: no') || lowerText.includes('verdict: no') || lowerText.includes('result: no')) {
+          console.log('✅ Detected NO from alternative format');
+          return this.parseAlternativeFormat(responseText, 'NO', scrapedContent, startTime);
+        }
+      }
 
       // Parse confidence
       const confidenceMatch = responseText.match(/CONFIDENCE:\s*([\d.]+)/);
       const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0.5;
 
+      if (!confidenceMatch) {
+        console.warn('⚠️  No CONFIDENCE: found in response');
+      }
+
       // Parse reasoning
       const reasoningMatch = responseText.match(/REASONING:\s*([^\n\r]+(?:\s*[^\n\r]+)*?)(?=\n\s*KEY_FACTORS|\n\s*SOURCE_ANALYSIS|$)/s);
       const reasoning = reasoningMatch?.[1]?.trim() || 'Unable to parse reasoning from AI response.';
+
+      if (!reasoningMatch) {
+        console.warn('⚠️  No REASONING: found in response. Using full text as reasoning.');
+        // Use first paragraph as reasoning if no explicit reasoning found
+        const firstParagraph = responseText.split('\n\n')[0];
+        if (firstParagraph && firstParagraph.length > 20) {
+          console.log('✅ Using first paragraph as reasoning');
+          return this.parseAlternativeFormat(responseText, recommendation, scrapedContent, startTime);
+        }
+      }
 
       // Parse key factors
       const keyFactorsMatch = responseText.match(/KEY_FACTORS:\s*([\s\S]*?)(?=SOURCE_ANALYSIS:|$)/);
@@ -510,6 +555,78 @@ ${scrapedContent.map(content =>
         processingTimeMs: Date.now() - startTime
       };
     }
+  }
+
+  /**
+   * Parse AI response when it doesn't follow the expected format
+   * Attempts to extract meaningful information from unstructured text
+   */
+  private parseAlternativeFormat(
+    responseText: string,
+    recommendation: 'YES' | 'NO' | 'INCONCLUSIVE',
+    scrapedContent: ScrapedContent[],
+    startTime: number
+  ): AIAnalysisResult {
+    console.log('🔄 Using alternative format parsing');
+
+    // Extract confidence from percentage mentions
+    const percentMatches = responseText.match(/(\d+)%/g);
+    let confidence = 0.5;
+    if (percentMatches && percentMatches.length > 0) {
+      // Use the first percentage found as confidence
+      const firstPercent = parseInt(percentMatches[0].replace('%', ''));
+      confidence = Math.min(1.0, firstPercent / 100);
+      console.log(`✅ Extracted confidence: ${confidence} from ${percentMatches[0]}`);
+    }
+
+    // Extract reasoning - use first substantial paragraph
+    const paragraphs = responseText.split('\n\n').filter(p => p.trim().length > 30);
+    const reasoning = paragraphs.length > 0
+      ? paragraphs[0].replace(/^(RECOMMENDATION|CONFIDENCE|REASONING):\s*/i, '').trim()
+      : responseText.substring(0, 200) + '...';
+
+    // Extract key factors from bullet points or numbered lists
+    const keyFactors: string[] = [];
+    const bulletMatches = responseText.match(/[-•*]\s*(.+)/g) || [];
+    const numberedMatches = responseText.match(/\d+\.\s*(.+)/g) || [];
+
+    [...bulletMatches, ...numberedMatches]
+      .map(line => line.replace(/^[-•*\d.]\s*/, '').trim())
+      .filter(line => line.length > 10)
+      .slice(0, 5)
+      .forEach(factor => keyFactors.push(factor));
+
+    // If no structured factors found, extract key sentences
+    if (keyFactors.length === 0) {
+      const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      keyFactors.push(...sentences.slice(0, 3).map(s => s.trim()));
+    }
+
+    // Create basic source analysis based on the sources we had
+    const sourceAnalysis: { [sourceName: string]: { position: 'YES' | 'NO' | 'NEUTRAL'; confidence: number; summary: string } } = {};
+    scrapedContent.slice(0, 5).forEach(content => {
+      sourceAnalysis[content.source] = {
+        position: recommendation,
+        confidence: confidence * 0.8,
+        summary: `Analysis incorporated ${content.source} data`
+      };
+    });
+
+    console.log('✅ Alternative format parsing complete:', {
+      recommendation,
+      confidence,
+      keyFactorsCount: keyFactors.length,
+      sourcesCount: Object.keys(sourceAnalysis).length
+    });
+
+    return {
+      recommendation,
+      confidence,
+      reasoning,
+      keyFactors,
+      sourceAnalysis,
+      processingTimeMs: Date.now() - startTime
+    };
   }
 
   /**

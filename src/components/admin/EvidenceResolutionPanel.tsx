@@ -7,12 +7,13 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
-import { Brain, Eye, CheckCircle, XCircle, Clock, Gavel, ExternalLink, AlertTriangle, PlayCircle, Settings } from 'lucide-react';
+import { Brain, Eye, CheckCircle, XCircle, Clock, Gavel, ExternalLink, AlertTriangle, PlayCircle, Settings, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { newsApiService } from '../../services/newsApiService';
 import { wikipediaService } from '../../services/wikipediaService';
 import { marketClassificationService } from '../../services/marketClassificationService';
 import { EvidenceAggregationService, type AggregationResult } from '../../services/evidenceAggregationService';
+import { finalConfidenceCalculator, type ConfidenceBreakdown } from '../../services/finalConfidenceCalculator';
 
 // Type definitions for environment variables
 declare global {
@@ -45,7 +46,8 @@ interface MarketWithEvidence {
   noOdds?: number;
   ai_resolution?: {
     recommendation: string;
-    confidence: number;
+    confidence: number; // AI engine confidence (e.g., 95%)
+    finalConfidence?: number; // Adaptive final confidence after combining market odds + evidence + AI (e.g., 78%)
     reasoning: string;
     timestamp: string;
     keyFactors?: string[];
@@ -56,6 +58,16 @@ interface MarketWithEvidence {
     newsArticles?: any[];
     dataSourceUsed?: DataSourceType;
     sourceType?: string;
+    // New entity extraction fields
+    extractedEntities?: {
+      mainSubject: string;
+      secondaryEntities: string[];
+      keywords: string[];
+      context: string;
+      searchQueries?: string[];
+    };
+    usedHederaAgent?: boolean;
+    searchQueries?: string[];
   };
   resolution_data?: any;
   // Hybrid AI fields
@@ -84,6 +96,9 @@ interface Evidence {
   source_type?: 'academic' | 'government' | 'news' | 'expert_opinion' | 'social_media' | 'blog' | 'anonymous' | 'other';
   quality_score?: number;
   status?: 'pending' | 'reviewed' | 'accepted' | 'rejected';
+  // New admin validation fields
+  admin_validated_legitimate?: boolean;
+  admin_validated_against_community?: boolean;
 }
 
 interface SourceAnalysis {
@@ -112,8 +127,9 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
     overrideAI: false
   });
   const [selectedNewsSources, setSelectedNewsSources] = useState<string[]>([
-    'bbc-news', 'reuters', 'associated-press', 'bloomberg', 'cnn'
-  ]); // Default selection
+    'bbc-news', 'reuters', 'associated-press', 'bloomberg', 'the-guardian-uk',
+    'the-new-york-times', 'al-jazeera-english', 'financial-times', 'cnn', 'the-washington-post'
+  ]); // Default selection - 10 diverse, high-reliability sources
   const [availableNewsSources, setAvailableNewsSources] = useState(newsApiService.getAvailableSources());
   const [showSourceSelector, setShowSourceSelector] = useState(false);
   // Hybrid AI classification state
@@ -122,9 +138,12 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
   // Evidence stance management state
   const [editingEvidence, setEditingEvidence] = useState<{[evidenceId: string]: boolean}>({});
   const [evidenceUpdates, setEvidenceUpdates] = useState<{[evidenceId: string]: Partial<Evidence>}>({});
+  const [expandedEvidence, setExpandedEvidence] = useState<{[marketId: string]: string | null}>({});
   // Aggregation results state
   const [aggregationResults, setAggregationResults] = useState<{[marketId: string]: AggregationResult}>({});
   const [calculatingAggregation, setCalculatingAggregation] = useState<{[marketId: string]: boolean}>({});
+  // Confidence breakdown state (adaptive weighting results)
+  const [confidenceBreakdowns, setConfidenceBreakdowns] = useState<{[marketId: string]: ConfidenceBreakdown | null}>({});
 
   useEffect(() => {
     loadMarketsWithEvidence();
@@ -136,6 +155,56 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       autoClassifyMarkets();
     }
   }, [markets.length]);
+
+  // Calculate confidence breakdowns for markets with AI resolution
+  useEffect(() => {
+    const calculateBreakdowns = async () => {
+      const newBreakdowns: {[marketId: string]: ConfidenceBreakdown | null} = {};
+
+      for (const market of markets) {
+        // Only calculate if market has required data
+        if (market.ai_resolution && market.yesOdds && market.noOdds) {
+          try {
+            const breakdown = await finalConfidenceCalculator.calculate({
+              yesOdds: market.yesOdds,
+              noOdds: market.noOdds,
+              evidences: market.evidences || [],
+              aiRecommendation: market.ai_resolution.recommendation as 'YES' | 'NO' | 'NEUTRAL' | 'INCONCLUSIVE',
+              aiConfidence: market.ai_resolution.confidence,
+              apiSourceType: market.ai_resolution.sourceType || market.ai_resolution.dataSourceUsed
+            });
+            newBreakdowns[market.id] = breakdown;
+
+            // Store final confidence in market's ai_resolution if not already set
+            if (!market.ai_resolution.finalConfidence || market.ai_resolution.finalConfidence !== breakdown.finalConfidence) {
+              setMarkets(prev => prev.map(m =>
+                m.id === market.id && m.ai_resolution
+                  ? {
+                      ...m,
+                      ai_resolution: {
+                        ...m.ai_resolution,
+                        finalConfidence: breakdown.finalConfidence
+                      }
+                    }
+                  : m
+              ));
+            }
+          } catch (error) {
+            console.error(`Failed to calculate confidence for market ${market.id}:`, error);
+            newBreakdowns[market.id] = null;
+          }
+        } else {
+          newBreakdowns[market.id] = null;
+        }
+      }
+
+      setConfidenceBreakdowns(newBreakdowns);
+    };
+
+    if (markets.length > 0) {
+      calculateBreakdowns();
+    }
+  }, [markets]);
 
   const autoClassifyMarkets = () => {
     setMarkets(prevMarkets => {
@@ -328,7 +397,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
     const startTime = Date.now();
 
     try {
-      console.log('🚀 Starting hybrid AI analysis for market:', marketId);
+      console.log('🚀 Starting enhanced AI analysis with entity extraction for market:', marketId);
 
       // Find the market
       const market = markets.find(m => m.id === marketId);
@@ -340,25 +409,52 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       const dataSourceType = marketClassification[market.id] || market.data_source_type;
       console.log(`📊 Using data source: ${dataSourceType}`);
 
+      // ===== STEP 1: Extract Entities from Market Claim =====
+      toast.info('🔍 Extracting key entities and keywords...');
+      const { entityExtractionService } = await import('../../services/entityExtractionService');
+      const entities = await entityExtractionService.extractEntities(market.claim);
+
+      console.log('✅ Extracted entities:', entities);
+      toast.success(`Found key entities: ${entities.mainSubject}, ${entities.secondaryEntities.slice(0, 2).join(', ')}`);
+
+      // ===== STEP 2: Generate Source-Specific Search Queries =====
+      const searchQueries = await entityExtractionService.generateSourceSpecificQueries(
+        entities,
+        dataSourceType
+      );
+      console.log(`🔎 Generated ${searchQueries.length} search queries:`, searchQueries);
+
       let sourceArticles: any[] = [];
       let sourceType = '';
 
-      // Step 1: Route to appropriate data source based on classification
+      // ===== STEP 3: Fetch Articles Using Entity-Based Queries =====
       if (dataSourceType === 'NEWS') {
-        toast.info('Searching NewsAPI for recent articles...');
+        toast.info(`📰 Searching ${selectedNewsSources.length} news sources...`);
         console.log(`📰 Selected news sources: ${selectedNewsSources.join(', ')}`);
 
-        const newsArticles = await newsApiService.searchNews(
-          market.claim,
-          selectedNewsSources,
-          15
-        );
+        // Search with each query and combine results
+        let allArticles: any[] = [];
+        for (const query of searchQueries.slice(0, 3)) { // Use top 3 queries
+          console.log(`   🔍 Searching: "${query}"`);
+          const articles = await newsApiService.searchNews(
+            query,
+            selectedNewsSources,
+            5 // Get 5 articles per query
+          );
+          allArticles = [...allArticles, ...articles];
+        }
 
-        if (newsArticles.length === 0) {
-          toast.warning('No relevant news articles found. Trying broader search...');
+        // Deduplicate by URL and take top 15
+        const uniqueArticles = Array.from(
+          new Map(allArticles.map(a => [a.url, a])).values()
+        ).slice(0, 15);
+
+        if (uniqueArticles.length === 0) {
+          // Fallback: try with main subject only
+          toast.warning('No results from entity queries. Trying main subject...');
           const fallbackArticles = await newsApiService.searchNews(
-            market.claim,
-            selectedNewsSources.slice(0, 3),
+            entities.mainSubject,
+            selectedNewsSources.slice(0, 5),
             10
           );
           if (fallbackArticles.length === 0) {
@@ -366,32 +462,40 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
           }
           sourceArticles = fallbackArticles;
         } else {
-          sourceArticles = newsArticles;
+          sourceArticles = uniqueArticles;
         }
         sourceType = 'NewsAPI';
 
       } else {
         // For HISTORICAL, ACADEMIC, GENERAL_KNOWLEDGE - use Wikipedia
-        toast.info(`Searching Wikipedia for ${dataSourceType.toLowerCase()} content...`);
-        console.log(`📚 Searching Wikipedia for: "${market.claim}"`);
+        toast.info(`📚 Searching Wikipedia for ${dataSourceType.toLowerCase()} content...`);
 
-        const wikipediaArticles = await wikipediaService.searchWikipedia(
-          market.claim,
-          10
-        );
+        // Search with entity-based queries
+        let allArticles: any[] = [];
+        for (const query of searchQueries.slice(0, 3)) {
+          console.log(`   🔍 Wikipedia search: "${query}"`);
+          const articles = await wikipediaService.searchWikipedia(query, 3);
+          allArticles = [...allArticles, ...articles];
+        }
 
-        if (wikipediaArticles.length === 0) {
+        // Deduplicate and take top 10
+        const uniqueArticles = Array.from(
+          new Map(allArticles.map(a => [a.url, a])).values()
+        ).slice(0, 10);
+
+        if (uniqueArticles.length === 0) {
           throw new Error(`No relevant Wikipedia articles found for this ${dataSourceType.toLowerCase()} topic`);
         }
 
-        sourceArticles = wikipediaArticles;
+        sourceArticles = uniqueArticles;
         sourceType = 'Wikipedia';
       }
 
-      toast.info(`Found ${sourceArticles.length} relevant ${sourceType} articles. Analyzing with AI...`);
+      toast.info(`✅ Found ${sourceArticles.length} relevant ${sourceType} articles. Running AI analysis...`);
 
-      // Step 2: Import AI service and analyze
+      // ===== STEP 4: AI Analysis with Hedera Agent Kit Integration =====
       const { aiAnalysisService } = await import('../../services/aiAnalysisService');
+      const { getHederaAIResolutionService } = await import('../../services/hederaAIResolutionService');
 
       // Convert articles to the format expected by AI service
       const scrapedContent = sourceArticles.map(article => ({
@@ -404,16 +508,66 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         relevanceScore: article.relevanceScore
       }));
 
-      // Use enhanced analysis with data source type context
-      const analysisResult = await aiAnalysisService.analyzeContentWithSourceType(
-        market.claim,
-        scrapedContent,
-        dataSourceType
-      );
+      // Try Hedera AI Agent first for enhanced analysis
+      let analysisResult: any;
+      let usedHederaAgent = false;
+
+      try {
+        toast.info('🔷 Running Hedera AI Agent analysis...');
+        const hederaAI = getHederaAIResolutionService();
+
+        // Convert articles to evidence items for Hedera AI
+        const evidenceItems = scrapedContent.map((article, idx) => ({
+          source: article.source || 'unknown',
+          type: sourceType.toLowerCase(),
+          content: `${article.title}\n\n${article.content}`,
+          timestamp: new Date(article.publishedAt || Date.now()),
+          credibility: article.relevanceScore || 0.7,
+          language: 'en',
+          submitter: 'admin_analysis'
+        }));
+
+        const hederaResult = await hederaAI.resolveMarket(
+          marketId,
+          evidenceItems,
+          {
+            region: 'general',
+            marketType: dataSourceType.toLowerCase(),
+            complexity: 'medium',
+            culturalContext: entities.context
+          }
+        );
+
+        if (hederaResult.metadata.usedHederaAgent && hederaResult.confidence >= 0.3) {
+          console.log('✅ Using Hedera AI Agent analysis');
+          analysisResult = {
+            recommendation: hederaResult.recommendation,
+            confidence: hederaResult.confidence,
+            reasoning: hederaResult.reasoning,
+            keyFactors: hederaResult.riskFactors,
+            sourceAnalysis: {},
+            hederaMetadata: hederaResult.metadata
+          };
+          usedHederaAgent = true;
+        } else {
+          throw new Error('Hedera AI confidence too low, using fallback');
+        }
+
+      } catch (hederaError) {
+        console.warn('⚠️ Hedera AI Agent failed, using standard analysis:', hederaError);
+
+        // Fallback to standard AI analysis
+        analysisResult = await aiAnalysisService.analyzeContentWithSourceType(
+          market.claim,
+          scrapedContent,
+          dataSourceType
+        );
+        usedHederaAgent = false;
+      }
 
       const processingTime = Date.now() - startTime;
 
-      // Step 3: Update market with results
+      // ===== STEP 5: Update Market with Results =====
       setMarkets(prev => prev.map(marketItem =>
         marketItem.id === marketId
           ? {
@@ -427,16 +581,21 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                 sourceAnalysis: analysisResult.sourceAnalysis,
                 scrapedContent: scrapedContent,
                 processingTimeMs: processingTime,
-                sourceArticles: sourceArticles, // Store original articles (news or wikipedia)
+                sourceArticles: sourceArticles,
                 dataSourceUsed: dataSourceType,
-                sourceType: sourceType
+                sourceType: sourceType,
+                // New fields
+                extractedEntities: entities,
+                usedHederaAgent,
+                searchQueries: searchQueries.slice(0, 3)
               }
             }
           : marketItem
       ));
 
       const confidencePercent = (analysisResult.confidence * 100).toFixed(0);
-      toast.success(`AI analysis complete! Found ${sourceArticles.length} ${sourceType} articles. Recommendation: ${analysisResult.recommendation} (${confidencePercent}% confidence)`);
+      const agentBadge = usedHederaAgent ? ' 🔷 (Hedera AI)' : '';
+      toast.success(`Analysis complete! ${sourceArticles.length} ${sourceType} articles analyzed. ${entities.mainSubject} → ${analysisResult.recommendation} (${confidencePercent}% certainty)${agentBadge}`);
 
       // Update database with the classification if admin made an override
       if (marketClassification[market.id] && marketClassification[market.id] !== market.data_source_type) {
@@ -528,28 +687,39 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         import.meta.env.VITE_SUPABASE_ANON_KEY
       );
 
-      const { error } = await supabase
+      // Build update object with only provided fields that exist in DB
+      const updateData: any = {};
+
+      if (updates.stance !== undefined) updateData.stance = updates.stance;
+      if (updates.source_credibility_score !== undefined) updateData.source_credibility_score = updates.source_credibility_score;
+      if (updates.source_type !== undefined) updateData.source_type = updates.source_type;
+      if (updates.quality_score !== undefined) updateData.quality_score = updates.quality_score;
+      if (updates.status !== undefined) updateData.status = updates.status;
+      // Note: admin_stance_verified doesn't exist in DB - removed
+      if (updates.admin_validated_legitimate !== undefined) updateData.admin_validated_legitimate = updates.admin_validated_legitimate;
+      if (updates.admin_validated_against_community !== undefined) updateData.admin_validated_against_community = updates.admin_validated_against_community;
+
+      console.log('Updating evidence:', evidenceId, 'with data:', updateData);
+
+      const { data, error } = await supabase
         .from('evidence_submissions')
-        .update({
-          stance: updates.stance,
-          source_credibility_score: updates.source_credibility_score,
-          admin_stance_verified: true,
-          source_type: updates.source_type,
-          quality_score: updates.quality_score,
-          status: updates.status || 'reviewed'
-        })
-        .eq('id', evidenceId);
+        .update(updateData)
+        .eq('id', evidenceId)
+        .select();
 
       if (error) {
+        console.error('Supabase update error:', error);
         throw error;
       }
+
+      console.log('Update successful, returned data:', data);
 
       // Update local state
       setMarkets(prev => prev.map(market => ({
         ...market,
         evidences: market.evidences.map(evidence =>
           evidence.id === evidenceId
-            ? { ...evidence, ...updates, admin_stance_verified: true }
+            ? { ...evidence, ...updates }
             : evidence
         )
       })));
@@ -572,9 +742,15 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         setTimeout(() => calculateAggregation(market.id), 1000);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating evidence stance:', error);
-      toast.error('Failed to update evidence stance');
+      console.error('Error details:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
+      toast.error(`Failed to update evidence stance: ${error?.message || 'Unknown error'}`);
     }
   };
 
@@ -652,6 +828,36 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
     }
   };
 
+  // Check if market is within 24 hours of dispute period ending (6 days out of 7)
+  const isDisputePeriodEndingSoon = (market: MarketWithEvidence): boolean => {
+    if (!market.dispute_period_end || market.status !== 'disputing') return false;
+
+    const disputeEnd = new Date(market.dispute_period_end);
+    const now = new Date();
+    const hoursRemaining = (disputeEnd.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    // Warning if less than 24 hours remaining (day 6 out of 7)
+    return hoursRemaining > 0 && hoursRemaining <= 24;
+  };
+
+  const getDisputeTimeWarning = (market: MarketWithEvidence) => {
+    if (!market.dispute_period_end || market.status !== 'disputing') return null;
+
+    const disputeEnd = new Date(market.dispute_period_end);
+    const now = new Date();
+    const hoursRemaining = Math.max(0, (disputeEnd.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+    if (hoursRemaining <= 24 && hoursRemaining > 0) {
+      return (
+        <Badge className="bg-red-600 text-white animate-pulse">
+          <AlertTriangle className="h-3 w-3 mr-1 inline" />
+          {Math.floor(hoursRemaining)}h left - Generate Final Resolution!
+        </Badge>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -727,7 +933,12 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                         <Badge variant="outline" className="text-xs">
                           {market.evidence_count} Evidence
                         </Badge>
-                        {market.ai_resolution && getConfidenceBadge(market.ai_resolution.confidence)}
+                        {market.ai_resolution && getConfidenceBadge(
+                          market.ai_resolution.finalConfidence !== undefined
+                            ? market.ai_resolution.finalConfidence / 100  // Final confidence is 0-100, convert to 0-1
+                            : market.ai_resolution.confidence  // Fallback to AI confidence
+                        )}
+                        {getDisputeTimeWarning(market)}
                       </div>
                     </div>
                     
@@ -800,21 +1011,21 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                     {getActiveMarketTab(market.id) === 'odds' && (
                       <div>
                         <h4 className="font-medium mb-4">Final Prediction Odds (Market Closed)</h4>
-                        <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                          <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        <div className="bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <div className="text-sm text-gray-700 dark:text-gray-300 mb-4 font-medium">
                             These are the final odds when the market closed for betting
                           </div>
                           <div className="grid grid-cols-2 gap-6 max-w-md mx-auto">
-                            <div className="text-center p-6 rounded-lg border-2 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
-                              <div className="text-sm mb-2 text-gray-500 dark:text-gray-400 font-medium">Yes Odds</div>
-                              <div className="text-4xl font-bold text-gray-700 dark:text-gray-300">{market.yesOdds?.toFixed(2) || '0.00'}x</div>
+                            <div className="text-center p-6 rounded-lg border-2 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30 border-green-400 dark:border-green-700 shadow-sm">
+                              <div className="text-sm mb-2 text-green-700 dark:text-green-300 font-semibold uppercase tracking-wide">Yes Odds</div>
+                              <div className="text-5xl font-bold text-green-900 dark:text-green-100">{market.yesOdds?.toFixed(2) || '0.00'}x</div>
                             </div>
-                            <div className="text-center p-6 rounded-lg border-2 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
-                              <div className="text-sm mb-2 text-gray-500 dark:text-gray-400 font-medium">No Odds</div>
-                              <div className="text-4xl font-bold text-gray-700 dark:text-gray-300">{market.noOdds?.toFixed(2) || '0.00'}x</div>
+                            <div className="text-center p-6 rounded-lg border-2 bg-gradient-to-br from-red-100 to-rose-100 dark:from-red-900/30 dark:to-rose-900/30 border-red-400 dark:border-red-700 shadow-sm">
+                              <div className="text-sm mb-2 text-red-700 dark:text-red-300 font-semibold uppercase tracking-wide">No Odds</div>
+                              <div className="text-5xl font-bold text-red-900 dark:text-red-100">{market.noOdds?.toFixed(2) || '0.00'}x</div>
                             </div>
                           </div>
-                          <div className="mt-6 text-xs text-center text-gray-500 dark:text-gray-400">
+                          <div className="mt-6 text-xs text-center text-gray-600 dark:text-gray-400 font-medium">
                             Market closed on {market.expiresAt.toLocaleString()}
                           </div>
                         </div>
@@ -824,7 +1035,12 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                     {/* Evidence Tab */}
                     {getActiveMarketTab(market.id) === 'evidence' && (
                       <div>
-                        <h4 className="font-medium mb-4">User Evidence Submissions</h4>
+                        <div className="mb-4">
+                          <h4 className="font-medium text-lg mb-1">User Evidence Submissions</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Review and validate evidence submitted by users for this market
+                          </p>
+                        </div>
 
                         {market.evidence_count === 0 ? (
                           <div className="text-center py-6 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
@@ -832,117 +1048,328 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {market.evidences.map((evidence, index) => (
-                              <div key={evidence.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                {/* Evidence Header */}
-                                <div className="bg-gray-50 dark:bg-gray-800 p-3">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="space-y-1">
+                            {market.evidences.map((evidence, index) => {
+                              const isExpanded = expandedEvidence[market.id] === evidence.id;
+
+                              return (
+                              <div key={evidence.id} className="border-2 border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                {/* Evidence Header - Always Visible & Clickable */}
+                                <div
+                                  className="bg-gray-50 dark:bg-gray-800 p-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                                  onClick={() => {
+                                    setExpandedEvidence(prev => ({
+                                      ...prev,
+                                      [market.id]: isExpanded ? null : evidence.id
+                                    }));
+                                  }}
+                                >
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="space-y-2 flex-1">
                                       <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-xs">#{index + 1}</Badge>
-                                        <Badge variant="outline" className="text-xs">{evidence.submission_fee} HBAR</Badge>
+                                        <Badge variant="outline" className="text-sm font-semibold">#{index + 1}</Badge>
+                                        <Badge variant="outline" className="text-sm">{evidence.submission_fee} HBAR</Badge>
                                         <Badge
                                           variant={evidence.stance === 'supporting' ? 'default' : evidence.stance === 'disputing' ? 'destructive' : 'secondary'}
-                                          className="text-xs"
+                                          className="text-sm"
                                         >
-                                          {evidence.stance === 'supporting' ? '✅ Supports' :
-                                           evidence.stance === 'disputing' ? '❌ Disputes' : '⚪ Neutral'}
+                                          {evidence.stance === 'supporting' ? '✅ Supports YES' :
+                                           evidence.stance === 'disputing' ? '❌ Supports NO' : '⚪ Neutral'}
                                         </Badge>
                                         {evidence.admin_stance_verified && (
-                                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
-                                            Admin Verified
+                                          <Badge variant="outline" className="text-sm bg-green-50 text-green-700 dark:bg-green-900/30">
+                                            ✓ Admin Verified
                                           </Badge>
                                         )}
                                       </div>
                                       <p className="font-mono text-xs text-gray-600 dark:text-gray-400">
-                                        {evidence.user_id.slice(0, 20)}...{evidence.user_id.slice(-8)}
+                                        Submitted by: {evidence.user_id.slice(0, 20)}...{evidence.user_id.slice(-8)}
                                       </p>
                                     </div>
-                                    <div className="text-right text-xs text-gray-500">
-                                      <div>{new Date(evidence.created_at).toLocaleString()}</div>
-                                      <div className="flex items-center gap-1 mt-1">
-                                        <span>Quality: {evidence.quality_score?.toFixed(1) || '1.0'}/5.0</span>
-                                        <span>•</span>
-                                        <span>Credibility: {(evidence.source_credibility_score || 1.0).toFixed(1)}</span>
+                                    <Badge
+                                      variant={
+                                        evidence.status === 'accepted' ? 'default' :
+                                        evidence.status === 'rejected' ? 'destructive' :
+                                        evidence.status === 'reviewed' ? 'secondary' : 'outline'
+                                      }
+                                      className="text-sm font-semibold px-3 py-1"
+                                    >
+                                      {evidence.status === 'accepted' ? '✅ ACCEPTED' :
+                                       evidence.status === 'rejected' ? '❌ REJECTED' :
+                                       evidence.status === 'reviewed' ? '👀 REVIEWED' : '⏳ PENDING'}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                                    <div className="flex items-center gap-3">
+                                      <span>📅 {new Date(evidence.created_at).toLocaleDateString()}</span>
+                                      <span>•</span>
+                                      <span>📄 {evidence.source_type || 'other'} source</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span>Quality: {evidence.quality_score?.toFixed(1) || '1.0'}/5.0</span>
+                                      <span>•</span>
+                                      <span>Credibility: {(evidence.source_credibility_score || 1.0).toFixed(1)}</span>
+                                      <ChevronDown className={`h-5 w-5 ml-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </div>
+                                  </div>
+
+                                  {/* Evidence Preview Text - Always visible */}
+                                  <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
+                                    <p className="text-sm text-gray-900 dark:text-white line-clamp-2">
+                                      {evidence.evidence_text}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Evidence Content - Expandable Section */}
+                                {isExpanded && (
+                                <div className="p-5 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="mb-4">
+                                    <h6 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">Full Evidence Text</h6>
+                                    <p className="text-base leading-relaxed text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                      {evidence.evidence_text}
+                                    </p>
+                                  </div>
+
+                                  {evidence.evidence_links && evidence.evidence_links.length > 0 && (
+                                    <div className="mb-4">
+                                      <h6 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">Source Links</h6>
+                                      <div className="flex flex-wrap gap-2">
+                                        {evidence.evidence_links.map((link, linkIdx) => (
+                                          <a
+                                            key={linkIdx}
+                                            href={link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md text-sm font-medium transition-colors border border-blue-200 dark:border-blue-800"
+                                          >
+                                            🔗 Source Link {linkIdx + 1}
+                                            <ExternalLink className="h-3 w-3" />
+                                          </a>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* STEP 1: Stance Selection - What does this evidence support? */}
+                                  <div className="mb-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 rounded-lg border-2 border-blue-300 dark:border-blue-700">
+                                    <h6 className="text-base font-bold text-blue-900 dark:text-blue-100 mb-2">🎯 Step 1: What does this evidence support?</h6>
+                                    <p className="text-sm text-blue-800 dark:text-blue-200 mb-4">
+                                      Select which outcome this evidence supports
+                                    </p>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                      {/* YES Card */}
+                                      <div
+                                        onClick={() => {
+                                          const hasLegitimate = evidence.admin_validated_legitimate === true;
+                                          const hasAgainstCommunity = evidence.admin_validated_against_community === true;
+
+                                          // Auto-accept if selecting stance AND both checkboxes are already checked
+                                          const newStatus = (hasLegitimate && hasAgainstCommunity) ? 'accepted' : 'rejected';
+
+                                          updateEvidenceStance(evidence.id, {
+                                            stance: 'supporting_yes',
+                                            status: newStatus
+                                          });
+                                        }}
+                                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                          evidence.stance === 'supporting_yes' || evidence.stance === 'supporting'
+                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/30 shadow-lg'
+                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:border-green-300 hover:shadow-md'
+                                        }`}
+                                      >
+                                        <div className="text-center">
+                                          <div className="text-4xl mb-2">✅</div>
+                                          <div className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                            Supports YES
+                                          </div>
+                                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                                            Evidence suggests claim is TRUE
+                                          </div>
+                                          {(evidence.stance === 'supporting_yes' || evidence.stance === 'supporting') && (
+                                            <div className="mt-2 flex items-center justify-center gap-1 text-green-600 dark:text-green-400 font-semibold text-sm">
+                                              <CheckCircle className="h-4 w-4" />
+                                              Selected
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* NO Card */}
+                                      <div
+                                        onClick={() => {
+                                          const hasLegitimate = evidence.admin_validated_legitimate === true;
+                                          const hasAgainstCommunity = evidence.admin_validated_against_community === true;
+
+                                          // Auto-accept if selecting stance AND both checkboxes are already checked
+                                          const newStatus = (hasLegitimate && hasAgainstCommunity) ? 'accepted' : 'rejected';
+
+                                          updateEvidenceStance(evidence.id, {
+                                            stance: 'supporting_no',
+                                            status: newStatus
+                                          });
+                                        }}
+                                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                          evidence.stance === 'supporting_no' || evidence.stance === 'disputing'
+                                            ? 'border-red-500 bg-red-50 dark:bg-red-900/30 shadow-lg'
+                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:border-red-300 hover:shadow-md'
+                                        }`}
+                                      >
+                                        <div className="text-center">
+                                          <div className="text-4xl mb-2">❌</div>
+                                          <div className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                            Supports NO
+                                          </div>
+                                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                                            Evidence suggests claim is FALSE
+                                          </div>
+                                          {(evidence.stance === 'supporting_no' || evidence.stance === 'disputing') && (
+                                            <div className="mt-2 flex items-center justify-center gap-1 text-red-600 dark:text-red-400 font-semibold text-sm">
+                                              <CheckCircle className="h-4 w-4" />
+                                              Selected
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
 
-                                  {/* Admin Controls */}
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="text-xs">
-                                        {evidence.source_type || 'other'} source
-                                      </Badge>
-                                      <Badge
-                                        variant={
-                                          evidence.status === 'accepted' ? 'default' :
-                                          evidence.status === 'rejected' ? 'destructive' :
-                                          evidence.status === 'reviewed' ? 'secondary' : 'outline'
-                                        }
-                                        className="text-xs"
-                                      >
-                                        {evidence.status || 'pending'}
-                                      </Badge>
+                                  {/* STEP 2: Validation Checkboxes - DRIVES Accept/Reject Decision */}
+                                  <div className="mb-4 p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-900 dark:to-gray-800 rounded-lg border-2 border-amber-300 dark:border-amber-700">
+                                    <h6 className="text-base font-bold text-amber-900 dark:text-amber-100 mb-2">📋 Step 2: Evidence Validation (Required)</h6>
+                                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
+                                      To ACCEPT evidence: Stance must be selected (Step 1) AND both checkboxes below must be ✅
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="flex items-start gap-3 p-4 bg-white dark:bg-gray-900 rounded-lg border-2 border-gray-200 dark:border-gray-700">
+                                        <input
+                                          type="checkbox"
+                                          id={`legitimate-${evidence.id}`}
+                                          checked={evidence.admin_validated_legitimate === true}
+                                          onChange={(e) => {
+                                            const newLegitimate = e.target.checked;
+                                            const currentAgainstCommunity = evidence.admin_validated_against_community === true;
+                                            const hasStance = evidence.stance === 'supporting_yes' || evidence.stance === 'supporting_no' ||
+                                                            evidence.stance === 'supporting' || evidence.stance === 'disputing';
+
+                                            // Auto-accept if ALL THREE are true: stance + both checkboxes
+                                            const newStatus = (hasStance && newLegitimate && currentAgainstCommunity) ? 'accepted' : 'rejected';
+
+                                            updateEvidenceStance(evidence.id, {
+                                              admin_validated_legitimate: newLegitimate,
+                                              status: newStatus
+                                            });
+                                          }}
+                                          className="mt-1 h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                        />
+                                        <div className="flex-1">
+                                          <label htmlFor={`legitimate-${evidence.id}`} className="text-base font-semibold text-gray-900 dark:text-white cursor-pointer">
+                                            ✅ Evidence is Legitimate
+                                          </label>
+                                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                            Is this from a credible, verifiable source?
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-start gap-3 p-4 bg-white dark:bg-gray-900 rounded-lg border-2 border-gray-200 dark:border-gray-700">
+                                        <input
+                                          type="checkbox"
+                                          id={`against-community-${evidence.id}`}
+                                          checked={evidence.admin_validated_against_community === true}
+                                          onChange={(e) => {
+                                            const newAgainstCommunity = e.target.checked;
+                                            const currentLegitimate = evidence.admin_validated_legitimate === true;
+                                            const hasStance = evidence.stance === 'supporting_yes' || evidence.stance === 'supporting_no' ||
+                                                            evidence.stance === 'supporting' || evidence.stance === 'disputing';
+
+                                            // Auto-accept if ALL THREE are true: stance + both checkboxes
+                                            const newStatus = (hasStance && currentLegitimate && newAgainstCommunity) ? 'accepted' : 'rejected';
+
+                                            updateEvidenceStance(evidence.id, {
+                                              admin_validated_against_community: newAgainstCommunity,
+                                              status: newStatus
+                                            });
+                                          }}
+                                          className="mt-1 h-5 w-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                        />
+                                        <div className="flex-1">
+                                          <label htmlFor={`against-community-${evidence.id}`} className="text-base font-semibold text-gray-900 dark:text-white cursor-pointer">
+                                            ⚠️ Challenges Market Consensus
+                                          </label>
+                                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                            Does this contradict current market odds? (Gets 3x weight)
+                                          </p>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      {evidence.status !== 'accepted' && (
-                                        <Button
-                                          variant="default"
-                                          size="sm"
-                                          onClick={() => updateEvidenceStance(evidence.id, { status: 'accepted' })}
-                                          className="text-xs h-7 bg-green-600 hover:bg-green-700"
-                                        >
-                                          ✓ Keep
-                                        </Button>
-                                      )}
-                                      {evidence.status !== 'rejected' && (
-                                        <Button
-                                          variant="destructive"
-                                          size="sm"
-                                          onClick={() => updateEvidenceStance(evidence.id, { status: 'rejected' })}
-                                          className="text-xs h-7"
-                                        >
-                                          ✗ Reject
-                                        </Button>
-                                      )}
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setEditingEvidence(prev => ({
-                                          ...prev,
-                                          [evidence.id]: !prev[evidence.id]
-                                        }))}
-                                        className="text-xs h-7"
-                                      >
-                                        {editingEvidence[evidence.id] ? 'Cancel' : 'Edit Details'}
-                                      </Button>
-                                    </div>
+
+                                    {/* Status Indicator */}
+                                    {(() => {
+                                      const hasStance = evidence.stance === 'supporting_yes' || evidence.stance === 'supporting_no' ||
+                                                       evidence.stance === 'supporting' || evidence.stance === 'disputing';
+                                      const hasLegitimate = evidence.admin_validated_legitimate === true;
+                                      const hasAgainstCommunity = evidence.admin_validated_against_community === true;
+                                      const isFullyAccepted = hasStance && hasLegitimate && hasAgainstCommunity;
+
+                                      return (
+                                        <div className={`mt-4 p-4 rounded-lg border-2 ${
+                                          isFullyAccepted
+                                            ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
+                                            : 'bg-red-50 dark:bg-red-900/20 border-red-500'
+                                        }`}>
+                                          <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                              {isFullyAccepted ? (
+                                                <>
+                                                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                  <span className="font-bold text-green-900 dark:text-green-100">ACCEPTED - Gets 3x weight in resolution</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                                  <span className="font-bold text-red-900 dark:text-red-100">REJECTED - Will not contribute to resolution</span>
+                                                </>
+                                              )}
+                                            </div>
+
+                                            {/* Checklist of requirements */}
+                                            {!isFullyAccepted && (
+                                              <div className="ml-7 space-y-1 text-sm">
+                                                <div className={hasStance ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                  {hasStance ? '✅' : '❌'} Stance selected (Step 1)
+                                                </div>
+                                                <div className={hasLegitimate ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                  {hasLegitimate ? '✅' : '❌'} Evidence is legitimate
+                                                </div>
+                                                <div className={hasAgainstCommunity ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                  {hasAgainstCommunity ? '✅' : '❌'} Challenges market consensus
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+
+                                  {/* Advanced Settings Toggle */}
+                                  <div className="flex items-center justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setEditingEvidence(prev => ({
+                                        ...prev,
+                                        [evidence.id]: !prev[evidence.id]
+                                      }))}
+                                      className="gap-1"
+                                    >
+                                      <Settings className="h-4 w-4" />
+                                      {editingEvidence[evidence.id] ? 'Close' : 'Advanced Settings'}
+                                    </Button>
                                   </div>
                                 </div>
-
-                                {/* Evidence Content */}
-                                <div className="p-3">
-                                  <p className="text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 p-3 rounded">
-                                    {evidence.evidence_text}
-                                  </p>
-
-                                  {evidence.evidence_links && evidence.evidence_links.length > 0 && (
-                                    <div className="mt-2">
-                                      {evidence.evidence_links.map((link, linkIdx) => (
-                                        <a
-                                          key={linkIdx}
-                                          href={link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-blue-500 hover:text-blue-600 text-xs mr-3"
-                                        >
-                                          🔗 Link {linkIdx + 1}
-                                        </a>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                                )}
 
                                 {/* Stance Assignment Interface */}
                                 {editingEvidence[evidence.id] && (
@@ -1037,6 +1464,56 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                         />
                                       </div>
 
+                                      {/* Evidence Legitimate Toggle */}
+                                      <div>
+                                        <Label className="text-sm font-medium mb-2 block">Evidence Legitimate?</Label>
+                                        <Select
+                                          value={evidenceUpdates[evidence.id]?.admin_validated_legitimate !== undefined ?
+                                            String(evidenceUpdates[evidence.id]?.admin_validated_legitimate) :
+                                            String(evidence.admin_validated_legitimate || false)}
+                                          onValueChange={(value: string) =>
+                                            setEvidenceUpdates(prev => ({
+                                              ...prev,
+                                              [evidence.id]: { ...prev[evidence.id], admin_validated_legitimate: value === 'true' }
+                                            }))
+                                          }
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="true">✅ Yes - Evidence is credible and valid</SelectItem>
+                                            <SelectItem value="false">❌ No - Evidence is not credible</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-gray-500 mt-1">Is this evidence from a credible source and factually accurate?</p>
+                                      </div>
+
+                                      {/* Against Community Toggle */}
+                                      <div>
+                                        <Label className="text-sm font-medium mb-2 block">Against Community Consensus?</Label>
+                                        <Select
+                                          value={evidenceUpdates[evidence.id]?.admin_validated_against_community !== undefined ?
+                                            String(evidenceUpdates[evidence.id]?.admin_validated_against_community) :
+                                            String(evidence.admin_validated_against_community || false)}
+                                          onValueChange={(value: string) =>
+                                            setEvidenceUpdates(prev => ({
+                                              ...prev,
+                                              [evidence.id]: { ...prev[evidence.id], admin_validated_against_community: value === 'true' }
+                                            }))
+                                          }
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="true">✅ Yes - Challenges market consensus</SelectItem>
+                                            <SelectItem value="false">❌ No - Aligns with market</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-gray-500 mt-1">Does this evidence go against what the prediction market suggests?</p>
+                                      </div>
+
                                       {/* Status */}
                                       <div className="md:col-span-2">
                                         <Label className="text-sm font-medium mb-2 block">Review Status</Label>
@@ -1082,7 +1559,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1094,100 +1572,258 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                         <div className="space-y-4">
 
                           {/* Market Classification Section */}
-                          <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <h5 className="font-medium text-amber-900 dark:text-amber-100">Market Classification</h5>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowClassificationOverride(prev => ({
-                                  ...prev,
-                                  [market.id]: !prev[market.id]
-                                }))}
-                              >
-                                {showClassificationOverride[market.id] ? 'Hide' : 'Override'} Classification
-                              </Button>
+                          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-6 rounded-lg border-2 border-amber-200 dark:border-amber-800">
+                            <div className="mb-4">
+                              <h5 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-2">📊 Select Data Source Type</h5>
+                              <p className="text-sm text-amber-800 dark:text-amber-200">
+                                Choose the most appropriate analysis type for this market. Recommended options are highlighted.
+                              </p>
                             </div>
 
-                            <div className="space-y-3">
-                              {/* Current Classification */}
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-sm font-medium">Current Classification:</span>
-                                  <Badge
-                                    variant={
-                                      (marketClassification[market.id] || market.data_source_type) === 'NEWS' ? 'default' :
-                                      (marketClassification[market.id] || market.data_source_type) === 'HISTORICAL' ? 'secondary' :
-                                      (marketClassification[market.id] || market.data_source_type) === 'ACADEMIC' ? 'outline' : 'destructive'
-                                    }
-                                  >
-                                    {marketClassification[market.id] || market.data_source_type}
-                                  </Badge>
-                                  {market.admin_override_classification && (
-                                    <Badge variant="outline" className="text-xs">Manual Override</Badge>
-                                  )}
-                                </div>
+                            {/* Classification Cards Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              {/* NEWS Card */}
+                              {(() => {
+                                const isSelected = (marketClassification[market.id] || market.data_source_type) === 'NEWS';
+                                const claim = market.claim.toLowerCase();
+                                const isRecommended = claim.includes('2024') || claim.includes('2025') ||
+                                  claim.includes('will') || claim.includes('announce') || claim.includes('report') ||
+                                  claim.includes('election') || claim.includes('government') || claim.includes('policy');
 
-                                {/* Auto-detection info */}
-                                {market.auto_detected_type && (
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                                    <div>
-                                      Auto-detected: {market.auto_detected_type}
-                                      {market.classification_confidence && (
-                                        <span> ({(market.classification_confidence * 100).toFixed(0)}% confidence)</span>
-                                      )}
+                                return (
+                                  <div
+                                    onClick={() => setMarketClassification(prev => ({ ...prev, [market.id]: 'NEWS' }))}
+                                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-lg'
+                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-300 hover:shadow-md'
+                                    }`}
+                                  >
+                                    {isRecommended && (
+                                      <div className="absolute -top-2 -right-2">
+                                        <Badge className="bg-green-600 text-white shadow-md">✨ Recommended</Badge>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="text-3xl">📰</div>
+                                      <div>
+                                        <h6 className="font-bold text-base">NEWS</h6>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Recent events & current affairs</p>
+                                      </div>
                                     </div>
-                                    {market.keywords_detected && market.keywords_detected.length > 0 && (
-                                      <div className="flex items-center gap-1 flex-wrap">
-                                        <span>Keywords:</span>
-                                        {market.keywords_detected.map((keyword, idx) => (
-                                          <Badge key={idx} variant="outline" className="text-xs px-1 py-0">
-                                            {keyword}
-                                          </Badge>
-                                        ))}
+
+                                    <div className="space-y-2 mb-3">
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
+                                        <div className="text-gray-600 dark:text-gray-400">NewsAPI (BBC, Reuters, Bloomberg, CNN, Guardian)</div>
+                                      </div>
+
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">✅ Best for:</div>
+                                        <ul className="text-gray-600 dark:text-gray-400 space-y-0.5">
+                                          <li>• Events happening in 2024-2025</li>
+                                          <li>• Breaking news & announcements</li>
+                                          <li>• Political & economic developments</li>
+                                        </ul>
+                                      </div>
+                                    </div>
+
+                                    {isSelected && (
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                                        <CheckCircle className="h-4 w-4" />
+                                        Selected
                                       </div>
                                     )}
                                   </div>
-                                )}
-                              </div>
+                                );
+                              })()}
 
-                              {/* Classification Override UI */}
-                              {showClassificationOverride[market.id] && (
-                                <div className="border border-amber-200 dark:border-amber-800 rounded p-3 bg-white dark:bg-gray-900">
-                                  <Label className="text-sm font-medium mb-2 block">Override Classification:</Label>
-                                  <Select
-                                    value={marketClassification[market.id] || market.data_source_type}
-                                    onValueChange={(value: DataSourceType) => {
-                                      setMarketClassification(prev => ({ ...prev, [market.id]: value }));
-                                    }}
+                              {/* HISTORICAL Card */}
+                              {(() => {
+                                const isSelected = (marketClassification[market.id] || market.data_source_type) === 'HISTORICAL';
+                                const claim = market.claim.toLowerCase();
+                                const isRecommended = /\b(19|20)\d{2}\b/.test(claim) && !claim.includes('2024') && !claim.includes('2025') ||
+                                  claim.includes('historical') || claim.includes('past') || claim.includes('before') ||
+                                  claim.includes('ancient') || claim.includes('century');
+
+                                return (
+                                  <div
+                                    onClick={() => setMarketClassification(prev => ({ ...prev, [market.id]: 'HISTORICAL' }))}
+                                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 shadow-lg'
+                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-purple-300 hover:shadow-md'
+                                    }`}
                                   >
-                                    <SelectTrigger className="mb-2">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="NEWS">📰 NEWS - Recent events, current affairs</SelectItem>
-                                      <SelectItem value="HISTORICAL">🏛️ HISTORICAL - Past events, historical facts</SelectItem>
-                                      <SelectItem value="ACADEMIC">🎓 ACADEMIC - Scientific, research-based</SelectItem>
-                                      <SelectItem value="GENERAL_KNOWLEDGE">🌐 GENERAL - Encyclopedia, common knowledge</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    {isRecommended && (
+                                      <div className="absolute -top-2 -right-2">
+                                        <Badge className="bg-green-600 text-white shadow-md">✨ Recommended</Badge>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="text-3xl">🏛️</div>
+                                      <div>
+                                        <h6 className="font-bold text-base">HISTORICAL</h6>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Past events & historical facts</p>
+                                      </div>
+                                    </div>
 
-                                  <div className="text-xs text-gray-500 space-y-1">
-                                    <div><strong>NEWS:</strong> Recent events, breaking news, current affairs</div>
-                                    <div><strong>HISTORICAL:</strong> Past events, historical figures, ancient civilizations</div>
-                                    <div><strong>ACADEMIC:</strong> Scientific studies, research findings, peer-reviewed data</div>
-                                    <div><strong>GENERAL:</strong> Encyclopedia knowledge, established facts, definitions</div>
+                                    <div className="space-y-2 mb-3">
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Wikipedia (historical articles & archives)</div>
+                                      </div>
+
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">✅ Best for:</div>
+                                        <ul className="text-gray-600 dark:text-gray-400 space-y-0.5">
+                                          <li>• Events before 2024</li>
+                                          <li>• Historical facts & records</li>
+                                          <li>• Verified past outcomes</li>
+                                        </ul>
+                                      </div>
+                                    </div>
+
+                                    {isSelected && (
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-purple-700 dark:text-purple-300">
+                                        <CheckCircle className="h-4 w-4" />
+                                        Selected
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
 
-                              {/* Data Source Preview */}
-                              <div className="text-sm text-amber-800 dark:text-amber-200">
-                                <span className="font-medium">Will use:</span>
-                                {(marketClassification[market.id] || market.data_source_type) === 'NEWS' && ' NewsAPI + 50 news sources'}
-                                {(marketClassification[market.id] || market.data_source_type) === 'HISTORICAL' && ' Wikipedia + historical articles'}
-                                {(marketClassification[market.id] || market.data_source_type) === 'ACADEMIC' && ' Wikipedia + academic references'}
-                                {(marketClassification[market.id] || market.data_source_type) === 'GENERAL_KNOWLEDGE' && ' Wikipedia + general knowledge'}
+                              {/* ACADEMIC Card */}
+                              {(() => {
+                                const isSelected = (marketClassification[market.id] || market.data_source_type) === 'ACADEMIC';
+                                const claim = market.claim.toLowerCase();
+                                const isRecommended = claim.includes('study') || claim.includes('research') ||
+                                  claim.includes('scientific') || claim.includes('scientists') || claim.includes('evidence') ||
+                                  claim.includes('climate') || claim.includes('medical') || claim.includes('vaccine');
+
+                                return (
+                                  <div
+                                    onClick={() => setMarketClassification(prev => ({ ...prev, [market.id]: 'ACADEMIC' }))}
+                                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 shadow-lg'
+                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-indigo-300 hover:shadow-md'
+                                    }`}
+                                  >
+                                    {isRecommended && (
+                                      <div className="absolute -top-2 -right-2">
+                                        <Badge className="bg-green-600 text-white shadow-md">✨ Recommended</Badge>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="text-3xl">🎓</div>
+                                      <div>
+                                        <h6 className="font-bold text-base">ACADEMIC</h6>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Scientific & research-based</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-2 mb-3">
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Wikipedia + scholarly references & research data</div>
+                                      </div>
+
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">✅ Best for:</div>
+                                        <ul className="text-gray-600 dark:text-gray-400 space-y-0.5">
+                                          <li>• Scientific claims & studies</li>
+                                          <li>• Research-backed facts</li>
+                                          <li>• Medical & health topics</li>
+                                        </ul>
+                                      </div>
+                                    </div>
+
+                                    {isSelected && (
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                                        <CheckCircle className="h-4 w-4" />
+                                        Selected
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* GENERAL KNOWLEDGE Card */}
+                              {(() => {
+                                const isSelected = (marketClassification[market.id] || market.data_source_type) === 'GENERAL_KNOWLEDGE';
+                                const claim = market.claim.toLowerCase();
+                                const isRecommended = claim.includes('definition') || claim.includes('what is') ||
+                                  claim.includes('how many') || claim.includes('capital') || claim.includes('located') ||
+                                  claim.includes('population') || claim.includes('country');
+
+                                return (
+                                  <div
+                                    onClick={() => setMarketClassification(prev => ({ ...prev, [market.id]: 'GENERAL_KNOWLEDGE' }))}
+                                    className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30 shadow-lg'
+                                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-teal-300 hover:shadow-md'
+                                    }`}
+                                  >
+                                    {isRecommended && (
+                                      <div className="absolute -top-2 -right-2">
+                                        <Badge className="bg-green-600 text-white shadow-md">✨ Recommended</Badge>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="text-3xl">🌐</div>
+                                      <div>
+                                        <h6 className="font-bold text-base">GENERAL KNOWLEDGE</h6>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">Encyclopedia & common facts</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-2 mb-3">
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Wikipedia (established facts & definitions)</div>
+                                      </div>
+
+                                      <div className="text-xs">
+                                        <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">✅ Best for:</div>
+                                        <ul className="text-gray-600 dark:text-gray-400 space-y-0.5">
+                                          <li>• Factual questions</li>
+                                          <li>• Definitions & explanations</li>
+                                          <li>• Geographic & demographic data</li>
+                                        </ul>
+                                      </div>
+                                    </div>
+
+                                    {isSelected && (
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-teal-700 dark:text-teal-300">
+                                        <CheckCircle className="h-4 w-4" />
+                                        Selected
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            {/* Current Selection Summary */}
+                            <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Selected:</span>
+                                <Badge
+                                  variant={
+                                    (marketClassification[market.id] || market.data_source_type) === 'NEWS' ? 'default' :
+                                    (marketClassification[market.id] || market.data_source_type) === 'HISTORICAL' ? 'secondary' :
+                                    (marketClassification[market.id] || market.data_source_type) === 'ACADEMIC' ? 'outline' : 'destructive'
+                                  }
+                                  className="font-bold"
+                                >
+                                  {(marketClassification[market.id] || market.data_source_type) === 'NEWS' && '📰 NEWS'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'HISTORICAL' && '🏛️ HISTORICAL'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'ACADEMIC' && '🎓 ACADEMIC'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'GENERAL_KNOWLEDGE' && '🌐 GENERAL KNOWLEDGE'}
+                                </Badge>
                               </div>
                             </div>
                           </div>
@@ -1220,156 +1856,266 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                             </div>
                           )}
 
-                          {/* AI Analysis Button */}
-                          <div className="space-y-2">
+                          {/* AI Analysis Button - Large and Prominent */}
+                          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 rounded-lg border-2 border-green-300 dark:border-green-700">
+                            <div className="mb-3">
+                              <h5 className="text-base font-bold text-green-900 dark:text-green-100 mb-1">🤖 Ready to Analyze</h5>
+                              <p className="text-sm text-green-800 dark:text-green-200">
+                                Click below to run AI analysis using the selected data source type.
+                              </p>
+                            </div>
+
                             <Button
                               onClick={() => triggerAIAnalysis(market.id)}
                               disabled={processingAI}
-                              className="gap-2 w-full"
+                              className="gap-3 w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-6 text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Brain className="h-4 w-4" />
-                              {processingAI ? 'Processing AI Analysis...' :
-                               `Run ${(marketClassification[market.id] || market.data_source_type)} Analysis`}
+                              {processingAI ? (
+                                <>
+                                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                                  Processing AI Analysis...
+                                </>
+                              ) : (
+                                <>
+                                  <Brain className="h-6 w-6" />
+                                  {(marketClassification[market.id] || market.data_source_type) === 'NEWS' && '📰 Run NEWS Analysis'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'HISTORICAL' && '🏛️ Run HISTORICAL Analysis'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'ACADEMIC' && '🎓 Run ACADEMIC Analysis'}
+                                  {(marketClassification[market.id] || market.data_source_type) === 'GENERAL_KNOWLEDGE' && '🌐 Run GENERAL KNOWLEDGE Analysis'}
+                                </>
+                              )}
                             </Button>
+
+                            {processingAI && (
+                              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="animate-pulse h-2 w-2 bg-blue-600 rounded-full" />
+                                  <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                                    AI Analysis in Progress...
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 text-xs text-blue-800 dark:text-blue-200">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span>🔍 Extracting key entities and keywords from market claim...</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span>📰 Fetching articles from {(marketClassification[market.id] || market.data_source_type) === 'NEWS' ? 'NewsAPI' : 'Wikipedia'} using entity-based queries...</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span>🔷 Running Hedera AI Agent analysis...</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span>🧠 Analyzing sources with Claude AI...</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span>📊 Generating final recommendation...</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                             
                           {market.ai_resolution && market.ai_resolution.recommendation !== 'PENDING' && (
-                            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                              <div className="flex items-center gap-2 mb-3">
-                                <Brain className="h-4 w-4 text-green-500" />
-                                <span className="font-medium">AI Analysis Complete</span>
-                                <Badge variant={
-                                  market.ai_resolution.recommendation === 'YES' ? 'default' :
-                                  market.ai_resolution.recommendation === 'NO' ? 'destructive' : 'secondary'
-                                }>
-                                  {market.ai_resolution.recommendation}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {(market.ai_resolution.confidence * 100).toFixed(0)}% confidence
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-800 dark:to-gray-900 p-6 rounded-lg border-2 border-green-200 dark:border-green-800 shadow-md">
+                              {/* Header with Hedera Badge */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                  <Brain className="h-6 w-6 text-green-600 dark:text-green-400" />
+                                  <span className="font-bold text-lg text-gray-900 dark:text-white">AI Analysis Complete</span>
+                                  {(market.ai_resolution as any).usedHederaAgent && (
+                                    <Badge className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+                                      🔷 Hedera AI Agent
+                                    </Badge>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className="text-sm font-bold">
+                                  {(market.ai_resolution.confidence * 100).toFixed(0)}% Certainty
                                 </Badge>
                               </div>
 
-                              <div className="space-y-3">
-                                <div>
-                                  <h6 className="font-medium text-sm mb-1">AI Conclusion:</h6>
-                                  <div className="bg-white dark:bg-gray-900 p-3 rounded border">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="font-medium text-lg">
-                                        {market.ai_resolution.recommendation === 'YES' ? '✅ LIKELY TRUE' :
-                                         market.ai_resolution.recommendation === 'NO' ? '❌ LIKELY FALSE' :
-                                         '❓ INCONCLUSIVE'}
-                                      </span>
-                                      <Badge variant="outline" className="text-xs">
-                                        {(market.ai_resolution.confidence * 100).toFixed(0)}% confidence
-                                      </Badge>
+                              {/* Extracted Entities Section */}
+                              {(market.ai_resolution as any).extractedEntities && (
+                                <div className="mb-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                                  <h6 className="font-semibold text-sm mb-3 text-gray-900 dark:text-white flex items-center gap-2">
+                                    <span>🎯</span> Extracted Entities & Keywords
+                                  </h6>
+                                  <div className="space-y-2 text-sm">
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-medium text-gray-600 dark:text-gray-400 min-w-[120px]">Main Subject:</span>
+                                      <Badge variant="default" className="text-sm">{(market.ai_resolution as any).extractedEntities.mainSubject}</Badge>
                                     </div>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-medium text-gray-600 dark:text-gray-400 min-w-[120px]">Related Entities:</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {(market.ai_resolution as any).extractedEntities.secondaryEntities.map((entity: string, idx: number) => (
+                                          <Badge key={idx} variant="outline" className="text-xs">{entity}</Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-medium text-gray-600 dark:text-gray-400 min-w-[120px]">Search Keywords:</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {(market.ai_resolution as any).extractedEntities.keywords.slice(0, 5).map((keyword: string, idx: number) => (
+                                          <Badge key={idx} variant="secondary" className="text-xs">{keyword}</Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Main Conclusion */}
+                              <div className="mb-4">
+                                <h6 className="font-semibold text-sm mb-2 text-gray-900 dark:text-white">📊 AI Verdict:</h6>
+                                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <span className="font-bold text-2xl">
+                                      {market.ai_resolution.recommendation === 'YES' ? '✅' :
+                                       market.ai_resolution.recommendation === 'NO' ? '❌' : '❓'}
+                                    </span>
+                                    <div className="flex-1">
+                                      <div className="font-bold text-lg text-gray-900 dark:text-white">
+                                        Based on my analysis, {(market.ai_resolution as any).extractedEntities?.mainSubject || 'this claim'} is{' '}
+                                        <span className={market.ai_resolution.recommendation === 'YES' ? 'text-green-600' : 'text-red-600'}>
+                                          {market.ai_resolution.recommendation === 'YES' ? 'TRUE' : 'FALSE'}
+                                        </span>
+                                      </div>
+                                      <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                        with a certainty of <span className="font-bold">{(market.ai_resolution.confidence * 100).toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="pl-11">
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                                       {market.ai_resolution.reasoning}
                                     </p>
                                   </div>
                                 </div>
+                              </div>
 
-                                {market.ai_resolution.keyFactors && market.ai_resolution.keyFactors.length > 0 && (
-                                  <div>
-                                    <h6 className="font-medium text-sm mb-1">Key Factors:</h6>
-                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                      {market.ai_resolution.keyFactors.map((factor, idx) => (
-                                        <li key={idx} className="flex items-start gap-2">
-                                          <span className="text-blue-500 mt-1">•</span>
-                                          <span>{factor}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
+                              {/* Search Queries Used */}
+                              {(market.ai_resolution as any).searchQueries && (market.ai_resolution as any).searchQueries.length > 0 && (
+                                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                  <h6 className="font-medium text-xs mb-2 text-blue-900 dark:text-blue-100">🔍 Search Queries Used:</h6>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(market.ai_resolution as any).searchQueries.map((query: string, idx: number) => (
+                                      <Badge key={idx} variant="outline" className="text-xs text-blue-700 dark:text-blue-300">
+                                        "{query}"
+                                      </Badge>
+                                    ))}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {market.ai_resolution.sourceAnalysis && Object.keys(market.ai_resolution.sourceAnalysis).length > 0 && (
-                                  <div>
-                                    <h6 className="font-medium text-sm mb-2">Source Analysis:</h6>
-                                    <div className="space-y-2">
-                                      {Object.entries(market.ai_resolution.sourceAnalysis).map(([source, analysis]) => {
-                                        const typedAnalysis = analysis as SourceAnalysis;
-                                        return (
-                                          <div key={source} className="border border-gray-200 dark:border-gray-700 p-2 rounded text-xs">
-                                            <div className="flex items-center gap-2 mb-1">
-                                              <span className="font-medium">{source}</span>
-                                              <Badge size="sm" variant={
-                                                typedAnalysis.position === 'YES' ? 'default' :
-                                                typedAnalysis.position === 'NO' ? 'destructive' : 'secondary'
-                                              }>
-                                                {typedAnalysis.position}
-                                              </Badge>
-                                            </div>
-                                            <p className="text-gray-600 dark:text-gray-400">{typedAnalysis.summary}</p>
+                              {/* Key Factors */}
+                              {market.ai_resolution.keyFactors && market.ai_resolution.keyFactors.length > 0 && (
+                                <div className="mb-4">
+                                  <h6 className="font-semibold text-sm mb-2 text-gray-900 dark:text-white">🔑 Key Evidence Points:</h6>
+                                  <ul className="space-y-2">
+                                    {market.ai_resolution.keyFactors.map((factor, idx) => (
+                                      <li key={idx} className="flex items-start gap-2 text-sm">
+                                        <span className="text-blue-600 dark:text-blue-400 font-bold mt-0.5">•</span>
+                                        <span className="text-gray-700 dark:text-gray-300">{factor}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {market.ai_resolution.sourceAnalysis && Object.keys(market.ai_resolution.sourceAnalysis).length > 0 && (
+                                <div>
+                                  <h6 className="font-medium text-sm mb-2">Source Analysis:</h6>
+                                  <div className="space-y-2">
+                                    {Object.entries(market.ai_resolution.sourceAnalysis).map(([source, analysis]) => {
+                                      const typedAnalysis = analysis as SourceAnalysis;
+                                      return (
+                                        <div key={source} className="border border-gray-200 dark:border-gray-700 p-2 rounded text-xs">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-medium">{source}</span>
+                                            <Badge size="sm" variant={
+                                              typedAnalysis.position === 'YES' ? 'default' :
+                                              typedAnalysis.position === 'NO' ? 'destructive' : 'secondary'
+                                            }>
+                                              {typedAnalysis.position}
+                                            </Badge>
                                           </div>
-                                        );
-                                      })}
-                                    </div>
+                                          <p className="text-gray-600 dark:text-gray-400">{typedAnalysis.summary}</p>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles) &&
-                                 ((market.ai_resolution.sourceArticles && market.ai_resolution.sourceArticles.length > 0) ||
-                                  (market.ai_resolution.newsArticles && market.ai_resolution.newsArticles.length > 0)) && (
-                                  <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <h6 className="font-medium text-sm">
-                                        {market.ai_resolution.sourceType || 'News'} Articles Analyzed
-                                        ({(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles).length}):
-                                      </h6>
-                                      {market.ai_resolution.dataSourceUsed && (
-                                        <Badge variant="outline" className="text-xs">
-                                          {market.ai_resolution.dataSourceUsed}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <div className="space-y-3 max-h-60 overflow-y-auto">
-                                      {(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles).map((article, idx) => (
-                                        <div key={idx} className="border border-gray-200 dark:border-gray-700 p-3 rounded">
-                                          <div className="flex items-start justify-between mb-2">
-                                            <div className="flex-1">
-                                              <h3 className="font-medium text-sm line-clamp-2 mb-1">{article.title}</h3>
-                                              <div className="flex items-center gap-2 mb-2">
-                                                <Badge variant="outline" className="text-xs">{article.source}</Badge>
-                                                {article.relevanceScore && (
-                                                  <Badge variant="outline" className="text-xs">
-                                                    {(article.relevanceScore * 100).toFixed(0)}% relevant
-                                                  </Badge>
-                                                )}
-                                                <span className="text-xs text-gray-500">
-                                                  {new Date(article.publishedAt).toLocaleDateString()}
-                                                </span>
-                                              </div>
+                              {(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles) &&
+                               ((market.ai_resolution.sourceArticles && market.ai_resolution.sourceArticles.length > 0) ||
+                                (market.ai_resolution.newsArticles && market.ai_resolution.newsArticles.length > 0)) && (
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h6 className="font-medium text-sm">
+                                      {market.ai_resolution.sourceType || 'News'} Articles Analyzed
+                                      ({(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles).length}):
+                                    </h6>
+                                    {market.ai_resolution.dataSourceUsed && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {market.ai_resolution.dataSourceUsed}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                                    {(market.ai_resolution.sourceArticles || market.ai_resolution.newsArticles).map((article, idx) => (
+                                      <div key={idx} className="border border-gray-200 dark:border-gray-700 p-3 rounded">
+                                        <div className="flex items-start justify-between mb-2">
+                                          <div className="flex-1">
+                                            <h3 className="font-medium text-sm line-clamp-2 mb-1">{article.title}</h3>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <Badge variant="outline" className="text-xs">{article.source}</Badge>
+                                              {article.relevanceScore && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  {((article.relevanceScore * 100).toFixed(0))}% relevant
+                                                </Badge>
+                                              )}
+                                              <span className="text-xs text-gray-500">
+                                                {new Date(article.publishedAt).toLocaleDateString()}
+                                              </span>
                                             </div>
-                                          </div>
-                                          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-2">
-                                            {article.content}
-                                          </p>
-                                          <div className="flex items-center justify-between">
-                                            {article.author && (
-                                              <span className="text-xs text-gray-500">By {article.author}</span>
-                                            )}
-                                            <a
-                                              href={article.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-blue-500 hover:text-blue-600 text-xs flex items-center gap-1"
-                                            >
-                                              Read Article <ExternalLink className="h-3 w-3" />
-                                            </a>
                                           </div>
                                         </div>
-                                      ))}
-                                    </div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-2">
+                                          {article.content}
+                                        </p>
+                                        <div className="flex items-center justify-between">
+                                          {article.author && (
+                                            <span className="text-xs text-gray-500">By {article.author}</span>
+                                          )}
+                                          <a
+                                            href={article.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-500 hover:text-blue-600 text-xs flex items-center gap-1"
+                                          >
+                                            Read Article <ExternalLink className="h-3 w-3" />
+                                          </a>
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {market.ai_resolution.processingTimeMs && (
+                              {market.ai_resolution.processingTimeMs && (() => {
+                                const timeInSeconds = (market.ai_resolution.processingTimeMs / 1000).toFixed(1);
+                                return (
                                   <div className="text-xs text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                    Processing time: {Math.round(market.ai_resolution.processingTimeMs / 1000 * 10) / 10}s
+                                    Processing time: {timeInSeconds}s
                                   </div>
-                                )}
-                              </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
@@ -1377,115 +2123,198 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                     )}
 
                     {/* Summary Tab */}
-                    {getActiveMarketTab(market.id) === 'summary' && (
+                    {getActiveMarketTab(market.id) === 'summary' && (() => {
+                      // Get pre-calculated confidence breakdown from state
+                      const confidenceBreakdown = confidenceBreakdowns[market.id] || null;
+
+                      return (
                       <div>
-                        <h4 className="font-medium mb-4">Resolution Summary</h4>
+                        <h4 className="font-medium mb-4">Final Resolution Summary</h4>
                         <div className="space-y-4">
-                          {/* 1. Prediction Odds Summary */}
-                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                            <h5 className="font-medium mb-3 flex items-center gap-2">
-                              <span>📊</span> Prediction Odds (Market Closed)
-                            </h5>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">Yes Odds:</span>
-                                <span className="ml-2 font-bold text-lg">{market.yesOdds?.toFixed(2) || '0.00'}x</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">No Odds:</span>
-                                <span className="ml-2 font-bold text-lg">{market.noOdds?.toFixed(2) || '0.00'}x</span>
-                              </div>
-                            </div>
-                          </div>
 
-                          {/* 2. Evidence Summary */}
-                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                            <h5 className="font-medium mb-3 flex items-center gap-2">
-                              <span>📝</span> Evidence Submissions
-                            </h5>
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">Total Submissions:</span>
-                                <span className="font-semibold">{market.evidence_count}</span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">Kept (Accepted):</span>
-                                <span className="font-semibold text-green-600">
-                                  {market.evidences.filter(e => e.status === 'accepted').length}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">Rejected:</span>
-                                <span className="font-semibold text-red-600">
-                                  {market.evidences.filter(e => e.status === 'rejected').length}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">Pending Review:</span>
-                                <span className="font-semibold text-yellow-600">
-                                  {market.evidences.filter(e => !e.status || e.status === 'pending').length}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 3. AI Engine Summary */}
-                          <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                            <h5 className="font-medium mb-3 flex items-center gap-2">
-                              <span>🤖</span> AI Engine Analysis
-                            </h5>
-                            {market.ai_resolution && market.ai_resolution.recommendation !== 'PENDING' ? (
-                              <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-sm text-gray-600 dark:text-gray-400">Recommendation:</span>
-                                  <Badge variant={market.ai_resolution.recommendation === 'YES' ? 'default' : 'destructive'} className="text-base">
-                                    {market.ai_resolution.recommendation}
+                          {confidenceBreakdown ? (
+                            <>
+                              {/* Final Confidence Score - Big Display */}
+                              <div className="border-2 border-primary p-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+                                <div className="text-center">
+                                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">FINAL CONFIDENCE SCORE</h3>
+                                  <div className="text-6xl font-bold mb-2" style={{
+                                    color: confidenceBreakdown.finalConfidence >= 90 ? '#16a34a' :
+                                           confidenceBreakdown.finalConfidence >= 70 ? '#2563eb' :
+                                           confidenceBreakdown.finalConfidence >= 50 ? '#eab308' : '#dc2626'
+                                  }}>
+                                    {confidenceBreakdown.finalConfidence.toFixed(1)}%
+                                  </div>
+                                  <Badge
+                                    variant={confidenceBreakdown.finalRecommendation === 'YES' ? 'default' : 'destructive'}
+                                    className="text-lg py-1 px-4"
+                                  >
+                                    RECOMMEND: {confidenceBreakdown.finalRecommendation}
                                   </Badge>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-sm text-gray-600 dark:text-gray-400">Confidence Score:</span>
-                                  <span className="text-xl font-bold text-primary">
-                                    {(market.ai_resolution.confidence * 100).toFixed(0)}%
-                                  </span>
-                                </div>
-                                <div className="text-sm">
-                                  <p className="text-gray-600 dark:text-gray-400 mb-1">Data Source:</p>
-                                  <p className="font-medium">
-                                    {market.ai_resolution.sourceType || market.ai_resolution.dataSourceUsed || 'External API'}
+                                  <p className="text-xs text-gray-500 mt-2">
+                                    {finalConfidenceCalculator.getConfidenceLevel(confidenceBreakdown.finalConfidence)} CONFIDENCE
                                   </p>
                                 </div>
                               </div>
-                            ) : (
-                              <p className="text-sm text-gray-500">No AI analysis completed yet. Please run AI Engine analysis first.</p>
-                            )}
-                          </div>
 
-                          {/* Execute Final Resolution Button */}
-                          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                            {market.ai_resolution?.confidence > 0 ? (
-                              <Button
-                                onClick={() => {
-                                  setSelectedMarket(market);
-                                  setShowResolveDialog(true);
-                                }}
-                                className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
-                                size="lg"
-                              >
-                                <Gavel className="h-5 w-5" />
-                                Execute Final Resolution
-                              </Button>
-                            ) : (
-                              <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                                <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-yellow-600" />
-                                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                                  Please complete AI Engine analysis before executing final resolution
+                              {/* Adaptive Strategy Transparency Card */}
+                              <div className={`border-2 p-4 rounded-lg ${
+                                confidenceBreakdown.strategy === 'MARKET_VALIDATED' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                                confidenceBreakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' :
+                                'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                              }`}>
+                                <div className="flex items-start gap-3">
+                                  <div className="text-2xl mt-0.5">
+                                    {confidenceBreakdown.strategy === 'MARKET_VALIDATED' ? '✅' :
+                                     confidenceBreakdown.strategy === 'EVIDENCE_CONTRADICTS' ? '⚠️' :
+                                     '⚖️'}
+                                  </div>
+                                  <div className="flex-1">
+                                    <h5 className="font-semibold mb-1 flex items-center gap-2">
+                                      <span>Adaptive Strategy: </span>
+                                      <Badge variant={
+                                        confidenceBreakdown.strategy === 'MARKET_VALIDATED' ? 'default' :
+                                        confidenceBreakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'destructive' :
+                                        'outline'
+                                      }>
+                                        {confidenceBreakdown.strategy === 'MARKET_VALIDATED' ? 'MARKET VALIDATED' :
+                                         confidenceBreakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'EVIDENCE CONTRADICTS' :
+                                         'STANDARD (MIXED SIGNALS)'}
+                                      </Badge>
+                                    </h5>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                      {confidenceBreakdown.strategyExplanation}
+                                    </p>
+                                    <div className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
+                                      <div className="flex gap-4">
+                                        <span>Market Weight: <strong>{confidenceBreakdown.marketOddsWeight}%</strong></span>
+                                        <span>Evidence Weight: <strong>{confidenceBreakdown.evidenceWeight}%</strong></span>
+                                        <span>AI Weight: <strong>{confidenceBreakdown.apiWeight}%</strong></span>
+                                      </div>
+                                      {confidenceBreakdown.suspectManipulation && (
+                                        <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded text-red-800 dark:text-red-200">
+                                          🚨 <strong>Potential Manipulation Detected:</strong> High-quality evidence strongly contradicts market consensus
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Component Breakdown */}
+                              <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                <h5 className="font-medium mb-4 flex items-center gap-2">
+                                  <span>📊</span> Confidence Components
+                                </h5>
+
+                                {/* Market Odds - Adaptive Weight */}
+                                <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium">1. Market Odds</span>
+                                    <Badge variant="outline" className="text-xs">{confidenceBreakdown.marketOddsWeight}% Weight</Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                                      <div
+                                        className="bg-blue-600 h-3 rounded-full transition-all"
+                                        style={{ width: `${confidenceBreakdown.marketOddsDetails.confidenceFromOdds}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-bold w-16 text-right">{confidenceBreakdown.marketOddsDetails.confidenceFromOdds.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                    <div>Yes Odds: {market.yesOdds?.toFixed(2)}x → {(confidenceBreakdown.marketOddsDetails.yesImpliedProbability * 100).toFixed(1)}% implied</div>
+                                    <div>No Odds: {market.noOdds?.toFixed(2)}x → {(confidenceBreakdown.marketOddsDetails.noImpliedProbability * 100).toFixed(1)}% implied</div>
+                                    <div className="font-medium text-primary">Contributes: +{confidenceBreakdown.marketOddsContribution.toFixed(1)} points</div>
+                                  </div>
+                                </div>
+
+                                {/* Evidence - Adaptive Weight */}
+                                <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium">2. Evidence Analysis</span>
+                                    <Badge variant="outline" className="text-xs">{confidenceBreakdown.evidenceWeight}% Weight</Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                                      <div
+                                        className="bg-green-600 h-3 rounded-full transition-all"
+                                        style={{ width: `${confidenceBreakdown.evidenceScore}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-bold w-16 text-right">{confidenceBreakdown.evidenceScore.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                    <div>Total: {confidenceBreakdown.evidenceDetails.totalEvidences} | Accepted: {confidenceBreakdown.evidenceDetails.acceptedEvidences}</div>
+                                    <div>Legitimate: {confidenceBreakdown.evidenceDetails.legitimateCount} | Against Community: {confidenceBreakdown.evidenceDetails.againstCommunityCount}</div>
+                                    <div className="text-amber-600 dark:text-amber-400">⭐ High-Value (Both): {confidenceBreakdown.evidenceDetails.legitimateAndAgainstCommunity} (3x weight)</div>
+                                    <div>Supporting YES: {confidenceBreakdown.evidenceDetails.yesSupporting} | Supporting NO: {confidenceBreakdown.evidenceDetails.noSupporting}</div>
+                                    <div className="font-medium text-primary">Contributes: +{confidenceBreakdown.evidenceContribution.toFixed(1)} points</div>
+                                  </div>
+                                </div>
+
+                                {/* External API - Adaptive Weight */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium">3. External API</span>
+                                    <Badge variant="outline" className="text-xs">{confidenceBreakdown.apiWeight}% Weight</Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                                      <div
+                                        className="bg-purple-600 h-3 rounded-full transition-all"
+                                        style={{ width: `${confidenceBreakdown.apiScore}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-bold w-16 text-right">{confidenceBreakdown.apiScore.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                    <div>Recommendation: {confidenceBreakdown.apiDetails.recommendation}</div>
+                                    <div>Source: {confidenceBreakdown.apiDetails.sourceType || 'External API'}</div>
+                                    <div>Raw Confidence: {(market.ai_resolution.confidence * 100).toFixed(1)}%</div>
+                                    <div className="font-medium text-primary">Contributes: +{confidenceBreakdown.apiContribution.toFixed(1)} points</div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Execute Final Resolution Button */}
+                              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <Button
+                                  onClick={() => {
+                                    setSelectedMarket(market);
+                                    setShowResolveDialog(true);
+                                  }}
+                                  className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
+                                  size="lg"
+                                >
+                                  <Gavel className="h-5 w-5" />
+                                  Generate Final Resolution & Payout
+                                </Button>
+                                <p className="text-xs text-center text-gray-500 mt-2">
+                                  This will execute the resolution on-chain with {confidenceBreakdown.finalConfidence.toFixed(1)}% confidence
                                 </p>
                               </div>
-                            )}
-                          </div>
+                            </>
+                          ) : (
+                            <div className="text-center p-8 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                              <AlertTriangle className="h-8 w-8 mx-auto mb-3 text-yellow-600" />
+                              <h5 className="font-medium mb-2">Cannot Calculate Confidence</h5>
+                              <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+                                Please complete the following steps first:
+                              </p>
+                              <ul className="text-sm text-left max-w-md mx-auto space-y-2">
+                                {!market.yesOdds && <li className="flex items-center gap-2">❌ Market odds not available</li>}
+                                {!market.ai_resolution && <li className="flex items-center gap-2">❌ Run AI Engine analysis in the AI tab</li>}
+                                {market.evidences.filter(e => e.status === 'accepted').length === 0 && (
+                                  <li className="flex items-center gap-2">⚠️  No evidence accepted yet (optional but recommended)</li>
+                                )}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1542,90 +2371,228 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Resolution Execution Dialog */}
+      {/* Resolution Execution Dialog - Enhanced */}
       <AlertDialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
-        <AlertDialogContent className="max-w-lg">
+        <AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>Execute Market Resolution</AlertDialogTitle>
+            <AlertDialogTitle className="text-xl">⚖️ Execute Market Resolution</AlertDialogTitle>
             <AlertDialogDescription>
-              Review the AI analysis and execute the final resolution for this market.
+              Review the complete analysis breakdown before executing the final resolution.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
-          {selectedMarket && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                <h4 className="font-medium mb-2">{selectedMarket.claim}</h4>
-                {selectedMarket.ai_resolution && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">AI Recommendation:</span>
-                      <Badge variant={selectedMarket.ai_resolution.recommendation === 'YES' ? 'default' : 'destructive'}>
-                        {selectedMarket.ai_resolution.recommendation}
+
+          {selectedMarket && (() => {
+            const breakdown = confidenceBreakdowns[selectedMarket.id];
+            const hasLowConfidence = breakdown && breakdown.finalConfidence < 70;
+            const hasManipulationWarning = breakdown && breakdown.suspectManipulation;
+
+            return (
+              <div className="space-y-4">
+                {/* Market Question */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                  <h4 className="font-bold text-lg mb-1">{selectedMarket.claim}</h4>
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <span>Market ID: {selectedMarket.id}</span>
+                    <span>•</span>
+                    <span>Status: {selectedMarket.status}</span>
+                  </div>
+                </div>
+
+                {/* Final Confidence Score - Prominent */}
+                {breakdown && (
+                  <div className="border-2 border-primary p-5 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+                    <div className="text-center mb-4">
+                      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">Final Confidence</h3>
+                      <div className="text-5xl font-bold mb-2" style={{
+                        color: breakdown.finalConfidence >= 90 ? '#16a34a' :
+                               breakdown.finalConfidence >= 70 ? '#2563eb' :
+                               breakdown.finalConfidence >= 50 ? '#eab308' : '#dc2626'
+                      }}>
+                        {breakdown.finalConfidence.toFixed(1)}%
+                      </div>
+                      <Badge
+                        variant={breakdown.finalRecommendation === 'YES' ? 'default' : 'destructive'}
+                        className="text-base py-1.5 px-5 font-bold"
+                      >
+                        RESOLVE: {breakdown.finalRecommendation}
                       </Badge>
-                      {getConfidenceBadge(selectedMarket.ai_resolution.confidence)}
+                      <p className="text-xs text-gray-500 mt-2 font-medium">
+                        {finalConfidenceCalculator.getConfidenceLevel(breakdown.finalConfidence)} CONFIDENCE
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+
+                    {/* Quick Summary Grid */}
+                    <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-300 dark:border-gray-600">
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Market Odds</div>
+                        <div className="font-bold text-sm">{breakdown.marketOddsDetails.confidenceFromOdds.toFixed(0)}%</div>
+                        <div className="text-xs text-gray-500">({breakdown.marketOddsWeight}% weight)</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Evidence</div>
+                        <div className="font-bold text-sm">{breakdown.evidenceScore.toFixed(0)}%</div>
+                        <div className="text-xs text-gray-500">({breakdown.evidenceWeight}% weight)</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">AI Analysis</div>
+                        <div className="font-bold text-sm">{breakdown.apiScore.toFixed(0)}%</div>
+                        <div className="text-xs text-gray-500">({breakdown.apiWeight}% weight)</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Safety Warnings */}
+                {hasLowConfidence && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-700 p-4 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                      <div>
+                        <h5 className="font-bold text-amber-900 dark:text-amber-100 mb-1">⚠️ Low Confidence Warning</h5>
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          Confidence is below 70%. Consider reviewing evidence and market data before proceeding.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {hasManipulationWarning && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-400 dark:border-red-700 p-4 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                      <div>
+                        <h5 className="font-bold text-red-900 dark:text-red-100 mb-1">🚨 Potential Market Manipulation Detected</h5>
+                        <p className="text-sm text-red-800 dark:text-red-200">
+                          High-quality evidence strongly contradicts market consensus. Review carefully before executing.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Adaptive Strategy Explanation */}
+                {breakdown && (
+                  <div className={`border-2 p-3 rounded-lg ${
+                    breakdown.strategy === 'MARKET_VALIDATED' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                    breakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' :
+                    'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">STRATEGY:</span>
+                      <Badge variant={
+                        breakdown.strategy === 'MARKET_VALIDATED' ? 'default' :
+                        breakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'destructive' :
+                        'outline'
+                      }>
+                        {breakdown.strategy === 'MARKET_VALIDATED' ? 'MARKET VALIDATED' :
+                         breakdown.strategy === 'EVIDENCE_CONTRADICTS' ? 'EVIDENCE CONTRADICTS' :
+                         'STANDARD (MIXED SIGNALS)'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-700 dark:text-gray-300">
+                      {breakdown.strategyExplanation}
+                    </p>
+                  </div>
+                )}
+
+                {/* AI Reasoning */}
+                {selectedMarket.ai_resolution && (
+                  <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-300 dark:border-gray-600">
+                    <h5 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Brain className="h-4 w-4" />
+                      AI Analysis Reasoning
+                    </h5>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                       {selectedMarket.ai_resolution.reasoning}
                     </p>
                   </div>
                 )}
-              </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="checkbox" 
-                    id="overrideAI"
-                    checked={manualResolution.overrideAI}
-                    onChange={(e) => setManualResolution(prev => ({ ...prev, overrideAI: e.target.checked }))}
-                  />
-                  <Label htmlFor="overrideAI" className="text-sm">Override AI decision with manual resolution</Label>
+                {/* Override Section */}
+                <div className="space-y-3 pt-3 border-t border-gray-300 dark:border-gray-600">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="overrideAI"
+                      checked={manualResolution.overrideAI}
+                      onChange={(e) => setManualResolution(prev => ({ ...prev, overrideAI: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <Label htmlFor="overrideAI" className="text-sm font-medium">Override AI decision with manual resolution</Label>
+                  </div>
+
+                  {manualResolution.overrideAI && (
+                    <div className="space-y-3 pl-6 border-l-2 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-3 rounded">
+                      <div>
+                        <Label className="text-sm font-medium">Manual Outcome</Label>
+                        <Select
+                          value={manualResolution.outcome}
+                          onValueChange={(value: 'yes' | 'no') =>
+                            setManualResolution(prev => ({ ...prev, outcome: value }))
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select outcome" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="yes">✅ YES - Claim is True</SelectItem>
+                            <SelectItem value="no">❌ NO - Claim is False</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium">Reasoning for Override (Required)</Label>
+                        <Textarea
+                          placeholder="Explain why you're overriding the AI decision..."
+                          value={manualResolution.reasoning}
+                          onChange={(e) => setManualResolution(prev => ({ ...prev, reasoning: e.target.value }))}
+                          className="mt-1"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {manualResolution.overrideAI && (
-                  <div className="space-y-3 pl-6 border-l-2 border-gray-200 dark:border-gray-700">
-                    <div>
-                      <Label className="text-sm font-medium">Manual Outcome</Label>
-                      <Select 
-                        value={manualResolution.outcome} 
-                        onValueChange={(value: 'yes' | 'no') => 
-                          setManualResolution(prev => ({ ...prev, outcome: value }))
-                        }
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Select outcome" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="yes">YES - Claim is True</SelectItem>
-                          <SelectItem value="no">NO - Claim is False</SelectItem>
-                        </SelectContent>
-                      </Select>
+                {/* Pre-execution Checklist */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 p-4 rounded-lg">
+                  <h5 className="text-sm font-semibold mb-3 flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                    <CheckCircle className="h-4 w-4" />
+                    Pre-Execution Checklist
+                  </h5>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 bg-green-600 rounded-full" />
+                      <span>Market has expired and is ready for resolution</span>
                     </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium">Reasoning for Override</Label>
-                      <Textarea
-                        placeholder="Explain why you're overriding the AI decision..."
-                        value={manualResolution.reasoning}
-                        onChange={(e) => setManualResolution(prev => ({ ...prev, reasoning: e.target.value }))}
-                        className="mt-1"
-                        rows={3}
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 bg-green-600 rounded-full" />
+                      <span>All evidence has been reviewed and validated</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 bg-green-600 rounded-full" />
+                      <span>AI analysis has been completed</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-1.5 bg-green-600 rounded-full" />
+                      <span>Final confidence score has been calculated</span>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+          <AlertDialogFooter className="flex gap-2">
+            <AlertDialogCancel className="flex-1">Cancel</AlertDialogCancel>
+            <AlertDialogAction
               onClick={executeResolution}
-              className="bg-green-600 hover:bg-green-700"
+              className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold"
             >
-              Execute Resolution
+              <Gavel className="h-4 w-4 mr-2" />
+              Execute Resolution On-Chain
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

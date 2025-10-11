@@ -20,17 +20,6 @@ export class AnthropicClient {
     try {
       console.log('🔄 Attempting AI proxy call via backend...');
       console.log('🌐 Using API URL:', this.baseUrl);
-      console.log('🌐 Testing fetch capability...');
-      
-      // Test if fetch is working at all
-      try {
-        const testResponse = await fetch('https://httpbin.org/get');
-        console.log('✅ Basic fetch works, status:', testResponse.status);
-      } catch (fetchError) {
-        console.error('❌ Basic fetch failed:', fetchError);
-        throw new Error('Network connectivity issue detected');
-      }
-      
       console.log('🌐 Making request to:', this.baseUrl);
       const requestBody = {
         model: 'claude-3-haiku-20240307',
@@ -76,11 +65,11 @@ export class AnthropicClient {
     } catch (error) {
       console.error('❌ Anthropic API call failed:', error);
       console.error('❌ Error type:', error.constructor.name);
-      console.error('❌ Error message:', error.message);
+      console.error('❌ Error message:', error?.message || 'Unknown error');
       console.error('❌ Full error object:', error);
-      
-      console.log('🔄 Falling back to enhanced mock response...');
-      return this.generateEnhancedMockResponse(prompt);
+
+      // DO NOT fall back to mock responses - throw the error so the user knows the API is not configured
+      throw new Error(`Anthropic API connection failed: ${error?.message || 'Unknown error'}. Please check your API configuration.`);
     }
   }
 
@@ -281,35 +270,16 @@ Format as:
   }
 
   private parseAIResponse(text: string, originalPrompt: string): any {
-    const baseResponse = {
-      confidence: this.extractConfidence(text),
-      reasoning: this.extractReasoning(text),
-      timestamp: new Date().toISOString(),
-      rawResponse: text
+    console.log('🔍 [anthropicClient] Parsing AI response...');
+    console.log('📄 Response text:', text.substring(0, 1000));
+
+    // Return the raw text so aiAnalysisService can parse it with its format
+    // This allows the structured format (RECOMMENDATION:, CONFIDENCE:, etc.) to be preserved
+    return {
+      rawResponse: text,
+      content: text,
+      timestamp: new Date().toISOString()
     };
-
-    if (originalPrompt.toLowerCase().includes('analyze market') || originalPrompt.toLowerCase().includes('market evidence')) {
-      return {
-        ...baseResponse,
-        keyFactors: this.extractKeyFactors(text)
-      };
-    } else if (originalPrompt.toLowerCase().includes('validate') || originalPrompt.toLowerCase().includes('resolution')) {
-      return {
-        ...baseResponse,
-        culturalContext: this.extractCulturalContext(text),
-        languageSupport: this.extractLanguageSupport(text)
-      };
-    } else if (originalPrompt.toLowerCase().includes('dispute')) {
-      return {
-        ...baseResponse,
-        successProbability: this.extractSuccessProbability(text),
-        recommendedType: this.extractRecommendedType(text),
-        typeReasoning: this.extractTypeReasoning(text),
-        suggestions: this.extractSuggestions(text)
-      };
-    }
-
-    return baseResponse;
   }
 
   private extractConfidence(text: string): number {

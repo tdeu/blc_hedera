@@ -1,3 +1,5 @@
+import { RESOLUTION_CONFIG } from '../config/resolutionConfig';
+
 interface NewsApiSource {
   id: string;
   name: string;
@@ -136,22 +138,94 @@ export class NewsApiService {
 
   /**
    * Extract search keywords from market topic for better news matching
+   * Returns a smart query string optimized for NewsAPI
+   * SUPPORTS MULTIPLE LANGUAGES - extracts entities regardless of language
    */
-  private extractSearchKeywords(marketTopic: string): string[] {
-    // Remove common prediction market words
-    const cleaned = marketTopic
-      .toLowerCase()
-      .replace(/\b(will|be|the|is|are|was|were|on|in|at|by|for|to|from|with|and|or|but|before|after|during|until|end|of|a|an)\b/g, ' ')
-      .replace(/[^\w\s]/g, ' ')
+  private extractSearchKeywords(marketTopic: string): string {
+    console.log(`🔍 Original market topic: "${marketTopic}"`);
+
+    const topicLower = marketTopic.toLowerCase();
+
+    // STEP 1: Extract entities (case-insensitive, language-agnostic)
+    const cryptoTerms = ['bitcoin', 'btc', 'ethereum', 'eth', 'dogecoin', 'doge', 'cardano', 'ada', 'solana', 'sol', 'ripple', 'xrp'];
+    const companyTerms = ['apple', 'google', 'microsoft', 'amazon', 'tesla', 'meta', 'nvidia', 'spacex'];
+    const peopleTerms = ['trump', 'biden', 'musk', 'bezos', 'gates', 'zuckerberg'];
+
+    const detectedEntities: string[] = [];
+
+    // Detect crypto entities
+    cryptoTerms.forEach(term => {
+      if (topicLower.includes(term)) {
+        detectedEntities.push(term);
+      }
+    });
+
+    // Detect company entities
+    companyTerms.forEach(term => {
+      if (topicLower.includes(term)) {
+        detectedEntities.push(term);
+      }
+    });
+
+    // Detect people entities
+    peopleTerms.forEach(term => {
+      if (topicLower.includes(term)) {
+        detectedEntities.push(term);
+      }
+    });
+
+    // STEP 2: If we found entities, use entity-based search (works for any language!)
+    if (detectedEntities.length > 0) {
+      console.log(`🎯 Detected entities: ${detectedEntities.join(', ')}`);
+
+      // Build query based on entities
+      let query = detectedEntities.join(' OR '); // Use OR for multiple entities
+
+      // Add context keywords
+      const hasCrypto = cryptoTerms.some(t => detectedEntities.includes(t));
+      const hasCompany = companyTerms.some(t => detectedEntities.includes(t));
+
+      if (hasCrypto) {
+        // Add price/prediction context for crypto
+        query += ' AND (price OR prediction OR forecast OR analysis)';
+      } else if (hasCompany) {
+        // Add stock/earnings context for companies
+        query += ' AND (stock OR earnings OR shares OR market)';
+      }
+
+      console.log(`✅ Entity-based query (multi-language): "${query}"`);
+      return query;
+    }
+
+    // STEP 3: Fallback - remove common words in multiple languages
+    const stopWords = [
+      // English
+      'will', 'be', 'the', 'is', 'are', 'was', 'were', 'on', 'in', 'at', 'by', 'for', 'to', 'from', 'with', 'and', 'or', 'but', 'of', 'a', 'an',
+      // French
+      'sera', 'quel', 'quelle', 'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'ou', 'mais', 'dans', 'sur', 'pour', 'avec', 'à', 'au',
+      // Spanish
+      'será', 'cuál', 'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'y', 'o', 'pero', 'en', 'con', 'por', 'para',
+      // Time words
+      'this', 'next', 'last', 'week', 'month', 'year', 'day', 'today', 'tomorrow', 'mois', 'année', 'jour', 'fin', 'end'
+    ];
+
+    const cleaned = topicLower
+      .replace(/[^\w\s$]/g, ' ') // Keep $ for crypto symbols
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Extract meaningful terms
-    const terms = cleaned.split(' ')
-      .filter(term => term.length > 2)
-      .slice(0, 5); // Limit to most important terms
+    const words = cleaned.split(' ')
+      .filter(term => term.length > 3 && !stopWords.includes(term))
+      .slice(0, 3);
 
-    return terms;
+    if (words.length === 0) {
+      console.warn('⚠️  Could not extract meaningful search terms');
+      return marketTopic.substring(0, 50); // Use first 50 chars as fallback
+    }
+
+    const query = words.join(' AND ');
+    console.log(`✅ Keyword-based query: "${query}"`);
+    return query;
   }
 
   /**
@@ -171,8 +245,10 @@ export class NewsApiService {
       console.log(`🔍 Searching NewsAPI for: "${marketTopic}"`);
       console.log(`📰 Selected sources: ${selectedSources.join(', ')}`);
 
-      const keywords = this.extractSearchKeywords(marketTopic);
-      const query = keywords.join(' OR ');
+      const query = this.extractSearchKeywords(marketTopic);
+
+      // Detect African country for targeted search
+      const africanCountry = this.detectAfricanCountry(marketTopic);
 
       // Build API URL
       const params = new URLSearchParams({
@@ -180,11 +256,16 @@ export class NewsApiService {
         apiKey: this.apiKey,
         language: 'en',
         sortBy: 'relevancy',
-        pageSize: Math.min(maxResults, 100).toString() // NewsAPI max is 100
+        pageSize: Math.min(maxResults * 2, 100).toString() // Fetch 2x to filter, NewsAPI max is 100
       });
 
-      // Add sources if specified (max 20 sources per request)
-      if (selectedSources.length > 0) {
+      // If African country detected, use country filter instead of sources
+      // (NewsAPI doesn't allow both sources and country parameters together)
+      if (africanCountry) {
+        console.log(`🌍 Using African country filter: ${africanCountry}`);
+        params.append('country', africanCountry);
+      } else if (selectedSources.length > 0) {
+        // Add sources if specified (max 20 sources per request)
         const sourcesToUse = selectedSources.slice(0, 20);
         params.append('sources', sourcesToUse.join(','));
       }
@@ -211,24 +292,36 @@ export class NewsApiService {
           article.url &&
           !article.title.toLowerCase().includes('[removed]')
         )
-        .map((article, index) => ({
-          id: `newsapi_${Date.now()}_${index}`,
-          source: article.source.name || 'Unknown Source',
-          url: article.url,
-          title: article.title,
-          content: article.description + (article.content ? ' ' + article.content : ''),
-          publishedAt: new Date(article.publishedAt),
-          author: article.author || undefined,
-          imageUrl: article.urlToImage || undefined,
-          relevanceScore: this.calculateRelevanceScore(
+        .map((article, index) => {
+          const relevanceScore = this.calculateRelevanceScore(
             article.title + ' ' + article.description,
             marketTopic
-          )
-        }))
+          );
+          return {
+            id: `newsapi_${Date.now()}_${index}`,
+            source: article.source.name || 'Unknown Source',
+            url: article.url,
+            title: article.title,
+            content: article.description + (article.content ? ' ' + article.content : ''),
+            publishedAt: new Date(article.publishedAt),
+            author: article.author || undefined,
+            imageUrl: article.urlToImage || undefined,
+            relevanceScore
+          };
+        })
+        .filter(article => {
+          // STRICT FILTERING: Only keep articles with relevance > 0.3
+          if ((article.relevanceScore || 0) < 0.3) {
+            console.log(`🚫 Filtered out low relevance (${(article.relevanceScore || 0).toFixed(2)}): "${article.title}"`);
+            return false;
+          }
+          console.log(`✅ Keeping relevant (${(article.relevanceScore || 0).toFixed(2)}): "${article.title}"`);
+          return true;
+        })
         .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0)) // Sort by relevance
         .slice(0, maxResults); // Limit results
 
-      console.log(`📊 Processed ${processedArticles.length} relevant articles`);
+      console.log(`📊 Kept ${processedArticles.length} highly relevant articles out of ${data.articles.length} total`);
 
       return processedArticles;
 
@@ -240,24 +333,126 @@ export class NewsApiService {
 
   /**
    * Calculate relevance score based on keyword matching
+   * Now much stricter - requires main entity to be present
    */
   private calculateRelevanceScore(text: string, marketTopic: string): number {
-    const keywords = this.extractSearchKeywords(marketTopic);
     const textLower = text.toLowerCase();
+    const topicLower = marketTopic.toLowerCase();
 
-    let score = 0;
-    let totalWeight = 0;
+    // Extract main entity/subject from the market topic
+    const mainEntities = this.extractMainEntities(topicLower);
 
-    keywords.forEach((keyword, index) => {
-      const weight = keywords.length - index; // Earlier keywords are more important
-      totalWeight += weight;
+    // STRICT RULE: Article MUST contain at least one main entity
+    const hasMainEntity = mainEntities.some(entity => textLower.includes(entity));
+    if (!hasMainEntity) {
+      console.log(`❌ Article rejected: No main entity found. Need one of: ${mainEntities.join(', ')}`);
+      return 0; // Complete rejection if main entity not present
+    }
 
-      if (textLower.includes(keyword.toLowerCase())) {
-        score += weight;
+    // Calculate how many main entities are present
+    const matchedEntities = mainEntities.filter(entity => textLower.includes(entity));
+    let score = matchedEntities.length / mainEntities.length;
+
+    // Boost score for exact phrase matches
+    const phrases = this.extractPhrases(topicLower);
+    phrases.forEach(phrase => {
+      if (textLower.includes(phrase)) {
+        score += 0.3; // Significant boost for phrase matches
       }
     });
 
-    return totalWeight > 0 ? score / totalWeight : 0;
+    // Penalize if text mentions completely unrelated topics
+    const unrelatedTopics = ['gaza', 'israel', 'palestine', 'motogp', 'formula', 'racing', 'nfl', 'nba'];
+    const topicContext = this.detectTopicContext(topicLower);
+
+    // If article is about sports but topic isn't (or vice versa), penalize
+    unrelatedTopics.forEach(topic => {
+      if (textLower.includes(topic) && !topicLower.includes(topic) && !topicContext.includes(topic)) {
+        score *= 0.3; // Heavy penalty for off-topic content
+      }
+    });
+
+    return Math.min(score, 1.0); // Cap at 1.0
+  }
+
+  /**
+   * Extract main entities (most important nouns/subjects) from topic
+   */
+  private extractMainEntities(topic: string): string[] {
+    const entities: string[] = [];
+
+    // Known entity patterns
+    const cryptoPatterns = ['bitcoin', 'btc', 'ethereum', 'eth', 'dogecoin', 'doge', 'cardano', 'ada', 'solana', 'sol'];
+    const companyPatterns = ['apple', 'google', 'microsoft', 'amazon', 'tesla', 'meta', 'nvidia'];
+    const peoplePatterns = ['trump', 'biden', 'musk', 'bezos', 'gates'];
+
+    // Extract entities
+    cryptoPatterns.forEach(pattern => {
+      if (topic.includes(pattern)) entities.push(pattern);
+    });
+    companyPatterns.forEach(pattern => {
+      if (topic.includes(pattern)) entities.push(pattern);
+    });
+    peoplePatterns.forEach(pattern => {
+      if (topic.includes(pattern)) entities.push(pattern);
+    });
+
+    // If no known entities, use first 2-3 important words
+    if (entities.length === 0) {
+      const words = topic
+        .replace(/\b(will|be|the|is|are|was|were|on|in|at|by|for|to|from|with|and|or|but|of|a|an|this|next|week|month|year)\b/g, ' ')
+        .split(' ')
+        .filter(w => w.length > 3);
+      entities.push(...words.slice(0, 2));
+    }
+
+    return entities;
+  }
+
+  /**
+   * Detect if market is about an African country
+   * Returns NewsAPI country code if detected, null otherwise
+   */
+  private detectAfricanCountry(marketTopic: string): string | null {
+    const topicLower = marketTopic.toLowerCase();
+
+    for (const [keyword, countryCode] of Object.entries(RESOLUTION_CONFIG.africanCountries)) {
+      if (topicLower.includes(keyword)) {
+        console.log(`🌍 Detected African country: ${keyword} → ${countryCode}`);
+        return countryCode;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract meaningful phrases (2-3 word combinations)
+   */
+  private extractPhrases(topic: string): string[] {
+    const words = topic.split(' ').filter(w => w.length > 2);
+    const phrases: string[] = [];
+
+    // Create 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      phrases.push(`${words[i]} ${words[i + 1]}`);
+    }
+
+    return phrases;
+  }
+
+  /**
+   * Detect topic context (crypto, sports, politics, etc.)
+   */
+  private detectTopicContext(topic: string): string[] {
+    const contexts: string[] = [];
+
+    if (/bitcoin|ethereum|crypto|dogecoin|blockchain/.test(topic)) contexts.push('crypto');
+    if (/nfl|nba|mlb|soccer|football|basketball/.test(topic)) contexts.push('sports');
+    if (/trump|biden|election|congress|senate/.test(topic)) contexts.push('politics');
+    if (/stock|shares|nasdaq|dow|s&p/.test(topic)) contexts.push('finance');
+
+    return contexts;
   }
 
   /**

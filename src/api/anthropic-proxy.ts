@@ -12,7 +12,6 @@ dotenv.config({ override: true });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const PROVIDER = (process.env.AI_PROVIDER || 'anthropic').toLowerCase();
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(process.cwd(), 'uploads', 'market-images');
@@ -58,47 +57,14 @@ app.use(express.json());
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Unified AI proxy endpoint (keeps same URL for existing clients)
+// Anthropic AI proxy endpoint
 app.post('/api/anthropic-proxy', async (req, res) => {
   try {
-    console.log('Backend received request:', req.body);
+    console.log('🤖 Anthropic API request received');
 
     const model = req.body?.model;
     const messages = req.body?.messages || [];
     const maxTokens = req.body?.max_tokens || req.body?.maxTokens || 1000;
-
-    if (PROVIDER === 'openai') {
-      console.log('AI provider:', PROVIDER);
-      console.log('OPENAI_API_KEY present?', !!process.env.OPENAI_API_KEY);
-      console.log('VITE_OPENAI_API_KEY present?', !!process.env.VITE_OPENAI_API_KEY);
-      const openaiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
-      if (!openaiKey) {
-        console.error('❌ OPENAI_API_KEY not found in environment variables');
-        return res.status(500).json({ error: 'OpenAI API key not configured' });
-      }
-
-      // Force OpenAI model from env or default; ignore inbound Anthropic model name
-      const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiKey}`
-        },
-        body: JSON.stringify({ model: openaiModel, messages, temperature: 0.2, max_tokens: maxTokens })
-      });
-
-      console.log('OpenAI API response status:', response.status);
-      const data = await response.json();
-      if (!response.ok) {
-        console.error('OpenAI API error:', data);
-        return res.status(response.status).json({ error: data });
-      }
-
-      const text = data?.choices?.[0]?.message?.content || '';
-      return res.json({ content: [{ text }] });
-    }
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) {
@@ -116,17 +82,17 @@ app.post('/api/anthropic-proxy', async (req, res) => {
       body: JSON.stringify({ model: model || 'claude-3-haiku-20240307', max_tokens: maxTokens, messages })
     });
 
-    console.log('Anthropic API response status:', response.status);
+    console.log('📡 Anthropic API response status:', response.status);
     const data = await response.json();
     if (!response.ok) {
-      console.error('Anthropic API error:', data);
+      console.error('❌ Anthropic API error:', data);
       return res.status(response.status).json({ error: data });
     }
 
-    console.log('Sending response to frontend:', JSON.stringify(data, null, 2));
+    console.log('✅ Sending response to frontend');
     return res.json(data);
   } catch (error) {
-    console.error('Anthropic proxy error:', error);
+    console.error('❌ Anthropic proxy error:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
     });
@@ -160,15 +126,14 @@ app.post('/api/upload-market-image', upload.single('image'), (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', provider: PROVIDER, timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', provider: 'anthropic', timestamp: new Date().toISOString() });
 });
 
 // Env check (no secrets exposed)
 app.get('/env-check', (req, res) => {
   res.json({
-    provider: PROVIDER,
-    hasOpenAI: !!process.env.OPENAI_API_KEY,
-    hasViteOpenAI: !!process.env.VITE_OPENAI_API_KEY
+    provider: 'anthropic',
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY
   });
 });
 
