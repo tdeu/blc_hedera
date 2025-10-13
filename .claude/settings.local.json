@@ -90,7 +90,10 @@
       "Bash(if [ -f scripts/add-evidence-validation-columns.ts ])",
       "Bash(then echo \"File exists\")",
       "Bash(else echo \"File does not exist\")",
-      "Bash(AI_PROVIDER=openai PORT=3001 npx tsx src/api/anthropic-proxy.ts)"
+      "Bash(AI_PROVIDER=openai PORT=3001 npx tsx src/api/anthropic-proxy.ts)",
+      "WebSearch",
+      "Bash(del test-perplexity.js)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []

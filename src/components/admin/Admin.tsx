@@ -6,7 +6,6 @@ import AdminLayout from './AdminLayout';
 import AdminOverview from './AdminDashboard';
 import MarketApproval from './MarketApproval';
 import EvidenceResolutionPanel from './EvidenceResolutionPanel';
-import PredictionAnalysisPanel from './PredictionAnalysisPanel';
 import TreasuryDashboard from './TreasuryDashboard';
 import { adminService } from '../../utils/adminService';
 import { useUser } from '../../contexts/UserContext';
@@ -159,16 +158,6 @@ const Admin: React.FC<AdminProps> = ({
           />
         );
 
-      case 'predictions':
-        return (
-          <PredictionAnalysisPanel
-            userProfile={{
-              walletAddress: walletConnection.address,
-              displayName: profile?.displayName
-            }}
-          />
-        );
-
       case 'evidence':
         return (
           <EvidenceResolutionPanel
@@ -205,27 +194,7 @@ const Admin: React.FC<AdminProps> = ({
             </CardContent>
           </Card>
         );
-      
-      case 'reports':
-        return (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <h3 className="text-lg font-semibold mb-2">Reports & Flags</h3>
-              <p className="text-gray-600 dark:text-gray-400">Coming soon...</p>
-            </CardContent>
-          </Card>
-        );
-      
-      case 'settings':
-        return (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <h3 className="text-lg font-semibold mb-2">Admin Settings</h3>
-              <p className="text-gray-600 dark:text-gray-400">Coming soon...</p>
-            </CardContent>
-          </Card>
-        );
-      
+
       default:
         return <AdminOverview userProfile={{ walletAddress: walletConnection.address }} />;
     }

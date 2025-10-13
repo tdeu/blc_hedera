@@ -16,7 +16,8 @@ contract PredictionMarket {
         Open,
         PendingResolution, // 🆕 Marché fermé, en attente résolution finale
         Resolved,
-        Canceled
+        Canceled,
+        Refunded // 🆕 Marché refunded (confidence never reached threshold)
     }
 
     enum Outcome {
@@ -38,6 +39,7 @@ contract PredictionMarket {
         uint256 confidenceScore,
         uint256 timestamp
     );
+    event MarketRefunded(uint256 timestamp, uint256 totalRefunded);
     struct MarketInfo {
         bytes32 id;
         string question;
@@ -245,6 +247,49 @@ contract PredictionMarket {
         factory.rewardCreator(marketInfo.creator);
 
         emit FinalResolution(outcome, _confidenceScore, block.timestamp);
+    }
+
+    // 🆕 Refund all bets (for markets that never reached confidence threshold)
+    /**
+     * @dev Refund all users their collateral proportionally
+     * Only callable when market is PendingResolution and confidence never reached threshold
+     */
+    function refundAllBets() external onlyAdmin {
+        require(
+            marketInfo.status == MarketStatus.PendingResolution ||
+            marketInfo.status == MarketStatus.Open,
+            "Can only refund pending resolution or open markets"
+        );
+
+        marketInfo.status = MarketStatus.Refunded;
+
+        // Users will call claimRefund() individually to get their collateral back
+        emit MarketRefunded(block.timestamp, reserve);
+    }
+
+    /**
+     * @dev Claim refund for a user's bets
+     * Called by individual users after market has been refunded
+     */
+    function claimRefund() external {
+        require(marketInfo.status == MarketStatus.Refunded, "Market not refunded");
+
+        uint256 userYesShares = yesBalance[msg.sender];
+        uint256 userNoShares = noBalance[msg.sender];
+        uint256 totalUserShares = userYesShares + userNoShares;
+
+        require(totalUserShares > 0, "No shares to refund");
+
+        // Clear balances first (reentrancy protection)
+        yesBalance[msg.sender] = 0;
+        noBalance[msg.sender] = 0;
+
+        // Calculate proportional refund based on total shares
+        uint256 totalShares = yesShares + noShares;
+        uint256 refundAmount = (totalUserShares * reserve) / totalShares;
+
+        require(refundAmount > 0, "No refund available");
+        require(collateral.transfer(msg.sender, refundAmount), "Refund transfer failed");
     }
 
     // DEPRECATED: Utiliser preliminaryResolve() puis finalResolve()

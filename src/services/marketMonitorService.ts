@@ -137,34 +137,31 @@ export class MarketMonitorService {
 
   /**
    * Handle a single expired market - start evidence submission period
+   * NEW: Markets stay disputable indefinitely until 80% confidence threshold is met
    */
   private async handleExpiredMarket(market: MarketInfo): Promise<void> {
     console.log(`⏰ Processing expired market: ${market.id} - "${market.question}"`);
 
     try {
-      // Update market status to 'expired' first (allows evidence submission)
-      const evidencePeriodHours = 168; // 168 hours (7 days) for evidence submission
-      const evidencePeriodEnd = new Date(Date.now() + evidencePeriodHours * 60 * 60 * 1000);
+      const now = new Date();
 
-      await this.supabaseService.updateMarketStatus(market.id, 'expired', {
-        dispute_period_end: evidencePeriodEnd.toISOString(),
-        expired_at: new Date().toISOString()
+      // Update market status to 'disputable' (allows evidence submission)
+      // Set evidence_period_start to track when evidence collection began
+      await this.supabaseService.updateMarketStatus(market.id, 'disputable', {
+        evidence_period_start: now.toISOString(),
+        expired_at: now.toISOString()
       });
 
-      console.log(`📋 Market ${market.id} status changed to 'expired'. Evidence collection period: 7 days`);
-      console.log(`⏰ Evidence period ends: ${evidencePeriodEnd.toISOString()}`);
+      console.log(`📋 Market ${market.id} status changed to 'disputable'`);
+      console.log(`📊 Evidence collection started: ${now.toISOString()}`);
+      console.log(`⏱️  Evidence period: Indefinite (minimum 7 days, until 80% confidence reached)`);
+      console.log(`🎯 Resolution threshold: 80% confidence minimum`);
+      console.log(`⚠️  Refund option available after 100 days if confidence never reaches 80%`);
 
-      // Schedule resolution analysis job AFTER evidence period ends
-      const resolutionJob: ResolutionJob = {
-        marketId: market.id,
-        contractAddress: market.contractAddress,
-        scheduledAt: evidencePeriodEnd, // Important: Schedule for AFTER evidence period
-        status: 'pending',
-        attempts: 0
-      };
-
-      this.resolutionQueue.push(resolutionJob);
-      console.log(`🤖 AI resolution scheduled for: ${evidencePeriodEnd.toISOString()}`);
+      // NEW BEHAVIOR: Do NOT automatically schedule resolution
+      // Markets will stay disputable until admin manually triggers resolution
+      // when confidence >= 80% (after minimum 7 days)
+      console.log(`✋ No automatic resolution scheduled - admin will manually trigger when ready`);
 
     } catch (error) {
       console.error(`❌ Error handling expired market ${market.id}:`, error);

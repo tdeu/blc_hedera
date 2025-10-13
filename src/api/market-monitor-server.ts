@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { MarketMonitorService } from '../services/marketMonitorService';
+import { getFinalResolutionExecutor } from '../services/finalResolutionExecutor';
 
 // Load environment variables
 dotenv.config();
@@ -17,8 +18,18 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Initialize market monitor service
+// Initialize services
 const marketMonitor = new MarketMonitorService();
+
+// Initialize final resolution executor
+// DRY_RUN mode can be controlled via environment variable
+const isDryRun = process.env.FINAL_RESOLUTION_DRY_RUN === 'true';
+const finalResolutionExecutor = getFinalResolutionExecutor(isDryRun);
+
+if (isDryRun) {
+  console.log('⚠️ Final Resolution Executor running in DRY-RUN mode');
+  console.log('   Set FINAL_RESOLUTION_DRY_RUN=false in .env to enable live mode');
+}
 
 // API Routes
 app.get('/health', (req, res) => {
@@ -41,12 +52,48 @@ app.get('/status', (req, res) => {
 
 app.post('/run-once', async (req, res) => {
   try {
-    const status = await marketMonitor.runOnce();
-    res.json({ success: true, status });
+    // Run market monitor (preliminary resolution)
+    const monitorStatus = await marketMonitor.runOnce();
+
+    // Run final resolution executor (separate, non-blocking)
+    const finalResolutionResults = await finalResolutionExecutor.execute();
+
+    res.json({
+      success: true,
+      monitor: monitorStatus,
+      finalResolution: {
+        executed: finalResolutionResults.length,
+        successful: finalResolutionResults.filter(r => r.success).length,
+        failed: finalResolutionResults.filter(r => !r.success).length,
+        results: finalResolutionResults
+      }
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to run monitor once'
+    });
+  }
+});
+
+// New endpoint: Run only final resolution executor
+app.post('/run-final-resolution', async (req, res) => {
+  try {
+    console.log('🔍 Manual final resolution execution requested...');
+    const results = await finalResolutionExecutor.execute();
+
+    res.json({
+      success: true,
+      executed: results.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      mode: finalResolutionExecutor.getStatus(),
+      results: results
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to run final resolution'
     });
   }
 });
@@ -92,6 +139,10 @@ app.listen(PORT, () => {
   // Start market monitoring automatically
   console.log(`🔄 Auto-starting market monitor service...`);
   marketMonitor.start();
+
+  // Log final resolution executor status
+  console.log(`⚖️ Final Resolution Executor: ${finalResolutionExecutor.getStatus()} mode`);
+  console.log(`   To run final resolution manually: POST http://localhost:${PORT}/run-final-resolution`);
 });
 
 // Graceful shutdown

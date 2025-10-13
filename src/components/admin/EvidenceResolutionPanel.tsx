@@ -76,6 +76,9 @@ interface MarketWithEvidence {
   auto_detected_type?: DataSourceType;
   classification_confidence?: number;
   keywords_detected?: string[];
+  // Timestamps for tracking when analysis was last run
+  ai_analysis_timestamp?: string;
+  aggregation_timestamp?: string;
 }
 
 interface Evidence {
@@ -165,11 +168,23 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         // Only calculate if market has required data
         if (market.ai_resolution && market.yesOdds && market.noOdds) {
           try {
+            // Normalize recommendation to ensure consistent format
+            const rawRecommendation = String(market.ai_resolution.recommendation).toUpperCase();
+            let normalizedRecommendation: 'YES' | 'NO' | 'INCONCLUSIVE';
+
+            if (rawRecommendation === 'YES' || rawRecommendation === 'TRUE') {
+              normalizedRecommendation = 'YES';
+            } else if (rawRecommendation === 'NO' || rawRecommendation === 'FALSE') {
+              normalizedRecommendation = 'NO';
+            } else {
+              normalizedRecommendation = 'INCONCLUSIVE';
+            }
+
             const breakdown = await finalConfidenceCalculator.calculate({
               yesOdds: market.yesOdds,
               noOdds: market.noOdds,
               evidences: market.evidences || [],
-              aiRecommendation: market.ai_resolution.recommendation as 'YES' | 'NO' | 'NEUTRAL' | 'INCONCLUSIVE',
+              aiRecommendation: normalizedRecommendation,
               aiConfidence: market.ai_resolution.confidence,
               apiSourceType: market.ai_resolution.sourceType || market.ai_resolution.dataSourceUsed
             });
@@ -323,8 +338,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
 
         console.log(`✅ Found ${evidences.length} evidence items for ${market.claim}`);
 
-        // Step 3: Get existing AI resolution if any
-        let aiResolution = {
+        // Step 3: Get existing AI resolution if any (load from persisted data)
+        let aiResolution: any = {
           recommendation: 'PENDING',
           confidence: 0.0,
           reasoning: 'Awaiting admin trigger for AI analysis',
@@ -333,20 +348,51 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
 
         if (market.resolution_data) {
           try {
-            const resData = typeof market.resolution_data === 'string' 
-              ? JSON.parse(market.resolution_data) 
+            const resData = typeof market.resolution_data === 'string'
+              ? JSON.parse(market.resolution_data)
               : market.resolution_data;
-            
+
             if (resData.recommendation || resData.outcome) {
+              // Load ALL persisted AI resolution fields
               aiResolution = {
                 recommendation: resData.recommendation || resData.outcome?.toUpperCase() || 'PENDING',
                 confidence: resData.confidence || 0.5,
                 reasoning: resData.reasoning || resData.analysis || 'AI analysis completed',
-                timestamp: resData.timestamp || market.updated_at || new Date().toISOString()
+                timestamp: resData.timestamp || market.updated_at || new Date().toISOString(),
+                keyFactors: resData.keyFactors || [],
+                sourceAnalysis: resData.sourceAnalysis || {},
+                scrapedContent: resData.scrapedContent || [],
+                processingTimeMs: resData.processingTimeMs,
+                sourceArticles: resData.sourceArticles || [],
+                dataSourceUsed: resData.dataSourceUsed,
+                sourceType: resData.sourceType,
+                extractedEntities: resData.extractedEntities,
+                usedHederaAgent: resData.usedHederaAgent || false,
+                searchQueries: resData.searchQueries || [],
+                finalConfidence: resData.finalConfidence
               };
+              console.log(`📥 Loaded persisted AI resolution for market ${market.id}`);
             }
           } catch (parseError) {
             console.warn('⚠️ Failed to parse resolution data:', parseError);
+          }
+        }
+
+        // Step 4: Load persisted aggregation results if any
+        if (market.aggregation_results) {
+          try {
+            const aggData = typeof market.aggregation_results === 'string'
+              ? JSON.parse(market.aggregation_results)
+              : market.aggregation_results;
+
+            // Store in aggregation state
+            setAggregationResults(prev => ({
+              ...prev,
+              [market.id]: aggData
+            }));
+            console.log(`📥 Loaded persisted aggregation results for market ${market.id}`);
+          } catch (parseError) {
+            console.warn('⚠️ Failed to parse aggregation results:', parseError);
           }
         }
 
@@ -367,7 +413,10 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
           admin_override_classification: market.admin_override_classification || false,
           auto_detected_type: market.auto_detected_type || undefined,
           classification_confidence: market.classification_confidence || undefined,
-          keywords_detected: market.keywords_detected || undefined
+          keywords_detected: market.keywords_detected || undefined,
+          // Timestamps
+          ai_analysis_timestamp: market.ai_analysis_timestamp,
+          aggregation_timestamp: market.aggregation_timestamp
         };
 
         marketsWithEvidence.push(marketWithEvidence);
@@ -428,46 +477,94 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       let sourceType = '';
 
       // ===== STEP 3: Fetch Articles Using Entity-Based Queries =====
-      if (dataSourceType === 'NEWS') {
-        toast.info(`📰 Searching ${selectedNewsSources.length} news sources...`);
-        console.log(`📰 Selected news sources: ${selectedNewsSources.join(', ')}`);
+      if (dataSourceType === 'HISTORICAL') {
+        // Use Wikipedia for HISTORICAL data source
+        toast.info(`📚 Searching Wikipedia for historical content...`);
 
-        // Search with each query and combine results
+        // Search with entity-based queries
         let allArticles: any[] = [];
-        for (const query of searchQueries.slice(0, 3)) { // Use top 3 queries
-          console.log(`   🔍 Searching: "${query}"`);
-          const articles = await newsApiService.searchNews(
-            query,
-            selectedNewsSources,
-            5 // Get 5 articles per query
-          );
+        for (const query of searchQueries.slice(0, 3)) {
+          console.log(`   🔍 Wikipedia search: "${query}"`);
+          const articles = await wikipediaService.searchWikipedia(query, 3);
           allArticles = [...allArticles, ...articles];
         }
 
-        // Deduplicate by URL and take top 15
+        // Deduplicate and take top 10
         const uniqueArticles = Array.from(
           new Map(allArticles.map(a => [a.url, a])).values()
-        ).slice(0, 15);
+        ).slice(0, 10);
 
         if (uniqueArticles.length === 0) {
-          // Fallback: try with main subject only
-          toast.warning('No results from entity queries. Trying main subject...');
-          const fallbackArticles = await newsApiService.searchNews(
-            entities.mainSubject,
-            selectedNewsSources.slice(0, 5),
-            10
-          );
-          if (fallbackArticles.length === 0) {
-            throw new Error('No relevant news articles found for this topic');
-          }
-          sourceArticles = fallbackArticles;
-        } else {
-          sourceArticles = uniqueArticles;
+          throw new Error(`No relevant Wikipedia articles found for this historical topic`);
         }
-        sourceType = 'NewsAPI';
+
+        sourceArticles = uniqueArticles;
+        sourceType = 'Wikipedia';
+
+      } else if (['NEWS', 'ACADEMIC', 'GENERAL_KNOWLEDGE'].includes(dataSourceType)) {
+        // Use Perplexity AI for NEWS, ACADEMIC, and GENERAL_KNOWLEDGE
+        const sourceLabel = dataSourceType === 'NEWS' ? 'news' :
+                           dataSourceType === 'ACADEMIC' ? 'academic research' :
+                           'general knowledge';
+        toast.info(`🔮 Searching with Perplexity AI for ${sourceLabel}...`);
+
+        console.log(`🔮 Using Perplexity AI for ${dataSourceType}`);
+
+        try {
+          // Import Perplexity service
+          const { perplexityService } = await import('../../services/perplexityService');
+
+          // Perform AI-powered search with real-time web access
+          const perplexityResult = await perplexityService.search(
+            market.claim,
+            dataSourceType as 'NEWS' | 'ACADEMIC' | 'GENERAL_KNOWLEDGE',
+            15
+          );
+
+          console.log(`✅ Perplexity found ${perplexityResult.results.length} results`);
+          console.log(`📚 Citations: ${perplexityResult.citations.length}`);
+
+          if (perplexityResult.results.length === 0) {
+            throw new Error(`No relevant information found for this ${sourceLabel} topic`);
+          }
+
+          sourceArticles = perplexityResult.results;
+          sourceType = 'Perplexity AI';
+
+          // Store Perplexity summary and citations for later use
+          (sourceArticles as any).perplexitySummary = perplexityResult.summary;
+          (sourceArticles as any).perplexityCitations = perplexityResult.citations;
+
+        } catch (perplexityError) {
+          console.warn('⚠️ Perplexity search failed, falling back to NewsAPI:', perplexityError);
+          toast.warning('Perplexity unavailable, using NewsAPI fallback...');
+
+          // Fallback to NewsAPI if Perplexity fails
+          let allArticles: any[] = [];
+          for (const query of searchQueries.slice(0, 3)) {
+            console.log(`   🔍 NewsAPI fallback: "${query}"`);
+            const articles = await newsApiService.searchNews(
+              query,
+              selectedNewsSources,
+              5
+            );
+            allArticles = [...allArticles, ...articles];
+          }
+
+          const uniqueArticles = Array.from(
+            new Map(allArticles.map(a => [a.url, a])).values()
+          ).slice(0, 15);
+
+          if (uniqueArticles.length === 0) {
+            throw new Error(`No relevant information found for this topic`);
+          }
+
+          sourceArticles = uniqueArticles;
+          sourceType = 'NewsAPI (fallback)';
+        }
 
       } else {
-        // For HISTORICAL, ACADEMIC, GENERAL_KNOWLEDGE - use Wikipedia
+        // Fallback for unknown data source types
         toast.info(`📚 Searching Wikipedia for ${dataSourceType.toLowerCase()} content...`);
 
         // Search with entity-based queries
@@ -593,6 +690,25 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
           : marketItem
       ));
 
+      // ===== STEP 6: Persist AI Resolution to Database =====
+      const aiResolutionData = {
+        recommendation: analysisResult.recommendation,
+        confidence: analysisResult.confidence,
+        reasoning: analysisResult.reasoning,
+        timestamp: new Date().toISOString(),
+        keyFactors: analysisResult.keyFactors,
+        sourceAnalysis: analysisResult.sourceAnalysis,
+        scrapedContent: scrapedContent,
+        processingTimeMs: processingTime,
+        sourceArticles: sourceArticles,
+        dataSourceUsed: dataSourceType,
+        sourceType: sourceType,
+        extractedEntities: entities,
+        usedHederaAgent,
+        searchQueries: searchQueries.slice(0, 3)
+      };
+      await saveAIResolutionToDatabase(marketId, aiResolutionData);
+
       const confidencePercent = (analysisResult.confidence * 100).toFixed(0);
       const agentBadge = usedHederaAgent ? ' 🔷 (Hedera AI)' : '';
       toast.success(`Analysis complete! ${sourceArticles.length} ${sourceType} articles analyzed. ${entities.mainSubject} → ${analysisResult.recommendation} (${confidencePercent}% certainty)${agentBadge}`);
@@ -601,6 +717,66 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       if (marketClassification[market.id] && marketClassification[market.id] !== market.data_source_type) {
         await updateMarketClassification(market.id, marketClassification[market.id]);
       }
+
+      // ===== STEP 7: Auto-calculate Final Confidence Breakdown for Summary Tab =====
+      // This recalculates the adaptive weighted confidence score that combines:
+      // - Market odds (betting signal)
+      // - Evidence submissions (user proof)
+      // - AI analysis (external verification)
+      setTimeout(async () => {
+        try {
+          const updatedMarket = markets.find(m => m.id === marketId);
+          if (updatedMarket && updatedMarket.ai_resolution) {
+            // Normalize recommendation to ensure consistent format
+            // Hedera AI can return: YES, NO, INVALID, TRUE, FALSE
+            // Calculator expects: YES, NO, INCONCLUSIVE
+            const rawRecommendation = String(updatedMarket.ai_resolution.recommendation).toUpperCase();
+            let normalizedRecommendation: 'YES' | 'NO' | 'INCONCLUSIVE';
+
+            if (rawRecommendation === 'YES' || rawRecommendation === 'TRUE') {
+              normalizedRecommendation = 'YES';
+            } else if (rawRecommendation === 'NO' || rawRecommendation === 'FALSE') {
+              normalizedRecommendation = 'NO';
+            } else {
+              // INVALID, INCONCLUSIVE, or any other value → INCONCLUSIVE
+              normalizedRecommendation = 'INCONCLUSIVE';
+            }
+
+            console.log(`🎯 [Auto-calc] Market ${marketId}: Raw recommendation "${rawRecommendation}" → Normalized "${normalizedRecommendation}" with ${updatedMarket.ai_resolution.confidence} confidence`);
+
+            const breakdown = await finalConfidenceCalculator.calculate({
+              yesOdds: updatedMarket.yesOdds,
+              noOdds: updatedMarket.noOdds,
+              evidences: updatedMarket.evidences || [],
+              aiRecommendation: normalizedRecommendation,
+              aiConfidence: updatedMarket.ai_resolution.confidence
+            });
+
+            // Update state with breakdown
+            setConfidenceBreakdowns(prev => ({
+              ...prev,
+              [marketId]: breakdown
+            }));
+
+            // Also update market with final confidence
+            setMarkets(prev => prev.map(m =>
+              m.id === marketId && m.ai_resolution
+                ? {
+                    ...m,
+                    ai_resolution: {
+                      ...m.ai_resolution,
+                      finalConfidence: breakdown.finalConfidence
+                    }
+                  }
+                : m
+            ));
+
+            console.log(`✅ Auto-calculated confidence breakdown for market ${marketId}: ${breakdown.finalConfidence.toFixed(1)}%`);
+          }
+        } catch (calcError) {
+          console.warn('⚠️ Failed to auto-calculate confidence breakdown:', calcError);
+        }
+      }, 500);
 
     } catch (error) {
       console.error('❌ Error during AI analysis:', error);
@@ -667,6 +843,9 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         ...prev,
         [marketId]: result
       }));
+
+      // Persist aggregation results to database
+      await saveAggregationToDatabase(marketId, result);
 
       toast.success(`Aggregation calculated: ${result.finalConfidence.toFixed(1)}% confidence`);
 
@@ -774,6 +953,82 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       console.log(`✅ Updated market ${marketId} classification to ${newType}`);
     } catch (error) {
       console.warn('⚠️ Failed to update market classification in database:', error);
+    }
+  };
+
+  // Save AI resolution results to database for persistence
+  const saveAIResolutionToDatabase = async (marketId: string, aiResolution: any) => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      );
+
+      const resolutionData = {
+        recommendation: aiResolution.recommendation,
+        confidence: aiResolution.confidence,
+        reasoning: aiResolution.reasoning,
+        timestamp: aiResolution.timestamp || new Date().toISOString(),
+        keyFactors: aiResolution.keyFactors,
+        sourceAnalysis: aiResolution.sourceAnalysis,
+        scrapedContent: aiResolution.scrapedContent,
+        processingTimeMs: aiResolution.processingTimeMs,
+        sourceArticles: aiResolution.sourceArticles,
+        dataSourceUsed: aiResolution.dataSourceUsed,
+        sourceType: aiResolution.sourceType,
+        extractedEntities: aiResolution.extractedEntities,
+        usedHederaAgent: aiResolution.usedHederaAgent,
+        searchQueries: aiResolution.searchQueries,
+        finalConfidence: aiResolution.finalConfidence
+      };
+
+      const { error } = await supabase
+        .from('approved_markets')
+        .update({
+          resolution_data: resolutionData,
+          ai_analysis_timestamp: new Date().toISOString()
+        })
+        .eq('id', marketId);
+
+      if (error) {
+        console.error('❌ Failed to save AI resolution to database:', error);
+        throw error;
+      }
+
+      console.log(`✅ Saved AI resolution to database for market ${marketId}`);
+    } catch (error) {
+      console.warn('⚠️ Failed to persist AI resolution to database:', error);
+      // Don't throw - we want the UI to still work even if DB save fails
+    }
+  };
+
+  // Save aggregation results to database for persistence
+  const saveAggregationToDatabase = async (marketId: string, aggregationResult: AggregationResult) => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      );
+
+      const { error } = await supabase
+        .from('approved_markets')
+        .update({
+          aggregation_results: aggregationResult,
+          aggregation_timestamp: new Date().toISOString()
+        })
+        .eq('id', marketId);
+
+      if (error) {
+        console.error('❌ Failed to save aggregation to database:', error);
+        throw error;
+      }
+
+      console.log(`✅ Saved aggregation results to database for market ${marketId}`);
+    } catch (error) {
+      console.warn('⚠️ Failed to persist aggregation to database:', error);
+      // Don't throw - we want the UI to still work even if DB save fails
     }
   };
 
@@ -1615,7 +1870,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                     <div className="space-y-2 mb-3">
                                       <div className="text-xs">
                                         <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
-                                        <div className="text-gray-600 dark:text-gray-400">NewsAPI (BBC, Reuters, Bloomberg, CNN, Guardian)</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Perplexity AI (real-time web search with citations)</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">Fallback: NewsAPI (BBC, Reuters, Bloomberg)</div>
                                       </div>
 
                                       <div className="text-xs">
@@ -1727,7 +1983,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                     <div className="space-y-2 mb-3">
                                       <div className="text-xs">
                                         <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
-                                        <div className="text-gray-600 dark:text-gray-400">Wikipedia + scholarly references & research data</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Perplexity AI (academic search with citations)</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">Optimized for peer-reviewed research</div>
                                       </div>
 
                                       <div className="text-xs">
@@ -1783,7 +2040,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                     <div className="space-y-2 mb-3">
                                       <div className="text-xs">
                                         <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
-                                        <div className="text-gray-600 dark:text-gray-400">Wikipedia (established facts & definitions)</div>
+                                        <div className="text-gray-600 dark:text-gray-400">Perplexity AI (general web search with citations)</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">Broad coverage of factual information</div>
                                       </div>
 
                                       <div className="text-xs">
@@ -1901,7 +2159,11 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
-                                    <span>📰 Fetching articles from {(marketClassification[market.id] || market.data_source_type) === 'NEWS' ? 'NewsAPI' : 'Wikipedia'} using entity-based queries...</span>
+                                    <span>📰 Fetching articles from {
+                                      (marketClassification[market.id] || market.data_source_type) === 'HISTORICAL'
+                                        ? 'Wikipedia'
+                                        : 'Perplexity AI'
+                                    } using entity-based queries...</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
@@ -2127,9 +2389,71 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                       // Get pre-calculated confidence breakdown from state
                       const confidenceBreakdown = confidenceBreakdowns[market.id] || null;
 
+                      // Format timestamp helper
+                      const formatTimestamp = (timestamp?: string) => {
+                        if (!timestamp) return 'Never run';
+                        const date = new Date(timestamp);
+                        const now = new Date();
+                        const diff = now.getTime() - date.getTime();
+                        const minutes = Math.floor(diff / 60000);
+                        const hours = Math.floor(diff / 3600000);
+                        const days = Math.floor(diff / 86400000);
+
+                        if (minutes < 1) return 'Just now';
+                        if (minutes < 60) return `${minutes}m ago`;
+                        if (hours < 24) return `${hours}h ago`;
+                        if (days < 7) return `${days}d ago`;
+                        return date.toLocaleDateString();
+                      };
+
                       return (
                       <div>
                         <h4 className="font-medium mb-4">Final Resolution Summary</h4>
+
+                        {/* Data Source & Timestamp Info Card */}
+                        <div className="mb-4 p-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h5 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                Analysis Status
+                              </h5>
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <div className="text-gray-600 dark:text-gray-400">AI Engine:</div>
+                                  <div className="font-medium">
+                                    {market.ai_analysis_timestamp ? (
+                                      <span className="text-green-600 dark:text-green-400">
+                                        ✓ {formatTimestamp(market.ai_analysis_timestamp)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500">Not run</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-600 dark:text-gray-400">Evidence Check:</div>
+                                  <div className="font-medium">
+                                    {market.aggregation_timestamp ? (
+                                      <span className="text-green-600 dark:text-green-400">
+                                        ✓ {formatTimestamp(market.aggregation_timestamp)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500">Not run</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                <strong>Data Source:</strong> {market.ai_resolution?.sourceType || 'Perplexity AI'}
+                                {market.ai_resolution?.sourceType?.includes('Perplexity') && ' (AI-powered search with citations)'}
+                                {market.ai_resolution?.sourceType?.includes('Wikipedia') && ' (Historical encyclopedia)'}
+                                {market.ai_resolution?.sourceType?.includes('NewsAPI') && ' (News aggregator)'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="space-y-4">
 
                           {confidenceBreakdown ? (
@@ -2277,22 +2601,129 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                 </div>
                               </div>
 
-                              {/* Execute Final Resolution Button */}
+                              {/* Execute Final Resolution Button - 80% Threshold Logic */}
                               <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                                <Button
-                                  onClick={() => {
-                                    setSelectedMarket(market);
-                                    setShowResolveDialog(true);
-                                  }}
-                                  className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
-                                  size="lg"
-                                >
-                                  <Gavel className="h-5 w-5" />
-                                  Generate Final Resolution & Payout
-                                </Button>
-                                <p className="text-xs text-center text-gray-500 mt-2">
-                                  This will execute the resolution on-chain with {confidenceBreakdown.finalConfidence.toFixed(1)}% confidence
-                                </p>
+                                {(() => {
+                                  // Calculate days since evidence period started
+                                  const evidenceStartDate = market.evidence_period_start
+                                    ? new Date(market.evidence_period_start)
+                                    : market.expiresAt
+                                      ? new Date(market.expiresAt)
+                                      : null;
+
+                                  if (!evidenceStartDate) {
+                                    return (
+                                      <div className="text-center p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                                        <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Evidence period not yet started</p>
+                                      </div>
+                                    );
+                                  }
+
+                                  const now = new Date();
+                                  const daysSinceExpiry = Math.floor((now.getTime() - evidenceStartDate.getTime()) / (1000 * 60 * 60 * 24));
+                                  const confidence = confidenceBreakdown.finalConfidence;
+                                  const MIN_EVIDENCE_DAYS = 7;
+                                  const MAX_EVIDENCE_DAYS = 100;
+                                  const CONFIDENCE_THRESHOLD = 80;
+
+                                  // State 1: Still in minimum evidence period (< 7 days)
+                                  if (daysSinceExpiry < MIN_EVIDENCE_DAYS) {
+                                    const daysRemaining = MIN_EVIDENCE_DAYS - daysSinceExpiry;
+                                    return (
+                                      <>
+                                        <Button
+                                          disabled
+                                          className="gap-2 w-full"
+                                          size="lg"
+                                          variant="secondary"
+                                        >
+                                          <Clock className="h-5 w-5" />
+                                          Collecting Evidence ({daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining)
+                                        </Button>
+                                        <p className="text-xs text-center text-gray-500 mt-2">
+                                          Minimum 7-day evidence period required. Current confidence: {confidence.toFixed(1)}%
+                                        </p>
+                                      </>
+                                    );
+                                  }
+
+                                  // State 2: After 7 days, confidence >= 80% - READY FOR RESOLUTION
+                                  if (confidence >= CONFIDENCE_THRESHOLD) {
+                                    return (
+                                      <>
+                                        <Button
+                                          onClick={() => {
+                                            setSelectedMarket(market);
+                                            setShowResolveDialog(true);
+                                          }}
+                                          className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white"
+                                          size="lg"
+                                        >
+                                          <Gavel className="h-5 w-5" />
+                                          Generate Final Resolution & Payout
+                                        </Button>
+                                        <p className="text-xs text-center text-green-700 dark:text-green-300 mt-2">
+                                          ✓ Confidence threshold met: {confidence.toFixed(1)}% (minimum: {CONFIDENCE_THRESHOLD}%)
+                                        </p>
+                                      </>
+                                    );
+                                  }
+
+                                  // State 3: After 100 days, confidence still < 80% - REFUND OPTION
+                                  if (daysSinceExpiry >= MAX_EVIDENCE_DAYS) {
+                                    return (
+                                      <>
+                                        <Button
+                                          onClick={async () => {
+                                            try {
+                                              if (!market.contractAddress) {
+                                                toast.error('Market contract address not found');
+                                                return;
+                                              }
+                                              toast.info('Initiating refund process...');
+                                              const { getHederaEVMServiceInstance } = await import('../../utils/hederaEVMService');
+                                              const hederaService = getHederaEVMServiceInstance();
+                                              const txHash = await hederaService.refundAllBets(market.contractAddress);
+                                              toast.success(`Market refunded successfully! TX: ${txHash.slice(0, 10)}...`);
+                                              // Refresh markets
+                                              await loadMarketsWithEvidence();
+                                            } catch (error: any) {
+                                              console.error('Refund error:', error);
+                                              toast.error(`Refund failed: ${error.message}`);
+                                            }
+                                          }}
+                                          className="gap-2 w-full bg-yellow-600 hover:bg-yellow-700 text-white"
+                                          size="lg"
+                                        >
+                                          <AlertTriangle className="h-5 w-5" />
+                                          Market Inconclusive - Refund All Bets
+                                        </Button>
+                                        <p className="text-xs text-center text-yellow-700 dark:text-yellow-300 mt-2">
+                                          {daysSinceExpiry} days elapsed. Confidence: {confidence.toFixed(1)}% (never reached {CONFIDENCE_THRESHOLD}%)
+                                        </p>
+                                      </>
+                                    );
+                                  }
+
+                                  // State 4: Between 7-100 days, confidence < 80% - WAITING FOR MORE EVIDENCE
+                                  return (
+                                    <>
+                                      <Button
+                                        disabled
+                                        className="gap-2 w-full"
+                                        size="lg"
+                                        variant="outline"
+                                      >
+                                        <AlertTriangle className="h-5 w-5" />
+                                        Confidence Too Low ({confidence.toFixed(1)}% - need {CONFIDENCE_THRESHOLD}%+)
+                                      </Button>
+                                      <p className="text-xs text-center text-gray-500 mt-2">
+                                        Day {daysSinceExpiry} of evidence period. Market will accept evidence for {MAX_EVIDENCE_DAYS - daysSinceExpiry} more days.
+                                      </p>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </>
                           ) : (

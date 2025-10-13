@@ -26,30 +26,36 @@
 
 ---
 
-## 🚀 CURRENT STATUS: FULLY OPERATIONAL
+## 🚀 CURRENT STATUS: OPERATIONAL WITH CONFIGURATION
 
-### ✅ **MAJOR UPDATE: Real Blockchain Betting - FULLY OPERATIONAL** 🎯
-- **✅ Complete Betting Integration**: End-to-end real blockchain transactions
+### ✅ **Real Blockchain Betting - FULLY OPERATIONAL**
+- **✅ Complete Betting Integration**: End-to-end real blockchain transactions on Hedera EVM
 - **✅ Automatic Market Approval**: Admin approval triggers blockchain `approveMarket()` call
 - **✅ Contract Status Management**: Markets transition from `Submited` (0) → `Open` (1) automatically
 - **✅ Real-Time Odds Updates**: Live price updates from smart contracts after each bet
-- **✅ Volume Tracking**: Real-time collateral volume updates (e.g., 5.6 CAST)
-- **✅ Balance Check & Collateral**: Automatic token balance verification and approval
+- **✅ Volume Tracking**: Real-time collateral volume updates from on-chain data
+- **✅ Balance Check & Collateral**: Automatic CAST token balance verification and approval
 - **✅ Transaction Confirmation**: Real Hedera EVM transactions with gas usage tracking
-- **✅ Market Interaction**: Click Y/N → Real blockchain bet → Odds update immediately (e.g., 2.00 → 10.00/1.11)
+- **✅ Market Interaction**: Click Y/N → Real blockchain bet → Immediate odds update
 
-### ✅ **Three-Signal AI Resolution System - ARCHITECTURE COMPLETE**
+### ✅ **Three-Signal AI Resolution System - IMPLEMENTED**
 - **🎯 Unique Innovation**: First prediction market using three independent verification signals
-- **Signal #1 - Betting Volumes**: Crowd wisdom analysis (0-25 points)
-- **Signal #2 - Evidence Submissions**: User-verified proof with credibility weighting (0-45 points)
-- **Signal #3 - External APIs**: Independent news verification (0-30 points)
-- **Combined Confidence Scoring**: Signals aligned = +8 bonus (max 108/100 points)
-- **Automated Market Monitoring**: 60-second cycle detecting expired markets
-- **Anthropic Claude AI Integration**: Real-time analysis with confidence scoring
-- **Real Web Scraping**: ✅ Live scraping from BBC, Reuters, Associated Press with HTML parsing
-- **Credibility Weighting**: 2.5x multiplier for contrarian evidence (users betting against their own submission)
-- **Intelligent Routing**: Auto-execute ≥95%, Admin review 60-94%, Flag <60%
-- **13+ Active Markets**: Currently being monitored across the platform
+- **Signal #1 - Betting Volumes**: Crowd wisdom analysis from on-chain data (0-25 points)
+- **Signal #2 - Evidence Submissions**: User-verified proof with 2.5x credibility weighting for contrarian evidence (0-45 points)
+- **Signal #3 - External APIs**: News verification via NewsAPI (**requires API key**, 0-30 points)
+- **Combined Confidence Scoring**: All signals aligned = +8 bonus (max 108/100 points)
+- **Automated Market Monitoring**: 60-second cycle when monitor service running
+- **Anthropic Claude AI Integration**: Real-time analysis via backend proxy (port 3001)
+- **Perplexity Integration**: Real-time web search with citations (**requires API key**)
+- **Intelligent Routing**: Auto-resolve ≥90%, Admin review 70-89%, Manual <70%
+- **Evidence Period**: Minimum 7 days, up to 100 days for markets requiring 80% confidence threshold
+- **Refund Mechanism**: Markets not reaching 80% confidence after 100 days can be refunded to bettors
+
+### ⚙️ **Configuration Required for Full Functionality**
+- **ANTHROPIC_API_KEY**: Required for Claude AI analysis (backend proxy)
+- **VITE_PERPLEXITY_API_KEY**: Optional but recommended for real-time web search
+- **VITE_NEWS_API_KEY**: Optional but recommended for Signal #3 external verification
+- **Without API keys**: System falls back to lower-tier AI and reduced confidence scoring
 
 ### ✅ **Evidence Submission & Dispute System - FULLY OPERATIONAL** 🎉
 **LATEST UPDATE**: Complete end-to-end evidence submission working!
@@ -62,26 +68,22 @@
 - **✅ 168-Hour Dispute Window**: 7 days to submit evidence after AI resolution
 - **✅ Bond System**: 1 CAST token bond per dispute (returned if dispute valid)
 
-### ✅ **Proven End-to-End Resolution**
-**Real Example**: Multiple markets successfully resolved including:
-1. Detected expiration automatically ⏰
-2. **NEW**: Real web scraping from BBC, Reuters, AP 📡
-3. Processed through Anthropic Claude AI analysis 🤖
-4. Resolved with confidence scoring 📊
-5. Updated database status to `resolved` ✅
-6. **NEW**: Real-time monitoring service running 24/7
+### ✅ **End-to-End Resolution Pipeline**
+**Resolution Flow**: Markets are successfully processed through:
+1. **Expiration Detection**: Automatic monitoring via market-monitor-server ⏰
+2. **Evidence Collection**: 7-day community submission period with on-chain bonding 📋
+3. **AI Analysis**: Three-tier system (Three-Signal > Hedera AI > BlockCast AI) 🤖
+4. **Confidence Scoring**: Combined signals with adaptive weighting 📊
+5. **Database Updates**: Market status transitions tracked in Supabase ✅
+6. **Admin Review**: Preliminary resolution preparation for on-chain execution 👨‍💼
 
-### 🎉 **Latest Achievement: Real Web Scraping**
-**JUST COMPLETED**: Full implementation of live news scraping
-```bash
-✅ Backend scraping complete! Found 2 total results
-✅ API Success, parsing response...
-✅ AI analysis complete: INCONCLUSIVE (20% confidence)
-```
-- **BBC News**: Live HTML parsing and content extraction
-- **Reuters**: Real-time search results processing
-- **Associated Press**: Automated content scraping
-- **Smart Fallbacks**: Graceful handling when sites block requests
+### 🔬 **External Data Integration**
+**Current Implementation**:
+- **Anthropic Claude**: Primary AI analysis via backend proxy (operational)
+- **Perplexity Service**: Real-time web search with citations (requires API key)
+- **NewsAPI**: External news verification for Signal #3 (requires API key)
+- **Test Data**: Enhanced test content generation for development/demo
+- **Smart Fallbacks**: System operates with reduced confidence when APIs unavailable
 
 ### 📋 **Complete Market Lifecycle (Updated 2025-01-06)**
 
@@ -117,16 +119,26 @@
 12. Result: Status → 'pending_resolution' with AI recommendation
 ```
 
-**Phase 5: Admin Resolution**
+**Phase 5: Admin Resolution (80% Confidence Threshold)**
 ```
-13. Admin reviews AI recommendation
-14. High confidence (≥90%): Execute preliminaryResolve()
-15. 7-day dispute period begins → Users can challenge
-16. Dispute period ends → Admin executes finalResolve()
-17. Payouts execute on-chain → Winners redeem
+13. Admin reviews AI recommendation and confidence score
+14. High confidence (≥80%):
+    - Execute preliminaryResolve() if ≥90%
+    - Admin approval with strong recommendation if 80-89%
+15. Low confidence (<80%):
+    - Continue evidence period (7-100 days total)
+    - After 100 days: Execute refundAllBets() if still <80%
+16. 7-day dispute period begins (if resolved) → Users can challenge
+17. Dispute period ends → Admin executes finalResolve()
+18. Payouts execute on-chain → Winners redeem via redeem()
+    OR refunds distributed → All bettors claim via claimRefund()
 ```
 
-**Key Innovation:** Backend analyzes and recommends, frontend executes contracts. This separates intelligence from execution, maintaining security while enabling automation.
+**Key Innovations:**
+- **80% Confidence Gate**: Markets require high confidence for resolution, ensuring accuracy
+- **Extended Evidence Period**: Up to 100 days for unclear markets to gather more evidence
+- **Fair Refund System**: Unresolvable markets refund all bettors proportionally
+- **Backend Intelligence**: Backend analyzes and recommends, frontend executes contracts
 
 ---
 
@@ -134,40 +146,124 @@
 
 ### **Current Operational Stack**
 ```
-Frontend (React + TypeScript)
+Frontend (React + TypeScript) - Port 5173 (dev)
     ├── Truth Markets (Active betting)
     ├── Verify Markets (Evidence submission & disputes)
     ├── AI Analysis Integration
-    ├── Admin Dashboard
+    ├── Admin Dashboard (Evidence Resolution Panel)
     └── Real-time Status Updates
          ↑
 Backend Services (Node.js + Express)
-    ├── 🟢 AI Proxy Server (Port 3001)
-    │   ├── Anthropic Claude API Integration
+    ├── 🟢 AI Proxy Server (Port 3001) - REQUIRED
+    │   ├── Anthropic Claude API proxy (operational)
+    │   ├── Image upload handling
     │   ├── CORS + Security Handling
-    ├── 🟢 Web Scraping Server (Port 3003) ✅ OPERATIONAL
-    │   ├── ✅ Live News Scraping (BBC, Reuters, AP)
-    │   ├── ✅ HTML Content Processing with Cheerio
-    │   ├── ✅ Intelligent Fallback Content
-    │   ├── ✅ Backend-Frontend Integration
-    │   ├── Real API Calls (no mocks)
-    │   └── Error Recovery & Logging
-    └── 🟢 Market Monitor (Port 3002)
-        ├── 60s Expiration Detection
-        ├── AI Resolution Queue
-        ├── Confidence-Based Decisions
-        └── 24/7 Background Processing
+    │   └── Enhanced test content generation
+    ├── 🟢 Market Monitor (Port 3002) - RECOMMENDED
+    │   ├── 60s cycle expiration detection
+    │   ├── Three-tier AI resolution system
+    │   ├── Confidence-based routing (≥90%, 70-89%, <70%)
+    │   └── Evidence period management (7 days)
+    └── 🔶 Evidence Review (Port 3003) - OPTIONAL
+        └── Additional admin review workflows
          ↑
 Database Layer (Supabase)
-    ├── approved_markets (with dispute support)
-    ├── market_resolutions
-    ├── market_disputes
-    └── evidence (ready for HCS)
+    ├── approved_markets (market storage + status)
+    ├── evidence_submissions (user evidence)
+    ├── resolution_scores (three-signal data)
+    ├── market_disputes (on-chain sync)
+    └── bet_tracking (unique bettor counts)
          ↑
-Blockchain Integration (Hedera)
-    ├── Smart Contracts (deployed on testnet)
-    ├── HCS Topics (configured)
-    └── Wallet Integration (MetaMask)
+Blockchain Integration (Hedera EVM)
+    ├── Smart Contracts (6 deployed on testnet)
+    │   ├── PredictionMarketFactory (market creation)
+    │   ├── PredictionMarket instances (individual markets)
+    │   ├── CAST Token (ERC20 betting token)
+    │   ├── BetNFT (position tracking)
+    │   ├── AdminManager (permissions)
+    │   └── DisputeManager (evidence bonding)
+    ├── HCS Topics (configured, server-side ready)
+    │   ├── Evidence topic (0.0.6701034)
+    │   ├── AI attestations (0.0.6701035)
+    │   └── Challenges (0.0.6701036)
+    └── Wallet Integration (MetaMask + Hedera)
+```
+
+---
+
+## 🗄️ Database Schema & Migrations
+
+### **80% Confidence Threshold Migration** (Latest: 2025-01-13)
+
+BlockCast implements a sophisticated resolution system requiring 80% confidence for market resolution. The database schema has been updated to support this system.
+
+#### **Migration Details**
+
+**File**: `database/80-percent-confidence-threshold-migration-safe.sql`
+
+**New Database Columns**:
+```sql
+-- Track when evidence collection period started
+evidence_period_start TIMESTAMPTZ   -- Set when market expires
+
+-- Refund tracking for unresolvable markets
+refunded BOOLEAN DEFAULT FALSE      -- True if market was refunded
+refund_tx_hash TEXT                 -- Blockchain transaction hash
+refunded_at TIMESTAMPTZ             -- Timestamp of refund execution
+```
+
+**Key Features**:
+- ✅ **Flexible Status Validation**: Constraint removed for application-level validation
+- ✅ **Evidence Period Tracking**: `evidence_period_start` column tracks when markets expire
+- ✅ **Refund Support**: Complete refund metadata for markets not reaching 80% confidence
+- ✅ **Indexed Queries**: Efficient queries on evidence period start times
+- ✅ **Safe Migration**: No constraint violations, works with existing status values
+
+**Smart Contract Integration**:
+```solidity
+// PredictionMarket.sol - New refund functions
+function refundAllBets() external onlyAdmin {
+  require(marketInfo.status == MarketStatus.PendingResolution);
+  marketInfo.status = MarketStatus.Refunded;
+  emit MarketRefunded(block.timestamp, reserve);
+}
+
+function claimRefund() external {
+  require(marketInfo.status == MarketStatus.Refunded);
+  uint256 refundAmount = (userShares * reserve) / totalShares;
+  collateral.transfer(msg.sender, refundAmount);
+}
+```
+
+**Market Status Flow**:
+```
+Open → Expired → PendingResolution
+                      ↓
+         ┌────────────┴────────────┐
+         │                         │
+    Confidence ≥80%          Confidence <80%
+         │                         │
+         ↓                         ↓
+    Resolved              After 100 days → Refunded
+         │                         │
+         ↓                         ↓
+  Winners claim             All claim refunds
+   via redeem()            via claimRefund()
+```
+
+**Database Queries**:
+```sql
+-- Find markets in extended evidence period (7-100 days)
+SELECT * FROM approved_markets
+WHERE evidence_period_start IS NOT NULL
+  AND evidence_period_start > NOW() - INTERVAL '100 days'
+  AND status = 'pending_resolution';
+
+-- Find markets eligible for refund (>100 days, <80% confidence)
+SELECT * FROM approved_markets
+WHERE evidence_period_start < NOW() - INTERVAL '100 days'
+  AND status = 'pending_resolution'
+  AND (confidence_score IS NULL OR confidence_score < 80);
 ```
 
 ---
@@ -225,8 +321,14 @@ FINAL SCORE:      94.45/100 (94.45% confidence)
 ```
 Confidence ≥ 95% + signals aligned  →  🚀 AUTO-EXECUTE (preliminary resolution)
 Confidence 80-94%                   →  👨‍💼 Admin Review (strong recommendation)
-Confidence 60-79%                   →  📋 Admin Review (weak recommendation)
+Confidence 60-79%                   →  📋 Admin Review (weak recommendation) + Extended evidence period
 Confidence < 60% OR signals conflict →  ⚠️ Manual Investigation Required
+
+🆕 80% CONFIDENCE THRESHOLD SYSTEM:
+- Markets require ≥80% confidence for final resolution
+- Evidence period: Minimum 7 days, extendable up to 100 days
+- If confidence <80% after 100 days → Market refunded to all bettors
+- Refund mechanism ensures fairness for unresolvable markets
 ```
 
 ### **Why Three Signals?**
@@ -246,9 +348,10 @@ Each signal has weaknesses:
 └─────────────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 2: Evidence Submission Window (7 Days)                │
+│ PHASE 2: Evidence Submission Window (7-100 Days)            │
 │ Market expires → Users submit evidence to HCS               │
 │ System tracks: submitter's bet position for credibility     │
+│ Minimum 7 days, extendable up to 100 days if needed        │
 └─────────────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -260,25 +363,38 @@ Each signal has weaknesses:
 └─────────────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 4: Resolution Routing (Based on Confidence)           │
-│ ≥95% + aligned → AUTO: preliminaryResolve() called          │
-│ 80-94%         → ADMIN: Review with strong recommendation   │
-│ 60-79%         → ADMIN: Review with weak recommendation     │
-│ <60% / conflict → FLAG: Manual investigation required       │
+│ PHASE 4: Resolution Routing (80% Confidence Check)          │
+│ Confidence ≥80%:                                            │
+│   ≥95% + aligned → AUTO: preliminaryResolve() called        │
+│   80-94%         → ADMIN: Review with strong recommendation │
+│                                                              │
+│ Confidence <80%:                                            │
+│   60-79%         → EXTEND: Continue evidence period         │
+│   <60% / conflict → EXTEND: Manual investigation + evidence │
+│                                                              │
+│ After 100 days if confidence still <80%:                    │
+│   → Market REFUNDED to all bettors proportionally           │
 └─────────────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 5: Dispute Period (7 Days)                            │
+│ PHASE 5: Dispute Period (7 Days) - IF RESOLVED              │
 │ Preliminary outcome posted → Losers can dispute             │
 │ Bond requirement: 1 CAST per dispute                        │
 │ Evidence submitted on-chain via DisputeManager              │
 └─────────────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 6: Final Resolution                                   │
-│ Admin reviews disputes (if any)                             │
-│ Smart contract: finalResolve(outcome, confidenceScore)      │
-│ Protocol fees deducted → Winners claim payouts              │
+│ PHASE 6: Final Resolution OR Refund                         │
+│                                                              │
+│ PATH A: Resolution (Confidence ≥80%)                        │
+│   Admin reviews disputes (if any)                           │
+│   Smart contract: finalResolve(outcome, confidenceScore)    │
+│   Protocol fees deducted → Winners claim payouts            │
+│                                                              │
+│ PATH B: Refund (Confidence <80% after 100 days)            │
+│   Smart contract: refundAllBets()                           │
+│   All bettors claim proportional refunds via claimRefund()  │
+│   No winners/losers → Everyone gets collateral back         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -528,20 +644,46 @@ cd blockcast_new
 npm install
 
 # Configure environment (.env)
-ANTHROPIC_API_KEY=sk-ant-...YOUR_KEY
-VITE_SUPABASE_URL=https://...supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...YOUR_KEY
-HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT
-HEDERA_PRIVATE_KEY=0x...YOUR_KEY
+# Required - AI Services
+ANTHROPIC_API_KEY=sk-ant-...YOUR_KEY           # Required for Claude AI analysis
+VITE_PERPLEXITY_API_KEY=pplx-...YOUR_KEY      # Optional: Real-time web search (recommended)
 
-# Hedera Contract Addresses (testnet)
-CONTRACT_ADMIN_MANAGER=0xbeD4F659fFc3f01e0094d4705aDDC5DefB93F979
-CONTRACT_CAST_TOKEN=0x154Ea3D6E7ce1b8194992BAf296603c8bB126373
-CONTRACT_TREASURY=0x358Ed5B43eBe9e55D37AF5466a9f0472D76E4635
-CONTRACT_BET_NFT=0xA8Af2EF4695Ca72803B058e46Dd2a55aEe3801b3
-CONTRACT_PREDICTION_MARKET_FACTORY=0x934caa95f90C546c989F80D56147d28b1a1309D5
+# Required - Database
+VITE_SUPABASE_URL=https://...supabase.co       # Supabase project URL
+VITE_SUPABASE_ANON_KEY=eyJ...YOUR_KEY          # Supabase anonymous key
 
-# Start services
+# Required - Hedera
+HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT             # Hedera testnet account
+HEDERA_PRIVATE_KEY=0x...YOUR_KEY               # Hedera native private key
+VITE_HEDERA_PRIVATE_KEY_EVM=0x...YOUR_KEY     # EVM-compatible private key
+
+# Optional - External APIs (for full Three-Signal functionality)
+VITE_NEWS_API_KEY=...YOUR_KEY                  # NewsAPI for Signal #3 verification
+
+# Hedera Contract Addresses (testnet) - Pre-deployed, no changes needed
+CONTRACT_ADMIN_MANAGER=0x94FAF61DE192D1A441215bF3f7C318c236974959
+CONTRACT_CAST_TOKEN=0xC78Ac73844077917E20530E36ac935c4B56236c2
+CONTRACT_TREASURY=0x69649cc208138B3A2c529cB301D7Bb591C53a2e2
+CONTRACT_BET_NFT=0x8e718596977C0BE525c5b1afeA73d9eFdF9bB7ca
+CONTRACT_PREDICTION_MARKET_FACTORY=0xD2092162aD3A3ebd26cA44BB7C8F5E2F87BDB17c
+CONTRACT_DISPUTE_MANAGER=0xCB8B4E630dFf7803055199A75969a25e7Ec48f39
+
+# HCS Topics (pre-configured)
+HCS_EVIDENCE_TOPIC=0.0.6701034
+HCS_AI_ATTESTATION_TOPIC=0.0.6701035
+HCS_CHALLENGES_TOPIC=0.0.6701036
+
+# Start services - Windows Native Solution
+
+# Option 1: Basic Setup (AI Proxy + Frontend)
+# Double-click start.bat OR run:
+npm start
+
+# Option 2: Full System (AI Proxy + Monitor + Frontend)
+# Double-click start-all.bat OR run:
+npm run start:all
+
+# Individual services (if needed):
 npm run server    # AI Proxy (Port 3001)
 npm run monitor   # Market Monitor (Port 3002)
 npm run dev       # Frontend (Port 5173)
@@ -615,6 +757,14 @@ curl -X POST http://localhost:3001/api/anthropic-proxy \
 ## 🔧 **Available Scripts**
 
 ### **Core Services**
+
+**Windows Startup (Recommended)**
+```bash
+npm start          # Launch AI Proxy + Frontend (double-click start.bat)
+npm run start:all  # Launch AI Proxy + Monitor + Frontend (double-click start-all.bat)
+```
+
+**Individual Services**
 ```bash
 npm run dev        # Start React frontend (development)
 npm run build      # Build production frontend
@@ -640,6 +790,74 @@ npm run setup:resolution    # Configure resolution system
 
 ---
 
+## 🪟 **Windows Setup Guide**
+
+BlockCast uses Windows-native batch files for easy service management. No `concurrently` dependency required!
+
+### **Batch Files**
+
+Two batch files are provided in the project root:
+
+#### **1. start.bat - Basic Setup**
+```batch
+Launches: AI Proxy (Port 3001) + Frontend (Port 5173)
+```
+**Usage:**
+- Double-click `start.bat` in File Explorer
+- Or run: `npm start` from command line
+
+**What it does:**
+- Opens 2 separate terminal windows (color-coded for easy identification)
+- AI Proxy server starts first (wait 2 seconds for initialization)
+- Frontend dev server starts automatically
+- Browser opens to `http://localhost:5173`
+
+#### **2. start-all.bat - Full System**
+```batch
+Launches: AI Proxy (Port 3001) + Market Monitor (Port 3002) + Frontend (Port 5173)
+```
+**Usage:**
+- Double-click `start-all.bat` in File Explorer
+- Or run: `npm run start:all` from command line
+
+**What it does:**
+- Opens 3 separate terminal windows (AI Proxy, Monitor, Frontend)
+- Staggered startup with 2-second delays for service initialization
+- Full system monitoring with automated market resolution
+- Browser opens to `http://localhost:5173`
+
+### **Benefits of Batch File Approach**
+
+✅ **No Dependencies**: No need for `concurrently` npm package
+✅ **Separate Windows**: Each service has its own terminal for clear log visibility
+✅ **Native Windows**: Uses built-in Windows commands (`start`, `cmd`)
+✅ **Color-Coded**: Window titles identify each service (AI Proxy, Monitor, Frontend)
+✅ **Auto-Browser**: Frontend automatically opens in default browser
+✅ **Easy Shutdown**: Close any window or press Ctrl+C in any terminal
+
+### **Troubleshooting**
+
+**Services won't start:**
+```bash
+# Check if ports are already in use
+netstat -ano | findstr "3001 3002 5173"
+
+# Kill process on specific port (if needed)
+npx kill-port 3001
+npx kill-port 3002
+npx kill-port 5173
+```
+
+**Browser doesn't open:**
+- Manually navigate to `http://localhost:5173`
+- Check if frontend terminal shows "Local: http://localhost:5173"
+
+**AI Proxy errors:**
+- Verify `ANTHROPIC_API_KEY` is set in `.env` file
+- Check terminal output for specific error messages
+
+---
+
 ## 🌍 Blockchain Integration
 
 ### **Current Status (Hedera Testnet)**
@@ -662,6 +880,101 @@ npm run setup:resolution    # Configure resolution system
 - ✅ **Database Sync**: HCS transaction IDs stored in database
 - ⚠️ **Browser Limitation**: SDK timeout in browser environment (5-10 seconds)
 - 🎯 **Hackathon Ready**: Architecture demonstrates full Hedera ecosystem usage
+
+---
+
+## ⚠️ Current Limitations & Configuration Requirements
+
+### **API Keys Required for Full Functionality**
+
+The system is fully operational but certain features require external API keys for optimal performance:
+
+####  **1. Anthropic Claude AI** (Required)
+- **Status**: Operational via backend proxy
+- **Configuration**: `ANTHROPIC_API_KEY` in `.env`
+- **Impact if missing**: AI analysis will fail, resolution system cannot function
+- **How to get**: Sign up at [Anthropic Console](https://console.anthropic.com/)
+
+#### **2. Perplexity AI** (Recommended)
+- **Status**: Service implemented, requires API key
+- **Configuration**: `VITE_PERPLEXITY_API_KEY` in `.env`
+- **Impact if missing**: Real-time web search unavailable, reduced verification confidence
+- **How to get**: Sign up at [Perplexity](https://www.perplexity.ai/settings/api)
+- **Fallback**: System uses enhanced test content generation
+
+#### **3. NewsAPI** (Recommended)
+- **Status**: Service framework ready, requires API key
+- **Configuration**: `VITE_NEWS_API_KEY` in `.env`
+- **Impact if missing**: Signal #3 (External API verification) operates with reduced confidence
+- **How to get**: Sign up at [NewsAPI](https://newsapi.org/register)
+- **Fallback**: Three-signal system works with Signals #1 & #2 only
+
+### **Known Technical Limitations**
+
+#### **HCS Browser Limitation**
+- **Issue**: `@hashgraph/sdk` times out in browser environment (5-10 seconds)
+- **Impact**: Evidence submission uses database storage instead of direct HCS submission
+- **Workaround**: Evidence is stored in Supabase and prepared for HCS with transaction IDs
+- **Production Solution**: Server-side HCS submission enables full functionality
+- **Status**: Architecture complete, demo-ready for hackathon
+
+#### **Web Scraping**
+- **Current**: Backend generates enhanced test data for development/demo
+- **Limitation**: Real-time scraping blocked by CORS policies
+- **Workaround**: Test data is realistic and sufficient for demonstration
+- **Production Solution**: Server-side scraping or Perplexity API integration
+- **Status**: Works with fallback content generation
+
+#### **Monitor Service**
+- **Requirement**: Must be manually started (`npm run monitor`)
+- **Limitation**: Not automatically deployed or running 24/7
+- **Impact**: Markets won't be automatically processed unless monitor is running
+- **Production Solution**: Deploy as background service with PM2 or similar
+- **Status**: Fully functional when running
+
+### **Deployment Considerations**
+
+#### **Testnet vs Mainnet**
+- **Current**: All contracts deployed on Hedera Testnet
+- **Migration Required**: Mainnet deployment requires contract redeployment
+- **Test HBAR**: Required for transactions (get from [Hedera Portal](https://portal.hedera.com/))
+
+#### **Database**
+- **Current**: Supabase with free tier
+- **Scaling**: May require paid plan for production usage
+- **Schema**: Complete and production-ready
+
+### **Feature Readiness Matrix**
+
+| Feature | Status | Configuration Required |
+|---------|--------|------------------------|
+| Market Creation & Betting | ✅ Fully Operational | Hedera account + private key |
+| Real-time Odds | ✅ Fully Operational | None (reads from blockchain) |
+| Evidence Submission | ✅ Fully Operational | CAST tokens for bonding |
+| AI Resolution (Basic) | ✅ Operational | ANTHROPIC_API_KEY |
+| AI Resolution (Enhanced) | ⚠️ Requires Config | + VITE_PERPLEXITY_API_KEY |
+| Three-Signal System | ⚠️ Requires Config | + VITE_NEWS_API_KEY for Signal #3 |
+| HCS Evidence Storage | 🔶 Partial | Works via database, HCS server-side ready |
+| Web Scraping | 🔶 Test Data | Works with generated content |
+| Market Monitoring | ⚠️ Manual Start | Must run `npm run monitor` |
+
+### **Recommended Setup for Demo**
+
+**Minimum Configuration** (Core features only):
+```bash
+ANTHROPIC_API_KEY=sk-ant-...        # Required
+VITE_SUPABASE_URL=...               # Required
+VITE_SUPABASE_ANON_KEY=...          # Required
+HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT  # Required
+HEDERA_PRIVATE_KEY=0x...            # Required
+```
+
+**Recommended Configuration** (Full functionality):
+```bash
+# Add to minimum config:
+VITE_PERPLEXITY_API_KEY=pplx-...    # Enhanced AI analysis
+VITE_NEWS_API_KEY=...               # Three-signal verification
+```
 
 ---
 
@@ -1167,13 +1480,30 @@ async function processExpiredMarket(market: any) {
 **Smart Contract Functions Already Available**:
 - ✅ `preliminaryResolve(Outcome outcome)` - Close market, start dispute period
 - ✅ `finalResolve(Outcome outcome, uint256 confidenceScore)` - Execute final resolution with payouts
+- ✅ `refundAllBets()` - Refund market to all bettors (for <80% confidence after 100 days)
+- ✅ `claimRefund()` - Users claim proportional refunds from refunded markets
 - ✅ `redeem()` - Users claim their winnings
 - ✅ `isPendingResolution()` - Check if market is in dispute period
 - ✅ `getConfidenceScore()` - Get final confidence score
 
-**Database Schema Updates Required**:
+**Database Schema Updates Completed**:
 ```sql
--- Enhance evidence_submissions table
+-- ✅ COMPLETED: 80% Confidence Threshold Migration
+-- File: database/80-percent-confidence-threshold-migration-safe.sql
+ALTER TABLE approved_markets
+ADD COLUMN evidence_period_start TIMESTAMPTZ,
+ADD COLUMN refunded BOOLEAN DEFAULT FALSE,
+ADD COLUMN refund_tx_hash TEXT,
+ADD COLUMN refunded_at TIMESTAMPTZ;
+
+-- ✅ Index for efficient queries
+CREATE INDEX idx_approved_markets_evidence_period_start
+ON approved_markets(evidence_period_start);
+```
+
+**Database Schema Updates Still Required** (for Three-Signal System):
+```sql
+-- TODO: Enhance evidence_submissions table
 ALTER TABLE evidence_submissions
 ADD COLUMN user_bet_position TEXT CHECK (user_bet_position IN ('YES', 'NO', 'NONE')),
 ADD COLUMN evidence_position TEXT CHECK (evidence_position IN ('YES', 'NO', 'NEUTRAL')),
@@ -1354,6 +1684,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🎉 Current Status Summary
 
 **🟢 OPERATIONAL**: AI-powered market resolution with Anthropic Claude integration
+**🟢 OPERATIONAL**: 80% confidence threshold system with extended evidence periods (7-100 days)
+**🟢 OPERATIONAL**: Fair refund mechanism for unresolvable markets
 **🟢 OPERATIONAL**: Evidence submission on disputable markets with blockchain storage
 **🟢 OPERATIONAL**: DisputeManager smart contract with 1 CAST bond system
 **🟢 OPERATIONAL**: Real-time market monitoring and processing (24/7)
@@ -1363,7 +1695,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **🟢 OPERATIONAL**: Enhanced UI with status-based conditional rendering
 **🔄 READY**: Enhanced Hedera blockchain integration for production deployment
 
-### **🎯 Latest Achievement: Evidence Submission Working!**
+### **🎯 Latest Achievements**
+
+**80% Confidence Threshold System** (January 2025):
+- ✅ **Database Migration**: Successfully migrated to support extended evidence periods
+- ✅ **Refund Mechanism**: Smart contract functions `refundAllBets()` and `claimRefund()` implemented
+- ✅ **Evidence Period Tracking**: New `evidence_period_start` column for 7-100 day windows
+- ✅ **Fair Resolution**: Markets not reaching 80% confidence can be refunded to all bettors
+- **File**: `database/80-percent-confidence-threshold-migration-safe.sql`
+
+**Evidence Submission System**:
 - **Transaction Hash**: `0x2bf5fcd482d2015ece4f062fea89961e91177f9746f221c3779bf1f86eafb9fa`
 - **Dispute ID**: `1`
 - **Status**: Successfully created dispute on Hedera blockchain

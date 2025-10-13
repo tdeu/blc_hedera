@@ -1227,6 +1227,36 @@ export class HederaEVMService {
   }
 
   /**
+   * Refund all bets (for markets that never reached confidence threshold)
+   * Can only be called when market is in PendingResolution or Open status
+   */
+  async refundAllBets(marketAddress: string): Promise<string> {
+    try {
+      console.log(`💸 Refunding all bets for market ${marketAddress}`);
+
+      const marketABI = [
+        "function refundAllBets() external"
+      ];
+
+      const market = new ethers.Contract(marketAddress, marketABI, this.signer);
+
+      const tx = await market.refundAllBets({
+        gasLimit: 300000
+      });
+
+      console.log('📤 Refund transaction sent:', tx.hash);
+      await tx.wait();
+
+      console.log('✅ Market refunded, users can now claim their refunds');
+      return tx.hash;
+
+    } catch (error: any) {
+      console.error('❌ Error refunding market:', error);
+      throw new Error(`Failed to refund market: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Get market resolution info
    */
   async getMarketResolutionInfo(marketAddress: string): Promise<{

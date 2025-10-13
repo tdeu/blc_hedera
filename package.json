@@ -74,12 +74,15 @@
             "@types/express": "^5.0.3",
             "@types/node": "^20.10.0",
             "@vitejs/plugin-react-swc": "^3.10.2",
+            "concurrently": "^9.2.1",
             "dotenv": "^17.2.2",
             "hardhat": "^3.0.3",
             "tsx": "^4.20.5",
             "vite": "6.3.5"
       },
       "scripts": {
+            "start": "start.bat",
+            "start:all": "start-all.bat",
             "dev": "vite",
             "build": "vite build",
             "server": "npx tsx src/api/anthropic-proxy.ts",

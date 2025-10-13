@@ -22,6 +22,12 @@ export interface EvidenceMultipliers {
   regular: number;
 }
 
+export interface TimingThresholds {
+  disputePeriodDays: number;
+  maxEvidencePeriodDays: number;
+  minConfidenceThreshold: number;
+}
+
 export interface ResolutionConfigType {
   thresholds: ResolutionThresholds;
   weights: {
@@ -30,6 +36,7 @@ export interface ResolutionConfigType {
     standard: ResolutionWeights;
   };
   evidenceMultipliers: EvidenceMultipliers;
+  timingThresholds: TimingThresholds;
   africanCountries: { [key: string]: string };
 }
 
@@ -117,6 +124,30 @@ export const RESOLUTION_CONFIG: ResolutionConfigType = {
      * Regular evidence with no special validation
      */
     regular: 1
+  },
+
+  /**
+   * Timing thresholds for market resolution lifecycle
+   */
+  timingThresholds: {
+    /**
+     * Dispute period after preliminary resolution
+     * Users have 7 days to submit disputes/evidence
+     */
+    disputePeriodDays: 7,
+
+    /**
+     * Maximum evidence collection period
+     * After 100 days, markets with <80% confidence are eligible for refund
+     */
+    maxEvidencePeriodDays: 100,
+
+    /**
+     * Minimum confidence threshold for resolution
+     * Markets need ≥80% confidence to be resolved
+     * Markets with <80% after max period get refunded
+     */
+    minConfidenceThreshold: 80
   },
 
   /**

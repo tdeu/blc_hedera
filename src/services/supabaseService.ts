@@ -86,6 +86,28 @@ export class SupabaseService {
   }
 
   /**
+   * Get markets in pending_resolution status (for final resolution executor)
+   */
+  async getMarketsInPendingResolution(): Promise<any[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('approved_markets')
+        .select('*')
+        .eq('status', 'pending_resolution');
+
+      if (error) {
+        console.error('❌ Error fetching markets in pending resolution:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('❌ Failed to get markets in pending resolution:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get a specific market by ID
    */
   async getMarket(marketId: string): Promise<MarketInfo | null> {
