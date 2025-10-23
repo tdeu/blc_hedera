@@ -25,12 +25,12 @@ import {
   Target
 } from 'lucide-react';
 import { adminService, AdminStats } from '../../utils/adminService';
-import AdminDisputePanel from '../AdminDisputePanel';
+import AdminDisputePanel from '../dispute/AdminDisputePanel';
 import { disputeService } from '../../utils/disputeService';
 import { MarketDispute } from '../../utils/supabase';
-import { AIAgentSimple } from '../AIAgentSimple';
+import { AIAgentSimple } from '../ai/AIAgentSimple';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
-import { BettingMarket } from '../BettingMarkets';
+import { BettingMarket } from '../betting/BettingMarkets';
 import TwoStageResolutionPanel from './TwoStageResolutionPanel';
 import ThreeSignalPanel from './ThreeSignalPanel';
 import { resolutionService } from '../../utils/resolutionService';

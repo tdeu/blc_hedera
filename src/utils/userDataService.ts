@@ -1,8 +1,8 @@
 import { supabase, ApprovedMarket } from './supabase';
 import { ContractService, MarketInfo, UserPosition } from './contractService';
 import { initializeHederaConfig } from './hederaConfig';
-import { UserBet } from '../components/BettingPortfolio';
-import { BettingMarket } from '../components/BettingMarkets';
+import { UserBet } from '../components/betting/BettingPortfolio';
+import { BettingMarket } from '../components/betting/BettingMarkets';
 
 export interface UserCreatedMarket {
   id: string;

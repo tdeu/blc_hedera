@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { HederaService, getHederaConfig, VerificationEvidence } from './hederaService';
 import { HederaEVMService, getHederaEVMConfig, MarketContract } from './hederaEVMService';
-import { BettingMarket } from '../components/BettingMarkets';
+import { BettingMarket } from '../components/betting/BettingMarkets';
 import { WalletConnection } from './walletService';
 import { toast } from 'sonner';
 import { ethers } from 'ethers';

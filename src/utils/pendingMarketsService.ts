@@ -1,4 +1,4 @@
-import { BettingMarket } from '../components/BettingMarkets';
+import { BettingMarket } from '../components/betting/BettingMarkets';
 
 export interface PendingMarketSubmission {
   id: string;

@@ -79,6 +79,7 @@ interface MarketWithEvidence {
   // Timestamps for tracking when analysis was last run
   ai_analysis_timestamp?: string;
   aggregation_timestamp?: string;
+  evidence_period_start?: string;
 }
 
 interface Evidence {
@@ -1036,16 +1037,60 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
     if (!selectedMarket) return;
 
     try {
-      const resolution = manualResolution.overrideAI 
-        ? manualResolution 
-        : selectedMarket.ai_resolution;
+      // Import resolution service
+      const { resolutionService } = await import('../../utils/resolutionService');
 
-      // Execute the resolution on smart contracts
-      toast.success('Resolution executed successfully!');
-      
+      // Determine outcome and confidence
+      let outcome: 'yes' | 'no';
+      let confidence: number;
+
+      if (manualResolution.overrideAI) {
+        // Admin manual override
+        if (!manualResolution.outcome || !manualResolution.reasoning) {
+          toast.error('Please provide outcome and reasoning for manual override');
+          return;
+        }
+        outcome = manualResolution.outcome;
+        confidence = 100; // Manual override gets 100% confidence
+      } else {
+        // Use AI recommendation
+        if (!selectedMarket.ai_resolution) {
+          toast.error('No AI resolution found');
+          return;
+        }
+
+        const recommendation = String(selectedMarket.ai_resolution.recommendation).toUpperCase();
+        if (recommendation === 'YES' || recommendation === 'TRUE') {
+          outcome = 'yes';
+        } else if (recommendation === 'NO' || recommendation === 'FALSE') {
+          outcome = 'no';
+        } else {
+          toast.error('Invalid AI recommendation - cannot resolve');
+          return;
+        }
+
+        // Use final confidence from breakdown, fallback to AI confidence
+        const breakdown = confidenceBreakdowns[selectedMarket.id];
+        confidence = Math.round(
+          breakdown?.finalConfidence ||
+          selectedMarket.ai_resolution.finalConfidence ||
+          (selectedMarket.ai_resolution.confidence * 100)
+        );
+      }
+
+      // Show loading toast
+      const loadingToast = toast.loading(`Executing final resolution on-chain...`);
+
+      // Call smart contract
+      console.log(`🔐 Executing finalResolveMarket(${selectedMarket.id}, ${outcome}, ${confidence})`);
+      const result = await resolutionService.finalResolveMarket(selectedMarket.id, outcome, confidence);
+
+      toast.dismiss(loadingToast);
+      toast.success(`✅ Resolution executed! TX: ${result.transactionId?.slice(0, 12)}...`);
+
       // Update market status
-      setMarkets(prev => prev.map(market => 
-        market.id === selectedMarket.id 
+      setMarkets(prev => prev.map(market =>
+        market.id === selectedMarket.id
           ? { ...market, status: 'resolved' as const }
           : market
       ));
@@ -1055,8 +1100,8 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
       loadMarketsWithEvidence();
 
     } catch (error) {
-      console.error('Error executing resolution:', error);
-      toast.error('Failed to execute resolution');
+      console.error('❌ Error executing resolution:', error);
+      toast.error(`Failed to execute resolution: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -1110,6 +1155,72 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
         </Badge>
       );
     }
+    return null;
+  };
+
+  const getEvidencePeriodInfo = (market: MarketWithEvidence): string | null => {
+    const MAX_EVIDENCE_DAYS = 100;
+
+    // Calculate evidence start date
+    const evidenceStartDate = market.evidence_period_start
+      ? new Date(market.evidence_period_start)
+      : market.expiresAt
+        ? new Date(market.expiresAt)
+        : null;
+
+    if (!evidenceStartDate) return null;
+
+    const now = new Date();
+    const daysSinceExpiry = Math.floor((now.getTime() - evidenceStartDate.getTime()) / (1000 * 60 * 60 * 24));
+    const daysRemaining = MAX_EVIDENCE_DAYS - daysSinceExpiry;
+
+    // Only show for markets in pending_resolution or disputing status
+    if (market.status !== 'pending_resolution' && market.status !== 'disputing') return null;
+
+    // Don't show negative days
+    if (daysSinceExpiry < 0) return null;
+
+    if (daysRemaining > 0) {
+      return `Day ${daysSinceExpiry} of evidence period. ${daysRemaining} days remaining.`;
+    } else {
+      return `Day ${daysSinceExpiry} of evidence period. Period expired.`;
+    }
+  };
+
+  // Check if market is ready for final resolution (RED ALERT)
+  const getReadyForPayoutAlert = (market: MarketWithEvidence) => {
+    const MIN_EVIDENCE_DAYS = 7;
+    const CONFIDENCE_THRESHOLD = 80;
+
+    // Calculate evidence start date
+    const evidenceStartDate = market.evidence_period_start
+      ? new Date(market.evidence_period_start)
+      : market.expiresAt
+        ? new Date(market.expiresAt)
+        : null;
+
+    if (!evidenceStartDate) return null;
+    if (market.status !== 'pending_resolution' && market.status !== 'disputable') return null;
+
+    const now = new Date();
+    const daysSinceExpiry = Math.floor((now.getTime() - evidenceStartDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Get confidence from breakdown or AI resolution
+    const breakdown = confidenceBreakdowns[market.id];
+    const confidence = breakdown?.finalConfidence ||
+      (market.ai_resolution?.finalConfidence) ||
+      (market.ai_resolution?.confidence ? market.ai_resolution.confidence * 100 : 0);
+
+    // RED ALERT: 7+ days AND confidence >= 80%
+    if (daysSinceExpiry >= MIN_EVIDENCE_DAYS && confidence >= CONFIDENCE_THRESHOLD) {
+      return (
+        <Badge className="bg-red-600 text-white animate-pulse shadow-lg">
+          <AlertTriangle className="h-3 w-3 mr-1 inline" />
+          SEND FOR PAYOUT - {confidence.toFixed(0)}% CONFIDENCE
+        </Badge>
+      );
+    }
+
     return null;
   };
 
@@ -1194,12 +1305,18 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                             : market.ai_resolution.confidence  // Fallback to AI confidence
                         )}
                         {getDisputeTimeWarning(market)}
+                        {getReadyForPayoutAlert(market)}
                       </div>
                     </div>
                     
                     <div className="text-sm text-gray-500 dark:text-gray-400 text-right">
                       <div>ID: {market.id.slice(-8)}</div>
                       <div>Expires: {market.expiresAt.toLocaleDateString()}</div>
+                      {getEvidencePeriodInfo(market) && (
+                        <div className="text-xs mt-1 text-blue-600 dark:text-blue-400">
+                          {getEvidencePeriodInfo(market)}
+                        </div>
+                      )}
                     </div>
                   </div>
                   

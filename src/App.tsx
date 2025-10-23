@@ -1,28 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { LanguageProvider } from './components/LanguageContext';
-import TopNavigation from './components/TopNavigation';
-import Footer from './components/Footer';
-import BettingMarkets from './components/BettingMarkets';
-import BettingPortfolio, { UserBet } from './components/BettingPortfolio';
-import Social from './components/Social';
-import Community from './components/Community';
-import About from './components/About';
-import Contact from './components/Contact';
-import PrivacyPolicy from './components/PrivacyPolicy';
-import TermsOfService from './components/TermsOfService';
-import LocalCurrencyWallet from './components/LocalCurrencyWallet';
-import Onboarding from './components/Onboarding';
-import VerificationInput from './components/VerificationInput';
-import VerificationResults, { VerificationResult } from './components/VerificationResults';
-import VerificationHistory from './components/VerificationHistory';
-import Settings from './components/Settings';
-import Profile from './components/Profile';
-import MarketPage from './components/MarketPage';
-import Categories from './components/Categories';
-import CreateMarket from './components/CreateMarket';
+import { LanguageProvider } from './components/shared/LanguageContext';
+import TopNavigation from './components/layout/TopNavigation';
+import Footer from './components/layout/Footer';
+import BettingMarkets from './components/betting/BettingMarkets';
+import BettingPortfolio, { UserBet } from './components/betting/BettingPortfolio';
+import Social from './components/pages/Social';
+import Community from './components/pages/Community';
+import About from './components/pages/About';
+import Contact from './components/pages/Contact';
+import PrivacyPolicy from './components/pages/PrivacyPolicy';
+import TermsOfService from './components/pages/TermsOfService';
+import LocalCurrencyWallet from './components/wallet/LocalCurrencyWallet';
+import Onboarding from './components/onboarding/Onboarding';
+import VerificationInput from './components/verification/VerificationInput';
+import VerificationResults, { VerificationResult } from './components/verification/VerificationResults';
+import VerificationHistory from './components/verification/VerificationHistory';
+import Settings from './components/pages/Settings';
+import Profile from './components/pages/Profile';
+import MarketPage from './components/betting/MarketPage';
+import Categories from './components/pages/Categories';
+import CreateMarket from './components/betting/CreateMarket';
 import Admin from './components/admin/Admin';
 import AdminModeSwitcher from './components/admin/AdminModeSwitcher';
-import PredictionAnalysisPanel from './components/admin/PredictionAnalysisPanel';
 import { adminService } from './utils/adminService';
 import { marketStatusService } from './utils/marketStatusService';
 import { pendingMarketsService } from './utils/pendingMarketsService';
@@ -929,6 +928,7 @@ export default function App() {
       id: `bet_${Date.now()}`,
       marketId,
       marketClaim: market.claim,
+      marketContractAddress: (market as any).contractAddress || (market as any).contract_address,
       position,
       amount,
       odds: position === 'yes' ? market.yesOdds : market.noOdds,

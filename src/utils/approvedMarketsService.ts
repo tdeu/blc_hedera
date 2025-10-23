@@ -1,5 +1,5 @@
 import { supabase, ApprovedMarket } from './supabase';
-import { BettingMarket } from '../components/BettingMarkets';
+import { BettingMarket } from '../components/betting/BettingMarkets';
 
 class ApprovedMarketsService {
   /**

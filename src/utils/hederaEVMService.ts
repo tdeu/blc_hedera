@@ -615,7 +615,7 @@ export class HederaEVMService {
     marketAddress: string,
     position: 'yes' | 'no',
     amount: number
-  ): Promise<string> {
+  ): Promise<{ txHash: string; nftTokenId: number | null }> {
     try {
       console.log('🎯 HederaEVMService.placeBet called:', { marketAddress, position, amount });
 
@@ -795,7 +795,57 @@ export class HederaEVMService {
           throw new Error('Transaction was mined but failed during execution');
         }
 
-        return tx.hash;
+        // Parse BetNFTMinted event to get NFT token ID
+        let nftTokenId: number | null = null;
+
+        try {
+          console.log('🔍 Parsing receipt logs for BetNFTMinted event...');
+
+          const betNFTAddress = TOKEN_ADDRESSES.BET_NFT_CONTRACT;
+          if (betNFTAddress && betNFTAddress !== '0x0000000000000000000000000000000000000000') {
+            const betNFTABI = [
+              "event BetNFTMinted(uint256 indexed tokenId, address indexed market, address indexed owner, uint256 shares, bool isYes)"
+            ];
+
+            const betNFTInterface = new ethers.Interface(betNFTABI);
+
+            // Look for BetNFTMinted event in receipt logs
+            for (const log of receipt.logs) {
+              // Check if log is from BetNFT contract
+              if (log.address.toLowerCase() === betNFTAddress.toLowerCase()) {
+                try {
+                  const parsedLog = betNFTInterface.parseLog({
+                    topics: log.topics as string[],
+                    data: log.data
+                  });
+
+                  if (parsedLog && parsedLog.name === 'BetNFTMinted') {
+                    nftTokenId = Number(parsedLog.args.tokenId);
+                    console.log('✅ NFT Token ID extracted from event:', nftTokenId);
+                    break;
+                  }
+                } catch (parseError) {
+                  // This log might not be a BetNFTMinted event, continue
+                  continue;
+                }
+              }
+            }
+
+            if (nftTokenId === null) {
+              console.warn('⚠️ Could not find BetNFTMinted event in transaction receipt');
+            }
+          } else {
+            console.warn('⚠️ BetNFT contract address not configured, cannot extract NFT token ID');
+          }
+        } catch (eventParseError) {
+          console.error('❌ Error parsing BetNFTMinted event:', eventParseError);
+          // Continue without NFT token ID
+        }
+
+        return {
+          txHash: tx.hash,
+          nftTokenId
+        };
 
       } catch (confirmError: any) {
         console.error('❌ Transaction confirmation failed:', confirmError);

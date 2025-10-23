@@ -19,7 +19,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BettingMarket } from '../BettingMarkets';
+import { BettingMarket } from '../betting/BettingMarkets';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
 import { resolutionService } from '../../utils/resolutionService';
 

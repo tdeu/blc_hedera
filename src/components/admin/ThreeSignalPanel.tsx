@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { SignalScores, calculateThreeSignals, getResolutionScore } from '../../services/threeSignalCalculator';
 import { approvedMarketsService } from '../../utils/approvedMarketsService';
-import { BettingMarket } from '../BettingMarkets';
+import { BettingMarket } from '../betting/BettingMarkets';
 import { toast } from 'sonner';
 
 interface ThreeSignalPanelProps {

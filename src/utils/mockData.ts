@@ -1,4 +1,4 @@
-import { VerificationResult } from '../components/VerificationResults';
+import { VerificationResult } from '../components/verification/VerificationResults';
 
 // Mock AI responses for different types of claims
 export const mockAIResponses = {
