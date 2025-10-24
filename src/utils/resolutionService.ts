@@ -687,6 +687,16 @@ export class ResolutionService {
         console.warn('⚠️  HCS final resolution submission failed (non-critical):', hcsError);
       }
 
+      // CRITICAL: Update all user bets for this market now that it's resolved
+      console.log(`\n💰 Updating user bets for resolved market...`);
+      try {
+        const { betResolutionService } = await import('./betResolutionService');
+        const updatedBetCount = await betResolutionService.updateBetsForResolvedMarket(marketId, outcome);
+        console.log(`   ✅ Updated ${updatedBetCount} bet(s) with win/loss status and payouts`);
+      } catch (betError) {
+        console.error('   ⚠️  Failed to update bets (non-critical):', betError);
+      }
+
       console.log(`\n🎉 Final resolution complete for market ${marketId}`);
       console.log(`   Outcome: ${outcome.toUpperCase()}`);
       console.log(`   Confidence: ${confidence}%`);

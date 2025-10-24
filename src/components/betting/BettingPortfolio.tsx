@@ -27,6 +27,8 @@ export interface UserBet {
   blockchainTxId?: string; // Hedera transaction ID - added for blockchain integration
   hasNFT?: boolean; // Whether user has minted NFT for this position
   nftTokenId?: number; // NFT token ID if minted
+  winningsClaimed?: boolean; // Whether winnings have been claimed from smart contract
+  claimedAt?: Date; // When winnings were claimed
 }
 
 interface BettingPortfolioProps {
@@ -34,11 +36,93 @@ interface BettingPortfolioProps {
   userBets: UserBet[];
 }
 
-export default function BettingPortfolio({ userBalance, userBets }: BettingPortfolioProps) {
+export default function BettingPortfolio({ userBalance, userBets: propUserBets }: BettingPortfolioProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [listingNFT, setListingNFT] = useState<UserBet | null>(null); // Track which NFT is being listed
   const [cancelingListing, setCancelingListing] = useState<string | null>(null); // Track which listing is being canceled
   const [nftListings, setNftListings] = useState<Map<number, NFTListing>>(new Map()); // Store NFT listing data
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [localBets, setLocalBets] = useState<UserBet[]>(propUserBets);
+  const [claimingBet, setClaimingBet] = useState<string | null>(null); // Track which bet is being claimed
+  const [claimingAll, setClaimingAll] = useState(false); // Track bulk claim
+
+  // Use local bets state which gets updated from localStorage
+  const userBets = localBets;
+
+  // Load bets from localStorage
+  const loadBetsFromStorage = () => {
+    try {
+      const walletKeys = Object.keys(localStorage).filter(key => key.startsWith('user_bets_'));
+      if (walletKeys.length === 0) return [];
+
+      const walletAddress = walletKeys[0].replace('user_bets_', '');
+      const storageKey = `user_bets_${walletAddress}`;
+      const data = localStorage.getItem(storageKey);
+      if (!data) return [];
+
+      const bets = JSON.parse(data);
+      // Convert to UserBet format
+      return bets.map((bet: any) => ({
+        ...bet,
+        placedAt: new Date(bet.placedAt),
+        resolvedAt: bet.resolvedAt ? new Date(bet.resolvedAt) : undefined
+      }));
+    } catch (error) {
+      console.error('Error loading bets from storage:', error);
+      return [];
+    }
+  };
+
+  // CRITICAL: Sync bets with market resolution status on mount
+  // This catches any bets that missed resolution updates
+  useEffect(() => {
+    const syncBetsWithResolutions = async () => {
+      if (isSyncing) return;
+
+      setIsSyncing(true);
+      try {
+        // Get wallet address from localStorage or context
+        const walletKeys = Object.keys(localStorage).filter(key => key.startsWith('user_bets_'));
+        if (walletKeys.length === 0) {
+          console.log('📊 No bets found in portfolio');
+          setLocalBets([]);
+          return;
+        }
+
+        // Use the first wallet found (in a real app, this would come from wallet context)
+        const walletAddress = walletKeys[0].replace('user_bets_', '');
+
+        console.log('🔄 Syncing portfolio bets with market resolutions...');
+        const { betResolutionService } = await import('../../utils/betResolutionService');
+        const updatedCount = await betResolutionService.syncBetsWithMarketStatus(walletAddress);
+
+        if (updatedCount > 0) {
+          console.log(`✅ Portfolio sync complete: ${updatedCount} bet(s) updated with resolution status`);
+        } else {
+          console.log('✅ Portfolio sync complete: All bets are up to date');
+        }
+
+        // Reload bets from localStorage after sync
+        const updatedBets = loadBetsFromStorage();
+        setLocalBets(updatedBets);
+
+      } catch (error) {
+        console.error('❌ Error syncing portfolio bets:', error);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    // Run sync on mount
+    syncBetsWithResolutions();
+  }, []); // Empty deps - only run once on mount
+
+  // Update local bets when prop changes (new bet placed)
+  useEffect(() => {
+    if (propUserBets.length > localBets.length) {
+      setLocalBets(propUserBets);
+    }
+  }, [propUserBets, localBets.length]);
 
   // Load NFT listing status for all NFTs (NFTs are auto-minted on bet placement)
   useEffect(() => {
@@ -100,12 +184,183 @@ export default function BettingPortfolio({ userBalance, userBets }: BettingPortf
     }, 2000);
   };
 
+  // Claim winnings for a single won bet
+  const handleClaimWinnings = async (cast: UserBet) => {
+    if (!cast.marketContractAddress) {
+      toast.error('Market contract address not found');
+      return;
+    }
+
+    if (cast.status !== 'won') {
+      toast.error('Can only claim winnings for won bets');
+      return;
+    }
+
+    if (cast.winningsClaimed) {
+      toast.info('Winnings already claimed for this bet');
+      return;
+    }
+
+    setClaimingBet(cast.id);
+
+    try {
+      // Import dependencies
+      const ethers = await import('ethers');
+      const { walletService } = await import('../../utils/walletService');
+
+      // Connect user's wallet
+      const connection = walletService.getConnection();
+      if (!connection?.signer) {
+        toast.error('Please connect your wallet first');
+        return;
+      }
+
+      const MARKET_ABI = ["function redeem() external"];
+      const marketContract = new ethers.Contract(
+        cast.marketContractAddress,
+        MARKET_ABI,
+        connection.signer
+      );
+
+      const loadingToast = toast.loading(`Claiming ${cast.actualWinning?.toFixed(3)} CAST...`);
+
+      console.log(`💰 Claiming winnings for bet ${cast.id} from market ${cast.marketContractAddress}`);
+      const tx = await marketContract.redeem();
+      await tx.wait();
+
+      toast.dismiss(loadingToast);
+      toast.success(`Successfully claimed ${cast.actualWinning?.toFixed(3)} CAST! 🎉`);
+
+      // Update bet as claimed in localStorage
+      updateBetClaimStatus(cast.id, true);
+
+      // Refresh wallet balance
+      setTimeout(() => {
+        window.location.reload(); // Simple refresh to update balance
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Failed to claim winnings:', error);
+      toast.error(`Failed to claim: ${error.message || 'Unknown error'}`);
+    } finally {
+      setClaimingBet(null);
+    }
+  };
+
+  // Claim all unclaimed winnings
+  const handleClaimAllWinnings = async () => {
+    const unclaimedWinnings = userBets.filter(
+      bet => bet.status === 'won' && !bet.winningsClaimed && bet.marketContractAddress
+    );
+
+    if (unclaimedWinnings.length === 0) {
+      toast.info('No unclaimed winnings available');
+      return;
+    }
+
+    setClaimingAll(true);
+
+    try {
+      const ethers = await import('ethers');
+      const { walletService } = await import('../../utils/walletService');
+
+      const connection = walletService.getConnection();
+      if (!connection?.signer) {
+        toast.error('Please connect your wallet first');
+        setClaimingAll(false);
+        return;
+      }
+
+      const totalWinnings = unclaimedWinnings.reduce((sum, bet) => sum + (bet.actualWinning || 0), 0);
+      const loadingToast = toast.loading(`Claiming ${totalWinnings.toFixed(3)} CAST from ${unclaimedWinnings.length} market(s)...`);
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const bet of unclaimedWinnings) {
+        try {
+          const MARKET_ABI = ["function redeem() external"];
+          const marketContract = new ethers.Contract(
+            bet.marketContractAddress!,
+            MARKET_ABI,
+            connection.signer
+          );
+
+          console.log(`💰 Claiming from market ${bet.marketContractAddress}`);
+          const tx = await marketContract.redeem();
+          await tx.wait();
+
+          updateBetClaimStatus(bet.id, true);
+          successCount++;
+
+        } catch (error) {
+          console.error(`Failed to claim from market ${bet.marketContractAddress}:`, error);
+          failCount++;
+        }
+      }
+
+      toast.dismiss(loadingToast);
+
+      if (successCount === unclaimedWinnings.length) {
+        toast.success(`Successfully claimed all winnings (${totalWinnings.toFixed(3)} CAST)! 🎉`);
+      } else {
+        toast.warning(`Claimed ${successCount}/${unclaimedWinnings.length} successfully. ${failCount} failed.`);
+      }
+
+      // Refresh to update balance
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Bulk claim failed:', error);
+      toast.error(`Bulk claim failed: ${error.message || 'Unknown error'}`);
+    } finally {
+      setClaimingAll(false);
+    }
+  };
+
+  // Update bet claim status in localStorage
+  const updateBetClaimStatus = (betId: string, claimed: boolean) => {
+    try {
+      const walletKeys = Object.keys(localStorage).filter(key => key.startsWith('user_bets_'));
+      if (walletKeys.length === 0) return;
+
+      const walletAddress = walletKeys[0].replace('user_bets_', '');
+      const storageKey = `user_bets_${walletAddress}`;
+      const data = localStorage.getItem(storageKey);
+      if (!data) return;
+
+      const bets = JSON.parse(data);
+      const updatedBets = bets.map((bet: any) =>
+        bet.id === betId
+          ? { ...bet, winningsClaimed: claimed, claimedAt: new Date().toISOString() }
+          : bet
+      );
+
+      localStorage.setItem(storageKey, JSON.stringify(updatedBets));
+
+      // Update local state
+      setLocalBets(prev => prev.map(bet =>
+        bet.id === betId
+          ? { ...bet, winningsClaimed: claimed, claimedAt: new Date() }
+          : bet
+      ));
+
+      console.log(`✅ Updated claim status for bet ${betId}: claimed=${claimed}`);
+    } catch (error) {
+      console.error('Error updating bet claim status:', error);
+    }
+  };
+
   // Calculate portfolio stats
   const totalCastAmount = userBets.reduce((sum, cast) => sum + cast.amount, 0);
   const activeCasts = userBets.filter(cast => cast.status === 'active');
   const resolvedCasts = userBets.filter(cast => cast.status === 'won' || cast.status === 'lost');
   const wonCasts = userBets.filter(cast => cast.status === 'won');
+  const unclaimedWinnings = wonCasts.filter(cast => !cast.winningsClaimed && cast.marketContractAddress);
   const totalWinnings = wonCasts.reduce((sum, cast) => sum + (cast.actualWinning || 0), 0);
+  const totalUnclaimedWinnings = unclaimedWinnings.reduce((sum, cast) => sum + (cast.actualWinning || 0), 0);
   const totalPotentialWinnings = activeCasts.reduce((sum, cast) => sum + (cast.potentialWinning || cast.potentialReturn || 0), 0);
   const winRate = resolvedCasts.length > 0 ? (wonCasts.length / resolvedCasts.length) * 100 : 0;
   const totalPnL = totalWinnings - resolvedCasts.reduce((sum, cast) => sum + cast.amount, 0);
@@ -173,21 +428,23 @@ export default function BettingPortfolio({ userBalance, userBets }: BettingPortf
 
         {/* Wallet Actions */}
         <div className="flex gap-2">
-          <Button 
+          <Button
             onClick={() => toast.success("Add Funds: Buy CAST tokens with HBAR using the Buy CAST button in the top navigation.")}
             className="gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
           >
             <DollarSign className="h-4 w-4" />
             Add Funds
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => toast.success("Withdrawal: Feature coming soon! Funds will be sent to your connected wallet.")}
-            className="gap-2"
-          >
-            <TrendingDown className="h-4 w-4" />
-            Withdraw
-          </Button>
+          {totalUnclaimedWinnings > 0 && (
+            <Button
+              onClick={handleClaimAllWinnings}
+              disabled={claimingAll}
+              className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+            >
+              <TrendingUp className="h-4 w-4" />
+              {claimingAll ? 'Claiming...' : `Claim ${totalUnclaimedWinnings.toFixed(3)} CAST`}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -593,11 +850,33 @@ export default function BettingPortfolio({ userBalance, userBets }: BettingPortf
                       </div>
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2">
                       <Button variant="outline" size="sm" className="gap-1">
                         <Eye className="h-3 w-3" />
                         View Details
                       </Button>
+
+                      {/* Claim button for won bets */}
+                      {cast.status === 'won' && cast.marketContractAddress && (
+                        <>
+                          {cast.winningsClaimed ? (
+                            <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Claimed
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handleClaimWinnings(cast)}
+                              disabled={claimingBet === cast.id}
+                              className="gap-1 bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              <DollarSign className="h-3 w-3" />
+                              {claimingBet === cast.id ? 'Claiming...' : `Claim ${cast.actualWinning?.toFixed(3)}`}
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>

@@ -949,7 +949,8 @@ export default function App() {
       '0', // shares - would be calculated from blockchain
       'pending', // transactionHash - will be updated after blockchain confirmation
       newBet.odds, // Pass the actual odds from the market
-      newBet.potentialWinning // Pass the calculated potential winning
+      newBet.potentialWinning, // Pass the calculated potential winning
+      newBet.marketContractAddress // Pass contract address for claiming
     );
     
     // Update user profile immediately

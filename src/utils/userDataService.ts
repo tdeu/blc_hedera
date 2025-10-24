@@ -43,6 +43,7 @@ export interface UserBettingHistory {
   actualWinning?: number;
   walletAddress?: string; // Track which wallet placed this bet
   odds?: number; // Store the odds at the time of placing the bet
+  marketContractAddress?: string; // Contract address for claiming winnings
 }
 
 class UserDataService {
@@ -172,7 +173,8 @@ class UserDataService {
     shares: string,
     transactionHash: string,
     odds?: number,
-    potentialReturn?: number
+    potentialReturn?: number,
+    marketContractAddress?: string
   ): void {
     try {
       const bet: UserBettingHistory = {
@@ -189,7 +191,8 @@ class UserDataService {
         potentialReturn: potentialReturn || amount * 2.0, // Default to 2x if not provided
         currentValue: potentialReturn || amount * 2.0, // Set current value to potential return for active bets
         walletAddress: walletAddress.toLowerCase(),
-        odds: odds
+        odds: odds,
+        marketContractAddress: marketContractAddress // Store contract address for claiming
       };
 
       const storageKey = `user_bets_${walletAddress.toLowerCase()}`;
