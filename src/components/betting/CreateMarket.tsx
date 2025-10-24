@@ -5,12 +5,11 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ArrowLeft, Plus, Sparkles, Upload, X, Image, Lock, DollarSign, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Sparkles, Upload, X, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import { BettingMarket } from './BettingMarkets';
 import { uploadMarketImage } from '../../utils/supabase';
-import { MARKET_CREATION, CollateralToken, TOKEN_CONFIG, DISPUTE_PERIOD } from '../../config/constants';
-import TokenService from '../../utils/tokenService';
+import { MARKET_CREATION, DISPUTE_PERIOD } from '../../config/constants';
 import { validateMarketExpirationDate, debugTimeComparison } from '../../utils/timeUtils';
 
 interface CreateMarketProps {
@@ -24,22 +23,15 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
     claim: '',
     description: '',
     category: '',
-    source: '',
     country: '',
     region: '',
-    confidenceLevel: 'medium' as 'high' | 'medium' | 'low',
-    marketType: 'future' as 'present' | 'future'
+    confidenceLevel: 'medium' as 'high' | 'medium' | 'low'
   });
   const [expirationDate, setExpirationDate] = useState<Date>();
   const [isCreating, setIsCreating] = useState(false);
   const [creatingStatus, setCreatingStatus] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Collateral state
-  const [collateralToken, setCollateralToken] = useState<CollateralToken>(TokenService.getDisplayTokenSymbol());
-  const [collateralAmount, setCollateralAmount] = useState<string>(MARKET_CREATION.DEFAULT_COLLATERAL_AMOUNT);
-  const [userBalance, setUserBalance] = useState<string>('100'); // Mock balance for demo
 
   const categories = [
     'Politics', 'Finance', 'Sports', 'Entertainment', 
@@ -59,32 +51,6 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
-
-  // Collateral validation helpers
-  const getMinCollateral = (token: CollateralToken): string => {
-    return token === 'HBAR' ? MARKET_CREATION.MIN_COLLATERAL_HBAR : MARKET_CREATION.MIN_COLLATERAL_CAST;
-  };
-
-  const isCollateralValid = (): boolean => {
-    const validation = TokenService.validateDisplayAmount(
-      collateralAmount,
-      getMinCollateral(collateralToken),
-      userBalance
-    );
-    return validation.isValid;
-  };
-
-  const getCollateralError = (): string | null => {
-    const validation = TokenService.validateDisplayAmount(
-      collateralAmount,
-      getMinCollateral(collateralToken),
-      userBalance
-    );
-    return validation.error || null;
-  };
-
-  // Get conversion info for display
-  const conversionInfo = TokenService.getConversionInfo();
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -150,13 +116,6 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
       return;
     }
 
-    // Validate collateral
-    const collateralError = getCollateralError();
-    if (collateralError) {
-      toast.error(collateralError);
-      return;
-    }
-
     // Only validate expiration date if it's required (truth markets)
     if (requiresExpirationDate && expirationDate) {
       // Use proper timezone-aware validation
@@ -207,15 +166,7 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
         yesOdds: 2.0,
         noOdds: 2.0,
         totalCasters: 0,
-        imageUrl: imageUrl, // Include the uploaded image URL
-        // Add collateral information
-        collateral: {
-          displayToken: collateralToken,
-          displayAmount: collateralAmount,
-          contractToken: TokenService.getContractTokenSymbol(),
-          contractAmount: TokenService.toContractAmount(collateralAmount),
-          deposited: false // Will be set when actually deposited
-        }
+        imageUrl: imageUrl // Include the uploaded image URL
       };
 
       console.log('📤 Creating market with data:', {
@@ -350,42 +301,27 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
             </p>
           </div>
 
-          {/* Category and Source */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Category <span className="text-red-500">*</span>
-              </Label>
-              <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="source">
-                Source <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="source"
-                value={formData.source}
-                onChange={(e) => handleInputChange('source', e.target.value)}
-                placeholder="Official source or organization"
-                className="text-sm"
-              />
-            </div>
+          {/* Category */}
+          <div className="space-y-2">
+            <Label>
+              Category <span className="text-red-500">*</span>
+            </Label>
+            <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Location and Market Type */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Location */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Country (Optional)</Label>
               <Select value={formData.country} onValueChange={(value) => handleInputChange('country', value)}>
@@ -414,19 +350,6 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
                       {region}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Market Type</Label>
-              <Select value={formData.marketType} onValueChange={(value) => handleInputChange('marketType', value as 'present' | 'future')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="present">Present (Current events)</SelectItem>
-                  <SelectItem value="future">Future (Predictions)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -533,99 +456,6 @@ export default function CreateMarket({ onBack, onCreateMarket, marketContext = '
               </p>
             </div>
           )}
-
-          {/* Collateral Requirements */}
-          <div className="space-y-4 p-4 border border-border/50 rounded-lg bg-muted/20">
-            <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold text-primary">Market Creation Collateral</h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Token Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="collateralToken">Collateral Token</Label>
-                <Select value={collateralToken} onValueChange={(value: CollateralToken) => setCollateralToken(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select token" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MARKET_CREATION.SUPPORTED_COLLATERAL_TOKENS.map((token) => (
-                      <SelectItem key={token} value={token}>
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4" />
-                          {token}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Amount Input */}
-              <div className="space-y-2">
-                <Label htmlFor="collateralAmount">
-                  Amount <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="collateralAmount"
-                  type="number"
-                  value={collateralAmount}
-                  onChange={(e) => setCollateralAmount(e.target.value)}
-                  placeholder={getMinCollateral(collateralToken)}
-                  min={getMinCollateral(collateralToken)}
-                  step="0.1"
-                  className={getCollateralError() ? 'border-red-500' : ''}
-                />
-              </div>
-            </div>
-
-            {/* Balance and Requirements Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Your Balance:</span>
-                <span className="font-medium">{userBalance} {collateralToken}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Minimum Required:</span>
-                <span className="font-medium">{getMinCollateral(collateralToken)} {collateralToken}</span>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {getCollateralError() && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <span className="text-sm text-red-600">{getCollateralError()}</span>
-              </div>
-            )}
-
-            {/* Token Conversion Info */}
-            {conversionInfo.showConversion && (
-              <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-medium">Token Conversion</p>
-                  <p>UI displays {conversionInfo.displayToken} for ease of use. Contracts use {conversionInfo.contractToken} tokens.</p>
-                  <p className="font-mono text-xs mt-1">{conversionInfo.rate}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Info about collateral */}
-            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium">Why is collateral required?</p>
-                <p>Collateral ensures market creators are committed to quality markets. It will be returned when your market is resolved successfully.</p>
-                {conversionInfo.showConversion && (
-                  <p className="mt-1 font-mono text-xs">
-                    Contract will lock: {TokenService.toContractAmount(collateralAmount)} {conversionInfo.contractToken}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
 
           {/* Create Button */}
           <div className="pt-4 space-y-2">

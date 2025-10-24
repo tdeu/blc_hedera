@@ -300,15 +300,35 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     if (market.status === 'resolved') return false;
 
     const now = new Date();
-    const disputePeriodEnd = market.dispute_period_end
-      ? new Date(market.dispute_period_end)
-      : new Date((market.expiresAt?.getTime() || Date.now()) + DISPUTE_PERIOD.MILLISECONDS);
 
-    return now <= disputePeriodEnd && (
+    // Check if market has resolution data with confidence score
+    const hasConfidenceData = market.resolution_data &&
+                              (market.resolution_data as any).finalConfidence !== undefined;
+    const confidenceScore = hasConfidenceData
+      ? (market.resolution_data as any).finalConfidence
+      : 0;
+
+    // Markets remain disputable if:
+    // 1. They are in disputable/pending_resolution/disputing status
+    // 2. OR they have expired but confidence < 80% (regardless of dispute period end)
+    // 3. Until confidence reaches 80% OR 100 days have passed (refund threshold)
+
+    const isExpired = market.expiresAt && market.expiresAt <= now;
+    const hasReachedConfidenceThreshold = confidenceScore >= 80;
+
+    // If confidence has reached 80%, use the original dispute period logic
+    if (hasReachedConfidenceThreshold && market.dispute_period_end) {
+      const disputePeriodEnd = new Date(market.dispute_period_end);
+      return now <= disputePeriodEnd;
+    }
+
+    // If confidence is still below 80%, keep market disputable
+    // (regardless of how long it's been since expiration)
+    return (
       market.status === 'pending_resolution' ||
       market.status === 'disputing' ||
       market.status === 'disputable' ||
-      (market.expiresAt && market.expiresAt <= now && market.status !== 'resolved')
+      (isExpired && !hasReachedConfidenceThreshold && market.status !== 'resolved')
     );
   };
 
@@ -917,6 +937,11 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
             <CardDescription>
               If you have evidence that contradicts the Community resolution, submit it here.
               Your evidence will be reviewed by our dispute resolution system.
+              {market.resolution_data && (market.resolution_data as any).finalConfidence < 80 && (
+                <span className="block mt-2 text-amber-600 font-medium">
+                  ⏳ This market remains open for evidence submissions until confidence reaches 80%.
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
