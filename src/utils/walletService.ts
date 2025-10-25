@@ -185,8 +185,7 @@ export class WalletService {
                   decimals: 18
                 },
                 rpcUrls: [
-                  'https://testnet.hashio.io/api',
-                  'https://testnet.mirrornode.hedera.com/api/v1/contracts/call'
+                  'https://testnet.hashio.io/api'
                 ],
                 blockExplorerUrls: ['https://hashscan.io/testnet/'],
                 iconUrls: ['https://s2.coinmarketcap.com/static/img/coins/64x64/4642.png']
