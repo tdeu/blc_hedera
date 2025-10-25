@@ -29,10 +29,12 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
     const initializeHedera = async () => {
       try {
         setIsLoading(true);
-        
-        // Get configuration based on environment
-        const config = getHederaConfig(import.meta.env.MODE === 'production' ? 'production' : 'development');
-        
+
+        // Get configuration - ALWAYS use testnet for now (even in production on Vercel)
+        // This ensures we use VITE_HEDERA_TESTNET_* environment variables
+        const config = getHederaConfig('development');
+        console.log('🔧 Hedera config mode: TESTNET (forced for development/production)');
+
         // Check if configuration is valid
         if (!config.operatorAccountId || !config.operatorPrivateKey) {
           console.warn('Hedera configuration not found. Running in mock mode.');
