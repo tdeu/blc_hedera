@@ -7,7 +7,7 @@
 BlockCast combines blockchain transparency, AI intelligence, and community wisdom to create a next-generation truth verification platform. Our **Three-Signal Resolution System** analyzes betting volumes, user evidence, and real-world data to automatically resolve prediction markets with 92%+ accuracy.
 
 **📌 Public Repository**: https://github.com/tdeu/blc_hedera
-**🎬 Live Demo**: `http://localhost:3000` (after setup)
+**🎬 Live Demo**: https://blockcast-hedera.vercel.app/
 **📺 Video Demo**: [YouTube/Loom Link - Insert if available]
 
 ---
@@ -220,7 +220,7 @@ npm start          # Basic system (Frontend + AI only)
 
 ```
 ✅ AI Proxy Server running on http://localhost:3001
-✅ Frontend server running on http://localhost:3000
+✅ Frontend server running on https://blockcast-hedera.vercel.app/
 ✅ Market Monitor running on port 3002
 ✅ Connected to Hedera Testnet
 ```
