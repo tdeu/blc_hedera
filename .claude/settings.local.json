@@ -99,7 +99,8 @@
       "Bash(tree:*)",
       "Bash(/dev/null -exec sed -i \"s|from ''\\.\\.\\/contexts\\/|from ''../../contexts/|g\" {} ;)",
       "Bash(/dev/null -exec sed -i \"s|from ''\\.\\.\\/config\\/|from ''../../config/|g\" {} ;)",
-      "Bash(./fix-imports.bat)"
+      "Bash(./fix-imports.bat)",
+      "WebFetch(domain:blockcast-hedera.vercel.app)"
     ],
     "deny": [],
     "ask": []
