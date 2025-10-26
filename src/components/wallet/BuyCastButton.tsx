@@ -192,7 +192,7 @@ export const BuyCastButton: React.FC<BuyCastButtonProps> = ({
             </Button>
             <Button
               onClick={handleBuyCast}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               disabled={isLoading || !hbarAmount || parseFloat(hbarAmount) <= 0 || parseFloat(hbarAmount) < 0.1}
             >
               {isLoading ? (

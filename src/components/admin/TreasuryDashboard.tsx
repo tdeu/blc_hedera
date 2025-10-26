@@ -251,13 +251,16 @@ export default function TreasuryDashboard({ isAdmin }: TreasuryDashboardProps) {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="token">Token</Label>
+                    <Label htmlFor="token">Token Contract Address</Label>
                     <Input
                       id="token"
-                      placeholder="Token contract address"
+                      placeholder="0xC78Ac73844077917E20530E36ac935c4B56236c2"
                       value={withdrawForm.token}
                       onChange={(e) => setWithdrawForm(prev => ({ ...prev, token: e.target.value }))}
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      CAST Token: <span className="font-mono text-blue-600">0xC78Ac73844077917E20530E36ac935c4B56236c2</span>
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="amount">Amount</Label>

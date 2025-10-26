@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
 import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Eye, BarChart3, PieChart, Activity, Tag, ShoppingBag, X } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Clock, DollarSign, Award, Target, Users, Zap, Vote, CheckCircle, XCircle, AlertTriangle, Eye, BarChart3, PieChart, Activity, Tag, ShoppingBag, X, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import ListNFTModal from '../nft/ListNFTModal';
 import { betNFTService, NFTListing } from '../../utils/betNFTService';
@@ -320,6 +320,59 @@ export default function BettingPortfolio({ userBalance, userBets: propUserBets }
     }
   };
 
+  // Withdraw funds (swap CAST to HBAR)
+  const handleWithdrawFunds = async () => {
+    // Check if user has positive P&L
+    if (totalPnL <= 0) {
+      toast.error('No profits available to withdraw. Your P&L must be positive.');
+      return;
+    }
+
+    try {
+      const { walletService } = await import('../../utils/walletService');
+      const connection = walletService.getConnection();
+
+      if (!connection || !connection.isConnected) {
+        toast.error('Please connect your wallet first');
+        return;
+      }
+
+      // Get CAST balance
+      const castBalance = await walletService.getCastTokenBalance();
+      const castBalanceNum = parseFloat(castBalance);
+
+      if (castBalanceNum <= 0) {
+        toast.error('No CAST tokens available to withdraw');
+        return;
+      }
+
+      // Show confirmation with withdraw amount
+      const withdrawAmount = Math.min(totalPnL, castBalanceNum);
+
+      toast.info(
+        `Withdrawing ${withdrawAmount.toFixed(3)} CAST (P&L profits) → HBAR`,
+        {
+          duration: 8000,
+          description: 'This feature will swap your CAST profits back to HBAR. Currently in development - will be available soon!'
+        }
+      );
+
+      // TODO: Implement actual CAST → HBAR swap via BuyCAST contract or liquidity pool
+      // For now, show placeholder message
+      toast.warning(
+        'Withdrawal feature coming soon!',
+        {
+          duration: 6000,
+          description: `You can withdraw ${withdrawAmount.toFixed(3)} CAST once the CAST→HBAR swap contract is deployed.`
+        }
+      );
+
+    } catch (error: any) {
+      console.error('Withdrawal failed:', error);
+      toast.error(`Withdrawal failed: ${error.message || 'Unknown error'}`);
+    }
+  };
+
   // Update bet claim status in localStorage
   const updateBetClaimStatus = (betId: string, claimed: boolean) => {
     try {
@@ -428,13 +481,16 @@ export default function BettingPortfolio({ userBalance, userBets: propUserBets }
 
         {/* Wallet Actions */}
         <div className="flex gap-2">
-          <Button
-            onClick={() => toast.success("Add Funds: Buy CAST tokens with HBAR using the Buy CAST button in the top navigation.")}
-            className="gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
-          >
-            <DollarSign className="h-4 w-4" />
-            Add Funds
-          </Button>
+          {totalPnL > 0 && (
+            <Button
+              onClick={handleWithdrawFunds}
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              title={`Withdraw your ${totalPnL.toFixed(3)} CAST profits back to HBAR`}
+            >
+              <ArrowDownToLine className="h-4 w-4" />
+              Withdraw {totalPnL.toFixed(3)} CAST
+            </Button>
+          )}
           {totalUnclaimedWinnings > 0 && (
             <Button
               onClick={handleClaimAllWinnings}

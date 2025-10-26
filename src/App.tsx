@@ -1323,7 +1323,7 @@ export default function App() {
           <MarketPage
             market={selectedMarket}
             onPlaceBet={handlePlaceBet}
-            userBalance={userProfile?.balance || 0}
+            userBalance={castBalance}
             onBack={handleBackFromMarket}
             walletConnected={walletConnection?.isConnected || false}
             onConnectWallet={connectWallet}

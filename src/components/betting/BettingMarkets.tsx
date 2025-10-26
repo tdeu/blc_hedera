@@ -348,7 +348,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     if (amount >= 1000) {
       return `${(amount / 1000).toFixed(1)}K`;
     }
-    return amount.toString();
+    return Math.round(amount).toString();
   };
 
   const getClaimText = (market: BettingMarket): string => {
@@ -520,7 +520,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
                 {/* Pool Information */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Total Pool</span>
+                    <span className="text-muted-foreground" title="Total CAST tokens locked in this market's liquidity pool">Liquidity Pool</span>
                     <span className="font-semibold">{formatCurrency(market.volume)} CAST</span>
                   </div>
                   

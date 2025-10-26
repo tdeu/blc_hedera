@@ -130,6 +130,7 @@ const translations = {
     truthVerificationPool: 'Truth Verification Pool',
     totalVolume: 'Total Volume',
     liquidity: 'Liquidity',
+    liquidityPool: 'Liquidity Pool',
     
     // Descriptions
     truthMarketsDesc: 'Verify trending news and cast your position on truth claims across Africa',
@@ -257,6 +258,7 @@ const translations = {
     truthVerificationPool: 'Pool de Vérification de Vérité',
     totalVolume: 'Volume Total',
     liquidity: 'Liquidité',
+    liquidityPool: 'Pool de Liquidité',
     
     // Descriptions
     truthMarketsDesc: 'Vérifiez les actualités tendances et prenez position sur les revendications de vérité à travers l\'Afrique',
@@ -384,6 +386,7 @@ const translations = {
     truthVerificationPool: 'Mfuko wa Uthibitisho wa Ukweli',
     totalVolume: 'Jumla ya Ujazo',
     liquidity: 'Urahisi wa Fedha',
+    liquidityPool: 'Mfuko wa Ukwasi',
     
     // Descriptions
     truthMarketsDesc: 'Thibitisha habari zinazovuma na chukua msimamo wako kuhusu madai ya ukweli kote Afrika',

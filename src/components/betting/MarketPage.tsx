@@ -1549,7 +1549,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                     <div className="p-3 bg-muted/50 rounded-lg">
                       <div className="text-sm text-muted-foreground mb-1">{t('potential_return')}</div>
                       <div className="font-semibold text-green-400">
-                        {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} HBAR
+                        {(parseFloat(castAmount) * (castPosition === 'yes' ? market.yesOdds : market.noOdds)).toFixed(3)} CAST
                       </div>
                     </div>
                   )}
