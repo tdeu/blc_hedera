@@ -537,31 +537,9 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
           (sourceArticles as any).perplexityCitations = perplexityResult.citations;
 
         } catch (perplexityError) {
-          console.warn('⚠️ Perplexity search failed, falling back to NewsAPI:', perplexityError);
-          toast.warning('Perplexity unavailable, using NewsAPI fallback...');
-
-          // Fallback to NewsAPI if Perplexity fails
-          let allArticles: any[] = [];
-          for (const query of searchQueries.slice(0, 3)) {
-            console.log(`   🔍 NewsAPI fallback: "${query}"`);
-            const articles = await newsApiService.searchNews(
-              query,
-              selectedNewsSources,
-              5
-            );
-            allArticles = [...allArticles, ...articles];
-          }
-
-          const uniqueArticles = Array.from(
-            new Map(allArticles.map(a => [a.url, a])).values()
-          ).slice(0, 15);
-
-          if (uniqueArticles.length === 0) {
-            throw new Error(`No relevant information found for this topic`);
-          }
-
-          sourceArticles = uniqueArticles;
-          sourceType = 'NewsAPI (fallback)';
+          console.error('❌ Perplexity search failed:', perplexityError);
+          toast.error('Perplexity search failed. Please try again.');
+          throw new Error(`Perplexity search failed: ${perplexityError.message}`);
         }
 
       } else {
@@ -1159,7 +1137,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
   };
 
   const getEvidencePeriodInfo = (market: MarketWithEvidence): string | null => {
-    const MAX_EVIDENCE_DAYS = 100;
+    const MAX_EVIDENCE_DAYS = 30;
 
     // Calculate evidence start date
     const evidenceStartDate = market.evidence_period_start
@@ -1988,7 +1966,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                       <div className="text-xs">
                                         <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">📡 Data Sources:</div>
                                         <div className="text-gray-600 dark:text-gray-400">Perplexity AI (real-time web search with citations)</div>
-                                        <div className="text-xs text-gray-500 mt-0.5">Fallback: NewsAPI (BBC, Reuters, Bloomberg)</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">AI Analysis: Anthropic Claude (reasoning & verification)</div>
                                       </div>
 
                                       <div className="text-xs">
@@ -2741,7 +2719,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                   const daysSinceExpiry = Math.floor((now.getTime() - evidenceStartDate.getTime()) / (1000 * 60 * 60 * 24));
                                   const confidence = confidenceBreakdown.finalConfidence;
                                   const MIN_EVIDENCE_DAYS = 7;
-                                  const MAX_EVIDENCE_DAYS = 100;
+                                  const MAX_EVIDENCE_DAYS = 30;
                                   const CONFIDENCE_THRESHOLD = 80;
 
                                   // State 1: Still in minimum evidence period (< 7 days)
@@ -2787,7 +2765,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                     );
                                   }
 
-                                  // State 3: After 100 days, confidence still < 80% - REFUND OPTION
+                                  // State 3: After 30 days, confidence still < 80% - REFUND OPTION
                                   if (daysSinceExpiry >= MAX_EVIDENCE_DAYS) {
                                     return (
                                       <>
@@ -2823,7 +2801,7 @@ const EvidenceResolutionPanel: React.FC<EvidenceResolutionPanelProps> = ({ userP
                                     );
                                   }
 
-                                  // State 4: Between 7-100 days, confidence < 80% - WAITING FOR MORE EVIDENCE
+                                  // State 4: Between 7-30 days, confidence < 80% - WAITING FOR MORE EVIDENCE
                                   return (
                                     <>
                                       <Button

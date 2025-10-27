@@ -156,7 +156,7 @@ export class MarketMonitorService {
       console.log(`📊 Evidence collection started: ${now.toISOString()}`);
       console.log(`⏱️  Evidence period: Indefinite (minimum 7 days, until 80% confidence reached)`);
       console.log(`🎯 Resolution threshold: 80% confidence minimum`);
-      console.log(`⚠️  Refund option available after 100 days if confidence never reaches 80%`);
+      console.log(`⚠️  Refund option available after 30 days if confidence never reaches 80%`);
 
       // NEW BEHAVIOR: Do NOT automatically schedule resolution
       // Markets will stay disputable until admin manually triggers resolution

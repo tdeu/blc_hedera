@@ -123,7 +123,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
   const handleQuickCast = (position: 'yes' | 'no', amount: number) => {
     if (!walletConnected && onConnectWallet) {
-      toast.info('Please connect your wallet to place bets');
+      toast.info('Please connect your wallet to place trades');
       onConnectWallet();
       return;
     }
@@ -136,7 +136,8 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     onPlaceBet(market.id, position, amount);
 
     // Success feedback
-    toast.success(`Truth position cast: ${position.toUpperCase()} with ${amount} CAST`);
+    const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
+    toast.success(`Truth position cast: ${displayPosition} with ${amount} CAST`);
   };
 
   const calculateProfit = (amount: number, position: 'yes' | 'no') => {
@@ -166,7 +167,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
 
   const handleCustomCast = () => {
     if (!walletConnected && onConnectWallet) {
-      toast.info('Please connect your wallet to place bets');
+      toast.info('Please connect your wallet to place trades');
       onConnectWallet();
       return;
     }
@@ -185,7 +186,8 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     setCastAmount('');
     setProfitCalculation(null);
 
-    toast.success(`Custom truth position cast: ${castPosition.toUpperCase()} with ${amount} CAST`);
+    const displayPosition = castPosition === 'yes' ? 'TRUE' : 'FALSE';
+    toast.success(`Custom truth position cast: ${displayPosition} with ${amount} CAST`);
   };
 
   const handleCommentSubmit = () => {
@@ -311,7 +313,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
     // Markets remain disputable if:
     // 1. They are in disputable/pending_resolution/disputing status
     // 2. OR they have expired but confidence < 80% (regardless of dispute period end)
-    // 3. Until confidence reaches 80% OR 100 days have passed (refund threshold)
+    // 3. Until confidence reaches 80% OR 30 days have passed (refund threshold)
 
     const isExpired = market.expiresAt && market.expiresAt <= now;
     const hasReachedConfidenceThreshold = confidenceScore >= 80;
@@ -1560,7 +1562,7 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
                 <CardHeader>
                   <CardTitle className="text-base">Market Not Active</CardTitle>
                   <CardDescription>
-                    This market is {market.status}. Placing new positions is disabled.
+                    This market is {market.status}. Trading new positions is disabled.
                   </CardDescription>
                 </CardHeader>
               </Card>

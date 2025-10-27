@@ -901,7 +901,7 @@ export default function App() {
 
     // Check if wallet is connected (including mock wallet for testing)
     if (!walletConnection || !walletConnection.isConnected) {
-      toast.error('Please connect your wallet to place bets');
+      toast.error('Please connect your wallet to place trades');
       return;
     }
 
@@ -910,7 +910,7 @@ export default function App() {
     const numericCastBalance = parseFloat(currentCastBalance);
 
     if (amount > numericCastBalance) {
-      toast.error(`Insufficient CAST balance. You have ${numericCastBalance.toFixed(3)} CAST but need ${amount} CAST to place this bet. Please buy more CAST tokens.`);
+      toast.error(`Insufficient CAST balance. You have ${numericCastBalance.toFixed(3)} CAST but need ${amount} CAST to place this trade. Please buy more CAST tokens.`);
       return;
     }
 
@@ -918,7 +918,7 @@ export default function App() {
     const market = markets.find(m => m.id === marketId);
     if (!market) return;
 
-    console.log('🏪 Market found for betting:', {
+    console.log('🏪 Market found for trading:', {
       id: market.id,
       claim: market.claim.substring(0, 50),
       contractAddress: (market as any).contractAddress
@@ -989,15 +989,15 @@ export default function App() {
       contractAddressForRefresh = contractAddress; // Store for later use
 
       // Always record bet locally first
-      console.log(`📝 Proceeding with bet placement for market ${marketId}. Contract: ${contractAddress || 'local mode'}`);
+      console.log(`📝 Proceeding with trade placement for market ${marketId}. Contract: ${contractAddress || 'local mode'}`);
 
       if (contractAddress) {
-        console.log(`🚀 Placing bet on blockchain contract: ${contractAddress}`);
+        console.log(`🚀 Placing trade on blockchain contract: ${contractAddress}`);
 
         // Place bet directly on the existing market contract
         hederaPlaceBetWithAddress(contractAddress, position, amount).then(transactionId => {
         if (transactionId) {
-          console.log(`Bet recorded on Hedera blockchain: ${transactionId}`);
+          console.log(`Trade recorded on Hedera blockchain: ${transactionId}`);
           // Update bet record with blockchain transaction ID
           setUserBets(prev => prev.map(bet =>
             bet.id === newBet.id
@@ -1005,8 +1005,8 @@ export default function App() {
               : bet
           ));
 
-          // 💰 Refresh wallet balances after successful bet to show updated CAST and HBAR balances
-          console.log('🔄 Refreshing wallet balances after successful bet...');
+          // 💰 Refresh wallet balances after successful trade to show updated CAST and HBAR balances
+          console.log('🔄 Refreshing wallet balances after successful trade...');
           setTimeout(async () => {
             try {
               // Refresh both HBAR and CAST balances
@@ -1014,7 +1014,7 @@ export default function App() {
                 const newHbarBalance = await walletService.getBalance();
                 const newCastBalance = await walletService.getCastTokenBalance();
 
-                console.log('💰 Balance update after bet:', {
+                console.log('💰 Balance update after trade:', {
                   hbar: newHbarBalance,
                   cast: newCastBalance,
                   change: `HBAR: ${(parseFloat(newHbarBalance) - (walletConnection?.balance ? parseFloat(walletConnection.balance) : 0)).toFixed(4)} (gas fees)`,
@@ -1029,7 +1029,7 @@ export default function App() {
 
                 // Show informative toast about the balance changes
                 toast.info(
-                  `Balance updated: ${amount} CAST used for bet + gas fees paid in HBAR`,
+                  `Balance updated: ${amount} CAST used for trade + gas fees paid in HBAR`,
                   {
                     duration: 4000,
                     description: 'Your CAST balance decreased by your stake amount, HBAR balance decreased by gas fees'
@@ -1043,7 +1043,7 @@ export default function App() {
 
           // 🔄 Refresh market odds after successful bet placement
           // Use the stored contract address to avoid React state timing issues
-          console.log(`🎯 Refreshing market odds after bet placement for market: ${marketId}`);
+          console.log(`🎯 Refreshing market odds after trade placement for market: ${marketId}`);
           console.log(`🔍 Stored contract address:`, contractAddressForRefresh);
           console.log(`🗂️ Current marketContracts state:`, marketContracts);
 
@@ -1081,17 +1081,18 @@ export default function App() {
           // UI continues to work normally even if blockchain fails
         });
       } else {
-        console.log(`📱 No contract found - bet will be stored locally for market ${marketId}`);
+        console.log(`📱 No contract found - trade will be stored locally for market ${marketId}`);
         // Bet was already recorded locally above, so this is fine
         // User will get success message below
       }
     }
 
+    const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
     toast.success(
-      `${position.toUpperCase()} position placed: ${amount} CAST`,
+      `${displayPosition} position placed: ${amount} CAST`,
       {
         duration: 4000,
-        description: `Bet placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
+        description: `Trade placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
       }
     );
   };

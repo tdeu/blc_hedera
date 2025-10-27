@@ -179,7 +179,7 @@ curl http://localhost:3002/status
 
 **Setup:**
 1. Create a market with low-quality evidence
-2. Let it reach 100+ days in evidence period
+2. Let it reach 30+ days in evidence period
 3. AI confidence stays below 80%
 4. Run final resolution executor
 
@@ -193,7 +193,7 @@ curl http://localhost:3002/status
 
 **Setup:**
 1. Have 2 markets in `pending_resolution` (7+ days dispute period)
-2. Have 1 market eligible for refund (100+ days, <80% confidence)
+2. Have 1 market eligible for refund (30+ days, <80% confidence)
 3. Run final resolution executor
 
 **Expected Result:**
@@ -217,7 +217,7 @@ All timing thresholds are in `src/config/resolutionConfig.ts`:
 ```typescript
 timingThresholds: {
   disputePeriodDays: 7,         // Dispute period after preliminary resolution
-  maxEvidencePeriodDays: 100,   // Max days before refund eligibility
+  maxEvidencePeriodDays: 30,    // Max days before refund eligibility
   minConfidenceThreshold: 80    // Minimum confidence % to resolve
 }
 ```
@@ -286,7 +286,7 @@ Users claim winnings
 ### Refund Path
 
 ```
-Market expires + Evidence Period >100 days + Confidence <80%
+Market expires + Evidence Period >30 days + Confidence <80%
     ↓
 [FinalResolutionExecutor detects]
     ↓

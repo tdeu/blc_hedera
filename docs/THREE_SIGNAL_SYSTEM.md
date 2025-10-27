@@ -73,8 +73,8 @@ Confidence < 60% OR signals conflict →  ⚠️ Manual Investigation Required
 ## 80% Confidence Threshold System
 
 - Markets require ≥80% confidence for final resolution
-- Evidence period: Minimum 7 days, extendable up to 100 days
-- If confidence <80% after 100 days → Market refunded to all bettors
+- Evidence period: Minimum 7 days, extendable up to 30 days
+- If confidence <80% after 30 days → Market refunded to all bettors
 - Refund mechanism ensures fairness for unresolvable markets
 
 ## Market Status Flow
@@ -87,7 +87,7 @@ Open → Expired → PendingResolution
     Confidence ≥80%          Confidence <80%
          │                         │
          ↓                         ↓
-    Resolved              After 100 days → Refunded
+    Resolved              After 30 days → Refunded
          │                         │
          ↓                         ↓
   Winners claim             All claim refunds

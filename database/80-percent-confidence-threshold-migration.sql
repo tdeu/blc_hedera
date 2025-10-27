@@ -4,8 +4,8 @@
 -- This migration adds support for the new resolution system where:
 -- 1. Markets require 80% confidence for resolution
 -- 2. Evidence period minimum is 7 days
--- 3. Markets can stay disputable up to 100 days
--- 4. Markets with <80% confidence after 100 days can be refunded
+-- 3. Markets can stay disputable up to 30 days
+-- 4. Markets with <80% confidence after 30 days can be refunded
 -- ========================================
 
 -- Add evidence_period_start column to track when evidence collection began

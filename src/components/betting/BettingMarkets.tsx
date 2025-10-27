@@ -273,7 +273,7 @@ export default function BettingMarkets({ onPlaceBet, userBalance, onMarketSelect
     // Markets remain disputable if:
     // 1. They are in disputable/pending_resolution/disputing status
     // 2. OR they have expired but confidence < 80% (regardless of dispute period end)
-    // 3. Until confidence reaches 80% OR 100 days have passed (refund threshold)
+    // 3. Until confidence reaches 80% OR 30 days have passed (refund threshold)
 
     const isExpired = market.expiresAt && market.expiresAt <= now;
     const hasReachedConfidenceThreshold = confidenceScore >= 80;

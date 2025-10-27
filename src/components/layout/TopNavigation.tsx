@@ -224,7 +224,7 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                     </div>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleNavClick('profile')}>
+                  <DropdownMenuItem onClick={() => handleNavClick('settings?tab=preferences')}>
                     <User className="h-4 w-4 mr-2" />
                     Profile
                   </DropdownMenuItem>
@@ -341,7 +341,7 @@ export default function TopNavigation({ currentTab, onTabChange, isDarkMode, onT
                   <div className="mt-4">
                     <Button
                       variant={currentTab === 'profile' ? "default" : "ghost"}
-                      onClick={() => handleNavClick('profile')}
+                      onClick={() => handleNavClick('settings?tab=preferences')}
                       className="w-full justify-start gap-3 h-12"
                     >
                       <User className="h-5 w-5" />

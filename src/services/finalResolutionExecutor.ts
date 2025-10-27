@@ -68,7 +68,7 @@ export class FinalResolutionExecutor {
       const finalResolutionJobs = await this.findMarketsReadyForFinalResolution();
       console.log(`📊 Found ${finalResolutionJobs.length} markets ready for final resolution`);
 
-      // Step 2: Find markets eligible for refund (>100 days, <80% confidence)
+      // Step 2: Find markets eligible for refund (>30 days, <80% confidence)
       const refundJobs = await this.findMarketsEligibleForRefund();
       console.log(`💸 Found ${refundJobs.length} markets eligible for refund`);
 
@@ -147,7 +147,7 @@ export class FinalResolutionExecutor {
   }
 
   /**
-   * Find markets eligible for refund (>100 days in evidence period, <80% confidence)
+   * Find markets eligible for refund (>30 days in evidence period, <80% confidence)
    */
   private async findMarketsEligibleForRefund(): Promise<RefundJob[]> {
     try {

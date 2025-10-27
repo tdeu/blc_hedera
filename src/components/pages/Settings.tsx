@@ -126,10 +126,6 @@ export default function Settings({ isDarkMode, onToggleDarkMode, userBalance = 0
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary mb-1 flex items-center gap-2">
-            <SettingsIcon className="h-7 w-7" />
-            {t('nav.settings')}
-          </h1>
           <p className="text-sm text-muted-foreground">
             Manage your account, preferences, and privacy settings
           </p>

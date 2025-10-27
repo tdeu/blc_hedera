@@ -192,12 +192,12 @@ export default function BettingPortfolio({ userBalance, userBets: propUserBets }
     }
 
     if (cast.status !== 'won') {
-      toast.error('Can only claim winnings for won bets');
+      toast.error('Can only claim winnings for won trades');
       return;
     }
 
     if (cast.winningsClaimed) {
-      toast.info('Winnings already claimed for this bet');
+      toast.info('Winnings already claimed for this trade');
       return;
     }
 
@@ -224,7 +224,7 @@ export default function BettingPortfolio({ userBalance, userBets: propUserBets }
 
       const loadingToast = toast.loading(`Claiming ${cast.actualWinning?.toFixed(3)} CAST...`);
 
-      console.log(`💰 Claiming winnings for bet ${cast.id} from market ${cast.marketContractAddress}`);
+      console.log(`💰 Claiming winnings for trade ${cast.id} from market ${cast.marketContractAddress}`);
       const tx = await marketContract.redeem();
       await tx.wait();
 

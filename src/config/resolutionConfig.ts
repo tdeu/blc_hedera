@@ -138,9 +138,9 @@ export const RESOLUTION_CONFIG: ResolutionConfigType = {
 
     /**
      * Maximum evidence collection period
-     * After 100 days, markets with <80% confidence are eligible for refund
+     * After 30 days, markets with <80% confidence are eligible for refund
      */
-    maxEvidencePeriodDays: 100,
+    maxEvidencePeriodDays: 30,
 
     /**
      * Minimum confidence threshold for resolution

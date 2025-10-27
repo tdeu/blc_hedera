@@ -406,6 +406,14 @@ This project is licensed under the **MIT License** - see [LICENSE](./LICENSE) fi
 
 ---
 
+## 📧 Contact
+
+For questions, support, or partnership inquiries:
+
+**Email:** contact@blockcast.live
+
+---
+
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
 
 *Built with ❤️ for the Hedera Hackathon*
