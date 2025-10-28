@@ -648,9 +648,38 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       if (result.success) {
         setSubmissionStep('complete');
 
+        // Show success toast with Hashscan links
+        const contractTxUrl = result.transactionId
+          ? `https://hashscan.io/testnet/transaction/${result.transactionId}`
+          : null;
+        const hcsTopicUrl = `https://hashscan.io/testnet/topic/0.0.6701034`;
+
         toast.success(
-          `🏛️ Dispute created successfully! 🎉\nBond: ${result.bondAmount} CAST locked\nID: ${result.disputeId}\nTX: ${result.transactionId?.slice(-8)}`,
-          { duration: 6000 }
+          <div className="space-y-2">
+            <p className="font-semibold">🏛️ Evidence submitted successfully!</p>
+            <p className="text-sm">Bond: {result.bondAmount} CAST • Dispute ID: {result.disputeId}</p>
+            {contractTxUrl && (
+              <a
+                href={contractTxUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:underline font-medium block"
+                onClick={(e) => e.stopPropagation()}
+              >
+                🔗 View Contract Transaction →
+              </a>
+            )}
+            <a
+              href={hcsTopicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-green-600 hover:underline font-medium block"
+              onClick={(e) => e.stopPropagation()}
+            >
+              📋 View Evidence on HCS Topic →
+            </a>
+          </div>,
+          { duration: 10000 }
         );
 
         // Clear form and refresh balance
@@ -681,7 +710,33 @@ export default function MarketPage({ market, onPlaceBet, userBalance, onBack, wa
       }
     } catch (error: any) {
       console.error('Failed to submit evidence:', error);
-      toast.error(error.message || 'Failed to submit evidence. Please try again.');
+
+      // Simplify error messages for better UX
+      let errorMessage = error.message || 'Failed to submit evidence. Please try again.';
+
+      // Check for common error patterns and simplify
+      if (errorMessage.includes('User already has active dispute')) {
+        errorMessage = 'You have already placed evidence against this market';
+      } else if (errorMessage.includes('Insufficient')) {
+        errorMessage = 'Insufficient balance to pay dispute bond';
+      } else if (errorMessage.includes('Market not found') || errorMessage.includes('does not exist')) {
+        errorMessage = 'Market not found or not available for disputes';
+      } else if (errorMessage.includes('execution reverted')) {
+        // Extract just the revert reason if available
+        const match = errorMessage.match(/"([^"]+)"/);
+        if (match && match[1]) {
+          const revertReason = match[1];
+          if (revertReason.includes('User already has active dispute')) {
+            errorMessage = 'You have already placed evidence against this market';
+          } else {
+            errorMessage = `Transaction failed: ${revertReason}`;
+          }
+        } else {
+          errorMessage = 'Transaction failed. Please try again.';
+        }
+      }
+
+      toast.error(errorMessage);
     } finally {
       setIsSubmittingEvidence(false);
       if (submissionStep !== 'complete') {

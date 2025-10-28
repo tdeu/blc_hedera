@@ -1005,6 +1005,26 @@ export default function App() {
               : bet
           ));
 
+          // Show success toast with Hashscan link
+          const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
+          const hashScanUrl = `https://hashscan.io/testnet/transaction/${transactionId}`;
+          toast.success(
+            <div className="space-y-2">
+              <p className="font-semibold">✅ {displayPosition} position placed successfully!</p>
+              <p className="text-sm">{amount} CAST • Market: {market.claim.substring(0, 50)}...</p>
+              <a
+                href={hashScanUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:underline font-medium block"
+                onClick={(e) => e.stopPropagation()}
+              >
+                🔗 View Transaction on HashScan →
+              </a>
+            </div>,
+            { duration: 8000 }
+          );
+
           // 💰 Refresh wallet balances after successful trade to show updated CAST and HBAR balances
           console.log('🔄 Refreshing wallet balances after successful trade...');
           setTimeout(async () => {
@@ -1075,26 +1095,43 @@ export default function App() {
             console.log(`❌ No contract address available for refresh`);
             console.log(`🔍 Debugging: contractAddressForRefresh was:`, contractAddressForRefresh);
           }
+        } else {
+          // No transaction ID - show basic success message
+          const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
+          toast.success(
+            `${displayPosition} position placed: ${amount} CAST`,
+            {
+              duration: 4000,
+              description: `Trade placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
+            }
+          );
         }
         }).catch(error => {
           console.error('Blockchain transaction failed:', error);
           // UI continues to work normally even if blockchain fails
+          const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
+          toast.success(
+            `${displayPosition} position placed: ${amount} CAST`,
+            {
+              duration: 4000,
+              description: `Trade placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
+            }
+          );
         });
       } else {
         console.log(`📱 No contract found - trade will be stored locally for market ${marketId}`);
         // Bet was already recorded locally above, so this is fine
         // User will get success message below
+        const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
+        toast.success(
+          `${displayPosition} position placed: ${amount} CAST`,
+          {
+            duration: 4000,
+            description: `Trade placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
+          }
+        );
       }
     }
-
-    const displayPosition = position === 'yes' ? 'TRUE' : 'FALSE';
-    toast.success(
-      `${displayPosition} position placed: ${amount} CAST`,
-      {
-        duration: 4000,
-        description: `Trade placed on "${market.claim.substring(0, 60)}..." - Your balances will update shortly`
-      }
-    );
   };
 
   // Handle category selection
@@ -1179,7 +1216,30 @@ export default function App() {
             );
             localStorage.setItem('blockcast_pending_markets', JSON.stringify(updatedMarkets));
             console.log(`✅ Contract address ${contract.contractId} stored with pending market ${newMarket.id}`);
-            toast.success('Market created and deployed to blockchain! Awaiting admin approval.');
+
+            // Show success toast with Hashscan link
+            const transactionHash = (contract as any).transactionHash;
+            if (transactionHash) {
+              const hashScanUrl = `https://hashscan.io/testnet/transaction/${transactionHash}`;
+              toast.success(
+                <div className="space-y-2">
+                  <p className="font-semibold">✅ Market created and deployed to blockchain!</p>
+                  <p className="text-sm">Contract: {contract.contractId.slice(0, 10)}...{contract.contractId.slice(-8)}</p>
+                  <a
+                    href={hashScanUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline font-medium block"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    🔗 View on HashScan →
+                  </a>
+                </div>,
+                { duration: 8000 }
+              );
+            } else {
+              toast.success('Market created and deployed to blockchain! Awaiting admin approval.');
+            }
           } else {
             console.warn('⚠️ Contract deployment returned invalid result');
             throw new Error('Contract deployment failed - no valid contract address returned');

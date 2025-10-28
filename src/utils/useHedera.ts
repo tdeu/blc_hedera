@@ -253,11 +253,13 @@ export const useHedera = (walletConnection?: WalletConnection | null): UseHedera
       setIsLoading(true);
 
       console.log('🎯 About to call hederaEVMService.placeBet...');
-      const transactionId = await hederaEVMService.placeBet(marketAddress, position, amount);
+      const result = await hederaEVMService.placeBet(marketAddress, position, amount);
       console.log('✅ hederaEVMService.placeBet completed successfully');
 
+      // Extract txHash from the result object
+      const transactionId = typeof result === 'string' ? result : result?.txHash;
       console.log(`Position placed on blockchain: ${transactionId}`);
-      return transactionId;
+      return transactionId || null;
     } catch (error) {
       console.error('❌ EVM bet placement failed:', error);
       console.error('❌ Error message:', error?.message);

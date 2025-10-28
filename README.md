@@ -1,10 +1,10 @@
 # BlockCast - AI-Powered Prediction Market Platform
 
-> **🏆 Hedera Hackathon Submission - DeFi Track**
->
+> **🏆 Hedera Hackathon Submission - Onchain Finance & Real-World Assets (RWA)**
+>Subtrack: Assets Tokenization
 > Fully operational decentralized prediction market with AI-powered resolution, built on Hedera Hashgraph
 
-BlockCast combines blockchain transparency, AI intelligence, and community wisdom to create a next-generation truth verification platform. Our **Three-Signal Resolution System** analyzes betting volumes, user evidence, and real-world data to automatically resolve prediction markets with 92%+ accuracy.
+BlockCast combines blockchain transparency, AI intelligence, and community wisdom to create a next-generation truth verification platform. Our **Three-Signal Resolution System** analyzes trading volumes, user evidence, and real-world data to automatically resolve prediction markets with 92%+ accuracy.
 
 **📌 Public Repository**: https://github.com/tdeu/blc_hedera
 **🎬 Live Demo**: https://blockcast-hedera.vercel.app/
@@ -31,7 +31,7 @@ BlockCast combines blockchain transparency, AI intelligence, and community wisdo
 
 ### Why Hedera?
 
-BlockCast targets African prediction markets where average bet sizes are **$1-5 USD**. Ethereum's $5-50 transaction fees make this impossible. Hedera's **$0.0001 fees** enable profitable micro-betting operations.
+BlockCast targets African prediction markets where average trade sizes are **$1-5 USD**. Ethereum's $5-50 transaction fees make this impossible. Hedera's **$0.0001 fees** enable profitable micro-trading operations.
 
 ### Hedera Token Service (HTS)
 
@@ -56,7 +56,7 @@ BlockCast targets African prediction markets where average bet sizes are **$1-5 
 **Why HSCS:** EVM-compatible, 10x cheaper gas than Ethereum, instant finality.
 
 **Contracts:** 6 deployed (Factory, CAST, BetNFT, AdminManager, Treasury, DisputeManager)
-**Gas Cost:** ~$0.003 per bet, ~$0.012 per market creation
+**Gas Cost:** ~$0.003 per trade, ~$0.012 per market creation
 
 ### Hedera File Service (HFS)
 
@@ -111,7 +111,7 @@ BlockCast targets African prediction markets where average bet sizes are **$1-5 
 ```
 
 **Data Flow:**
-1. User Bet: Frontend → MetaMask → Factory Contract → CAST Transfer
+1. User Trade: Frontend → MetaMask → Factory Contract → CAST Transfer
 2. Evidence: Frontend → HCS Topic → Supabase → AI Proxy → Claude Analysis
 3. Resolution: Monitor → AI Proxy → Three-Signal Analysis → Preliminary Resolve → Final Resolve
 4. Claim: Portfolio → MetaMask → Market.redeem() → CAST Transfer
@@ -263,7 +263,7 @@ After executing `npm run start:all`, you should have:
 **HTS (Hedera Token Service):**
 - ✅ `TokenCreateTransaction` - Created CAST token & BetNFT (2 tokens)
 - ✅ `TokenAssociateTransaction` - Auto-associate tokens with user wallets
-- ✅ `TokenTransferTransaction` - Betting, payouts, evidence bonds, NFT trading (50+ TX)
+- ✅ `TokenTransferTransaction` - Trading, payouts, evidence bonds, NFT trading (50+ TX)
 - ✅ `TokenMintTransaction` - Creator rewards (100 CAST per resolved market)
 - ✅ `TokenBurnTransaction` - Failed evidence bond penalties
 
@@ -273,7 +273,7 @@ After executing `npm run start:all`, you should have:
 
 **HSCS (Smart Contract Service):**
 - ✅ `ContractCreateTransaction` - Deployed 6 core contracts
-- ✅ `ContractExecuteTransaction` - Place bets, resolve markets, claim winnings (100+ TX)
+- ✅ `ContractExecuteTransaction` - Place trades, resolve markets, claim winnings (100+ TX)
 - ✅ `ContractCallQuery` - Read market state, balances, odds (10,000+ queries)
 
 **HFS (File Service):**
@@ -287,12 +287,12 @@ After executing `npm run start:all`, you should have:
 ### Cost Analysis
 
 **Average Transaction Costs:**
-- Place bet: ~$0.003 (0.05 HBAR)
+- Place trade: ~$0.003 (0.05 HBAR)
 - Submit evidence: ~$0.0001 (HCS message)
 - Create market: ~$0.012 (0.20 HBAR)
 - Claim winnings: ~$0.003 (0.05 HBAR)
 
-**Total Cost Per User Journey:** Bet + Evidence + Claim = **$0.0061 USD**
+**Total Cost Per User Journey:** Trade + Evidence + Claim = **$0.0061 USD**
 **Compare to Ethereum:** Same journey = **$15-75 USD** (2,500x more expensive)
 
 ---
@@ -301,17 +301,17 @@ After executing `npm run start:all`, you should have:
 
 ### 1. Three-Signal Resolution System (Industry First)
 
-Combines **betting volumes** + **evidence submissions** + **external APIs** for 92%+ accuracy vs 70-80% for single-oracle markets. Each signal weighted independently, aligned signals receive bonus points.
+Combines **trading volumes** + **evidence submissions** + **external APIs** for 92%+ accuracy vs 70-80% for single-oracle markets. Each signal weighted independently, aligned signals receive bonus points.
 
 **📊 Deep Dive:** [COMPETITIVE_ANALYSIS.md](./docs/COMPETITIVE_ANALYSIS.md)
 
 ### 2. 80% Confidence Threshold
 
-Markets require ≥80% confidence for resolution. Below 80%? **All bettors refunded.** Accuracy over speed prevents incorrect resolutions and builds user trust.
+Markets require ≥80% confidence for resolution. Below 80%? **All traders refunded.** Accuracy over speed prevents incorrect resolutions and builds user trust.
 
 ### 3. Tradeable Position NFTs
 
-Each bet mints an NFT representing the position. Exit losing positions early or buy discounted winners. **First prediction market with full NFT trading.**
+Each trade mints an NFT representing the position. Exit losing positions early or buy discounted winners. **First prediction market with full NFT trading.**
 
 ### 4. Creator Rewards
 
@@ -323,7 +323,7 @@ Market creators earn **100 CAST tokens** (~$5) per successful resolution. Incent
 - **Finality:** 3-5 seconds (vs 12+ minutes)
 - **Energy:** 0.00017 kWh (vs 238 kWh on Ethereum)
 
-Makes micro-betting ($0.50-5) accessible to African users with limited capital.
+Makes micro-trading ($0.50-5) accessible to African users with limited capital.
 
 ---
 
@@ -372,7 +372,7 @@ Makes micro-betting ($0.50-5) accessible to African users with limited capital.
 **Live Platform Stats:**
 - Markets Created: **120+**
 - Markets Resolved: **3+** (verified on HashScan)
-- Total Bets Placed: **50+**
+- Total Trades Placed: **50+**
 - Transaction Success Rate: **99.8%**
 - AI Confidence Average: **85%+**
 - P&L Accuracy: **100%** ✅

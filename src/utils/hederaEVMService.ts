@@ -593,7 +593,8 @@ export class HederaEVMService {
         contractId: marketAddress,
         topicId: `market-${marketAddress.slice(0, 10)}`,
         createdAt: new Date(),
-        status: approvalTxHash ? 'active' : 'submitted'
+        status: approvalTxHash ? 'active' : 'submitted',
+        transactionHash: tx.hash
       };
 
     } catch (error: any) {
