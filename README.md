@@ -88,7 +88,7 @@ The `HederaLangchainToolkit` exposes all Hedera operations to Claude AI, enablin
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        USER INTERFACE                           │
-│                   React Frontend (Port 3000)                    │
+│                   React Frontend (Port 3000/Vercel)             │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────┐    │
 │  │   Markets    │  │  Portfolio   │  │  Admin Dashboard    │    │
 │  │   Browser    │  │   P&L View   │  │  Resolution Panel   │    │
@@ -402,4 +402,5 @@ For questions, support, or partnership inquiries:
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
 
 *Built with ❤️ for the Hedera Hackathon*
+
 
