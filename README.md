@@ -13,7 +13,7 @@ BlockCast combines blockchain transparency, AI intelligence, and community wisdo
 📌 Public Repository: https://github.com/tdeu/blc_hedera
 📌 Pitch Deck: https://drive.google.com/drive/folders/1olVNiNjba1eTShq4DpaIfeAonKlTef4E
 🎬 Deployment: https://blockcast-hedera.vercel.app/
-📺 Video Demo: https://drive.google.com/drive/u/0/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F
+📺 Video Demo: https://www.youtube.com/watch?v=lWgoOMuMuNc
 📺 Team Hashgraph certificates**: [https://drive.google.com/drive/u/0/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F
 
 ---
@@ -406,6 +406,7 @@ For questions, support, or partnership inquiries:
 ---
 
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
+
 
 
 
