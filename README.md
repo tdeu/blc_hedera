@@ -2,7 +2,7 @@
 
 > **🏆 Hedera Hackathon Submission - 
 
-Track: Onchain Finance & Real-World Assets (RWA)**
+Track: Onchain Finance & Real-World Assets (RWA)
 
 >Subtrack: Assets Tokenization
 
@@ -406,6 +406,7 @@ For questions, support, or partnership inquiries:
 ---
 
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
+
 
 
 
