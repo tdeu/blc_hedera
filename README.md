@@ -1,7 +1,11 @@
 # BlockCast - AI-Powered Prediction Market Platform
 
-> **🏆 Hedera Hackathon Submission - Onchain Finance & Real-World Assets (RWA)**
+> **🏆 Hedera Hackathon Submission - 
+
+Track: Onchain Finance & Real-World Assets (RWA)**
+
 >Subtrack: Assets Tokenization
+
 > Fully operational decentralized prediction market with AI-powered resolution, built on Hedera Hashgraph
 
 BlockCast combines blockchain transparency, AI intelligence, and community wisdom to create a next-generation truth verification platform. Our **Three-Layer Resolution System** analyzes trading volumes, user evidence, and real-world data to automatically resolve prediction markets with 92%+ accuracy.
@@ -10,7 +14,7 @@ BlockCast combines blockchain transparency, AI intelligence, and community wisdo
 📌 Pitch Deck: https://drive.google.com/drive/folders/1olVNiNjba1eTShq4DpaIfeAonKlTef4E
 🎬 Deployment: https://blockcast-hedera.vercel.app/
 📺 Video Demo: https://drive.google.com/drive/u/0/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F
-📺 Team Hashgraph certificates**: [https://drive.google.com/drive/u/0/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F]
+📺 Team Hashgraph certificates**: [https://drive.google.com/drive/u/0/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F
 
 ---
 
@@ -402,6 +406,7 @@ For questions, support, or partnership inquiries:
 ---
 
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
+
 
 
 
