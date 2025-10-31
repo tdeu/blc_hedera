@@ -11,10 +11,10 @@ Track: Onchain Finance & Real-World Assets (RWA)
 BlockCast combines blockchain transparency, AI intelligence, and community wisdom to create a next-generation truth verification platform. Our **Three-Layer Resolution System** analyzes trading volumes, user evidence, and real-world data to automatically resolve prediction markets with 92%+ accuracy.
 
 📌 Public Repository: https://github.com/tdeu/blc_hedera
-📌 Pitch Deck: https://drive.google.com/drive/folders/1olVNiNjba1eTShq4DpaIfeAonKlTef4E
 🎬 Deployment: https://blockcast-hedera.vercel.app/
 📺 Video Demo: https://www.youtube.com/watch?v=lWgoOMuMuNc
-📺 Team Hashgraph certificates & Pitch: https://drive.google.com/drive/u/2/folders/1olVNiNjba1eTShq4DpaIfeAonKlTef4E
+📺 Team Hashgraph certificates : https://drive.google.com/drive/u/2/folders/1Orkf7748OWjaxvzOqkEGiXmQYdsDF-_F
+📌 Pitch Deck: https://drive.google.com/file/d/1AmxO27Ll75MmDJKTCXwCYMtmWaXMg0K9/view?usp=drive_link
 
 
 ---
@@ -407,6 +407,7 @@ For questions, support, or partnership inquiries:
 ---
 
 **✨ BlockCast: Where AI meets blockchain to verify truth, one prediction at a time.**
+
 
 
 
